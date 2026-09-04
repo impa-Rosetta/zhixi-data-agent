@@ -4,7 +4,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.routes.auth import router as auth_router
 from apps.api.routes.health import router as health_router
+from apps.api.routes.workspaces import router as workspaces_router
 from packages.platform_core.settings import get_settings
 
 
@@ -28,3 +30,5 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(workspaces_router)

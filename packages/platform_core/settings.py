@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     app_version: str = "0.1.0"
-    app_secret_key: SecretStr = SecretStr("development-only-secret")
+    app_secret_key: SecretStr = SecretStr("development-only-secret-change-me-32")
     database_url: str = "postgresql+psycopg://zhixi:zhixi-local-only@localhost:5432/zhixi"
     redis_url: str = "redis://localhost:6379/0"
     s3_endpoint_url: str = "http://localhost:9000"
@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     s3_secret_key: SecretStr = SecretStr("zhixi-local-secret")
     s3_bucket: str = "zhixi-artifacts"
     cors_origins: list[str] = ["http://localhost:5173"]
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
+    login_rate_limit: int = 10
+    login_rate_window_seconds: int = 60
 
     @field_validator("app_secret_key")
     @classmethod
