@@ -8,5 +8,12 @@ __pycache__/
 .mypy_cache/
 node_modules/
 dist/
+*.tsbuildinfo
 coverage/
-
+.venv/
+.coverage
+htmlcov/
+playwright-report/
+test-results/
+*.egg-info/
+.DS_Store
