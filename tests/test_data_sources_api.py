@@ -161,20 +161,20 @@ def test_data_source_lifecycle_is_versioned_and_never_returns_credentials(
         assert "top-secret-password" not in audit_text
 
 
-def test_connector_availability_validation_and_role_policy(
+def test_mysql_connector_availability_and_role_policy(
     api: tuple[TestClient, Engine],
 ) -> None:
     client, _ = api
     headers, workspace_id = bootstrap(client)
     base = f"/api/v1/workspaces/{workspace_id}/data-sources"
 
-    unavailable = client.post(
+    mysql_source = client.post(
         base,
         headers=headers,
         json=source_payload(source_type="mysql", port=3306),
     )
-    assert unavailable.status_code == 422
-    assert unavailable.json()["detail"]["code"] == "connector.not_available"
+    assert mysql_source.status_code == 201
+    assert mysql_source.json()["data_source"]["source_type"] == "mysql"
 
     invitation = client.post(
         f"/api/v1/workspaces/{workspace_id}/invitations",

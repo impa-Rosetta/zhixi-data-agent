@@ -1,11 +1,12 @@
 from packages.connectors.base import DatabaseConnector
+from packages.connectors.mysql import MySQLConnector
 from packages.connectors.postgresql import PostgreSQLConnector
 from packages.platform_core.models import DataSourceType
 
 
 class ConnectorRegistry:
     def __init__(self, connectors: tuple[DatabaseConnector, ...] | None = None) -> None:
-        registered = connectors or (PostgreSQLConnector(),)
+        registered = connectors or (PostgreSQLConnector(), MySQLConnector())
         self._connectors = {item.source_type: item for item in registered}
 
     def get(self, source_type: DataSourceType) -> DatabaseConnector:

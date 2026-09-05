@@ -14,7 +14,6 @@ from packages.platform_core.models import (
     DataSource,
     DataSourceSecret,
     DataSourceStatus,
-    DataSourceType,
     NetworkPolicy,
     OutboxEvent,
     ScanJob,
@@ -254,10 +253,6 @@ def create_data_source(
     payload: DataSourceCreateRequest,
     settings: Settings,
 ) -> tuple[DataSource, ScanJob]:
-    if payload.source_type is not DataSourceType.POSTGRESQL:
-        raise DataSourceServiceError(
-            "connector.not_available", "This connector is not available in the current release"
-        )
     try:
         host = normalize_host(payload.host)
     except NetworkPolicyError as exc:

@@ -1,6 +1,6 @@
 # 智析 Data Agent
 
-A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收；M2已完成数据源安全底座、PostgreSQL连接与版本化元数据目录，正在扩展MySQL兼容能力。
+A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收；M2已完成数据源安全底座、PostgreSQL/MySQL双连接器与版本化元数据目录。
 
 ## 快速开始
 
@@ -49,7 +49,7 @@ A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、�
 - `GET /api/v1/workspaces/{workspace_id}/data-sources/{id}/jobs`：数据源任务历史；
 - `GET /api/v1/workspaces/{workspace_id}/scan-jobs/{job_id}`：轮询真实任务状态。
 
-Compose中的`source-postgres`是本地只读集成样例，宿主机端口为`55432`。它只用于开发验收，不作为平台业务数据库或生产凭据示例。
+Compose中的`source-postgres`与`source-mysql`是本地只读集成样例，宿主机端口分别为`55432`和`53306`。二者只用于开发验收，不作为平台业务数据库或生产凭据示例。MySQL默认只扫描配置的数据库，不允许借助Schema范围跨库扩张扫描边界。
 
 ## M1产品界面
 

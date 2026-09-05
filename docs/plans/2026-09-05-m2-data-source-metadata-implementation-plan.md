@@ -58,6 +58,8 @@
 
 ## 切片四：MySQL连接器与双数据库兼容
 
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M4-mysql-connector-acceptance.md`。
+
 目标：同一控制面和目录模型完整支持MySQL。
 
 1. 加入`PyMySQL`运行依赖；

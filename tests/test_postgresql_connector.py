@@ -188,7 +188,7 @@ def test_postgresql_errors_are_safely_classified(
 
 def test_registry_rejects_unavailable_connector() -> None:
     with pytest.raises(ConnectorError) as raised:
-        ConnectorRegistry().get(DataSourceType.MYSQL)
+        ConnectorRegistry((PostgreSQLConnector(),)).get(DataSourceType.MYSQL)
     assert raised.value.code == "connector.unsupported"
 
 
