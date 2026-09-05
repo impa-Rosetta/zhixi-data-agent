@@ -1,21 +1,40 @@
 import { render, screen } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
+import { expect, test, vi } from 'vitest'
 
 import { App } from './App'
+import { AuthContext, type AuthContextValue } from './features/auth/context'
 
-afterEach(() => vi.restoreAllMocks())
+const anonymousContext: AuthContextValue = {
+  status: 'anonymous',
+  user: null,
+  workspace: null,
+  login: vi.fn(),
+  bootstrap: vi.fn(),
+  acceptInvitation: vi.fn(),
+  logout: vi.fn(),
+  selectWorkspace: vi.fn(),
+}
 
-test('shows the product identity and API health', async () => {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(JSON.stringify({ status: 'ok', service: 'api', version: '0.1.0' }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }),
+function renderRoute(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <AuthContext.Provider value={anonymousContext}>
+        <App />
+      </AuthContext.Provider>
+    </MemoryRouter>,
   )
+}
 
-  render(<App />)
+test('renders the login experience', () => {
+  renderRoute('/login')
 
-  expect(screen.getByRole('heading', { name: '智析 Data Agent' })).toBeInTheDocument()
-  expect(await screen.findByText('API 0.1.0 已连接')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()
 })
 
+test('redirects anonymous users away from the protected workspace', () => {
+  renderRoute('/app')
+
+  expect(screen.getByRole('heading', { name: '欢迎回来' })).toBeInTheDocument()
+})

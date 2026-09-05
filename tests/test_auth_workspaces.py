@@ -53,7 +53,9 @@ def bootstrap(client: TestClient) -> dict[str, str]:
 
 
 def test_bootstrap_login_refresh_logout_and_me(client: TestClient) -> None:
+    assert client.get("/api/v1/auth/bootstrap-status").json() == {"initialized": False}
     initial_tokens = bootstrap(client)
+    assert client.get("/api/v1/auth/bootstrap-status").json() == {"initialized": True}
     assert (
         client.post(
             "/api/v1/auth/bootstrap",

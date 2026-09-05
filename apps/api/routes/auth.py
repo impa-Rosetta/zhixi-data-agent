@@ -25,6 +25,7 @@ from packages.platform_core.security import (
 from packages.platform_core.settings import get_settings
 from packages.shared_contracts.auth import (
     BootstrapRequest,
+    BootstrapStatusResponse,
     InvitationAcceptRequest,
     LoginRequest,
     LogoutRequest,
@@ -55,6 +56,14 @@ def _response_and_session(db: DbSession, user: User) -> TokenResponse:
         access_token=pair.access_token,
         refresh_token=pair.refresh_token,
         expires_in=int((pair.access_expires_at - datetime.now(UTC)).total_seconds()),
+    )
+
+
+@router.get("/bootstrap-status", response_model=BootstrapStatusResponse)
+def bootstrap_status(db: DbSession) -> BootstrapStatusResponse:
+    user_count = db.scalar(select(func.count()).select_from(User)) or 0
+    return BootstrapStatusResponse(
+        initialized=user_count > 0,
     )
 
 

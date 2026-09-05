@@ -1,44 +1,33 @@
-import { useEffect, useState } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
 
-type Health = {
-  status: string
-  service: string
-  version: string
+import { LoadingScreen } from './components/feedback/LoadingScreen'
+import { AppShell } from './components/layout/AppShell'
+import { useAuth } from './features/auth/context'
+import { AnalysisHomePage } from './pages/AnalysisHomePage'
+import { InvitePage } from './pages/InvitePage'
+import { LoginPage } from './pages/LoginPage'
+import { MembersPage } from './pages/MembersPage'
+import { SetupPage } from './pages/SetupPage'
+import { StartPage } from './pages/StartPage'
+
+function ProtectedRoute() {
+  const { status } = useAuth()
+  if (status === 'loading') return <LoadingScreen label="正在恢复安全会话…" />
+  return status === 'authenticated' ? <AppShell /> : <Navigate to="/login" replace />
 }
-
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 export function App() {
-  const [health, setHealth] = useState<Health | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetch(`${apiBaseUrl}/health`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return (await response.json()) as Health
-      })
-      .then(setHealth)
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return
-        setError(reason instanceof Error ? reason.message : '未知错误')
-      })
-    return () => controller.abort()
-  }, [])
-
   return (
-    <main className="shell">
-      <section>
-        <p className="eyebrow">A07 企业数据底座智能问析 Agent</p>
-        <h1>智析 Data Agent</h1>
-        <p className="subtitle">可信、可验证、可私有化部署的企业数据智能分析平台。</p>
-      </section>
-      <section className="status" aria-live="polite">
-        <span className={`indicator ${health?.status === 'ok' ? 'ok' : ''}`} />
-        {health ? `API ${health.version} 已连接` : error ? `API连接失败：${error}` : '正在检查服务状态…'}
-      </section>
-    </main>
+    <Routes>
+      <Route path="/" element={<StartPage />} />
+      <Route path="/setup" element={<SetupPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/invite" element={<InvitePage />} />
+      <Route path="/app" element={<ProtectedRoute />}>
+        <Route index element={<AnalysisHomePage />} />
+        <Route path="members" element={<MembersPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
-

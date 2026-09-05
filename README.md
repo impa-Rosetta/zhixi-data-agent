@@ -1,6 +1,6 @@
 # 智析 Data Agent
 
-A07 企业数据底座智能问析 Agent 系统。M0工程基线已验收，当前开发M1身份与权限。
+A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收，下一阶段进入数据源接入。
 
 ## 快速开始
 
@@ -11,6 +11,7 @@ A07 企业数据底座智能问析 Agent 系统。M0工程基线已验收，当�
 
 ## M1认证接口
 
+- `GET /api/v1/auth/bootstrap-status`：判断平台是否已经初始化；
 - `POST /api/v1/auth/bootstrap`：首次初始化平台；
 - `POST /api/v1/auth/login`：登录；
 - `POST /api/v1/auth/refresh`：轮换访问令牌和刷新令牌；
@@ -22,6 +23,17 @@ A07 企业数据底座智能问析 Agent 系统。M0工程基线已验收，当�
 - `PATCH /api/v1/workspaces/{workspace_id}/members/{membership_id}`：角色管理。
 
 交互式接口文档：<http://localhost:8000/docs>。
+
+## M1产品界面
+
+- `/`：按平台状态自动进入首次初始化、登录或工作台；
+- `/setup`：创建首个系统管理员和工作空间；
+- `/login`：企业账号登录；
+- `/invite?token=...`：接受一次性工作空间邀请；
+- `/app`：受保护的Agent问析工作台；
+- `/app/members`：成员邀请和角色管理。
+
+前端不会模拟尚未实现的Agent回答。数据接入、语义模型和Agent执行将在后续里程碑按真实纵向切片开放。
 
 ## 本地质量检查
 
