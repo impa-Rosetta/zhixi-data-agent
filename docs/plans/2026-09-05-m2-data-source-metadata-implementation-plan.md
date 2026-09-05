@@ -71,6 +71,8 @@
 
 ## 切片五：安全采样、画像与定时刷新
 
+设计：`docs/superpowers/specs/2026-09-05-m2-safe-profiling-scheduling-design.md`。
+
 目标：在明确授权和资源预算内补充语义建模所需数据特征。
 
 1. 实现采样授权、Schema/表白名单和预算模型；
