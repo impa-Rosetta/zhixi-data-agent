@@ -1,6 +1,6 @@
 # 智析 Data Agent
 
-A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收，下一阶段进入数据源接入。
+A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收；M2已完成数据源安全底座，正在实现真实数据库接入。
 
 ## 快速开始
 
@@ -23,6 +23,15 @@ A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、�
 - `PATCH /api/v1/workspaces/{workspace_id}/members/{membership_id}`：角色管理。
 
 交互式接口文档：<http://localhost:8000/docs>。
+
+## M2数据源安全配置
+
+- `DATA_SOURCE_MASTER_KEYS`：JSON格式的版本化AES-256主密钥表，值为32字节Base64；
+- `DATA_SOURCE_ACTIVE_KEY_VERSION`：新凭据使用的主密钥版本；
+- `DATA_SOURCE_ALLOWED_PRIVATE_CIDRS`：允许连接的私网CIDR，默认生产配置应为空并按部署环境显式开放；
+- `DATA_SOURCE_ALLOWED_PORTS`：允许的数据源端口，当前示例为PostgreSQL `5432`与MySQL `3306`。
+
+`.env.example`中的密钥和私网范围只用于本机Docker开发。生产部署会拒绝开发主密钥，并应采用独立随机密钥与最小CIDR白名单。
 
 ## M1产品界面
 

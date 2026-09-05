@@ -14,6 +14,8 @@
 
 ## 切片一：领域模型、密钥与网络策略
 
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M2-data-source-foundation-acceptance.md`。
+
 目标：建立数据源安全配置的持久化边界，不连接外部数据库。
 
 1. 扩展`packages/platform_core/models.py`，加入数据源、密文、网络策略、扫描任务、outbox、快照及目录核心实体；
