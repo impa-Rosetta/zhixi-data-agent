@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 
 from sqlalchemy import (
     JSON,
@@ -8,11 +8,13 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
+    Time,
     UniqueConstraint,
     text,
 )
@@ -55,6 +57,7 @@ class TlsMode(enum.StrEnum):
 class ScanJobType(enum.StrEnum):
     CONNECTION_TEST = "connection_test"
     METADATA_SCAN = "metadata_scan"
+    PROFILE_SCAN = "profile_scan"
 
 
 class ScanJobTrigger(enum.StrEnum):
@@ -75,6 +78,20 @@ class SnapshotStatus(enum.StrEnum):
     BUILDING = "building"
     PUBLISHED = "published"
     REJECTED = "rejected"
+
+
+class ProfilingStatus(enum.StrEnum):
+    DISABLED = "disabled"
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ScheduleFrequency(enum.StrEnum):
+    DAILY = "daily"
+    WEEKLY = "weekly"
 
 
 def _enum_values(enum_type: type[enum.Enum]) -> list[str]:
@@ -324,6 +341,12 @@ class ScanJob(Base):
     snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("catalog_snapshots.id", ondelete="SET NULL"), index=True
     )
+    parent_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("scan_jobs.id", ondelete="SET NULL"), index=True
+    )
+    retry_of_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("scan_jobs.id", ondelete="SET NULL"), index=True
+    )
     job_type: Mapped[ScanJobType] = mapped_column(
         Enum(
             ScanJobType,
@@ -360,6 +383,8 @@ class ScanJob(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -409,8 +434,95 @@ class CatalogSnapshot(Base):
     object_counts: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     content_digest: Mapped[str | None] = mapped_column(String(64))
     sampling_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    profiling_status: Mapped[ProfilingStatus] = mapped_column(
+        Enum(
+            ProfilingStatus,
+            name="profiling_status",
+            native_enum=False,
+            values_callable=_enum_values,
+        ),
+        default=ProfilingStatus.DISABLED,
+        index=True,
+    )
+    profiling_error_code: Mapped[str | None] = mapped_column(String(100))
+    profiling_options: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    profile_counts: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    profiling_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    profiling_finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class SamplingPolicy(Base):
+    __tablename__ = "sampling_policies"
+    __table_args__ = (
+        CheckConstraint("max_rows_per_table >= 1 AND max_rows_per_table <= 20"),
+        CheckConstraint("max_values_per_column >= 1 AND max_values_per_column <= 20"),
+        CheckConstraint("max_value_chars >= 16 AND max_value_chars <= 256"),
+        CheckConstraint("max_bytes_per_table >= 1024"),
+        CheckConstraint("max_bytes_per_job >= max_bytes_per_table"),
+        CheckConstraint("statement_timeout_seconds >= 1 AND statement_timeout_seconds <= 10"),
+    )
+
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    schema_allowlist: Mapped[list[str]] = mapped_column(JSON, default=list)
+    table_allowlist: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
+    max_rows_per_table: Mapped[int] = mapped_column(Integer, default=20)
+    max_values_per_column: Mapped[int] = mapped_column(Integer, default=20)
+    max_value_chars: Mapped[int] = mapped_column(Integer, default=256)
+    max_bytes_per_table: Mapped[int] = mapped_column(Integer, default=65_536)
+    max_bytes_per_job: Mapped[int] = mapped_column(Integer, default=1_048_576)
+    statement_timeout_seconds: Mapped[int] = mapped_column(Integer, default=10)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ScanSchedule(Base):
+    __tablename__ = "scan_schedules"
+    __table_args__ = (
+        CheckConstraint("day_of_week IS NULL OR (day_of_week >= 0 AND day_of_week <= 6)"),
+    )
+
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), primary_key=True
+    )
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    frequency: Mapped[ScheduleFrequency] = mapped_column(
+        Enum(
+            ScheduleFrequency,
+            name="schedule_frequency",
+            native_enum=False,
+            values_callable=_enum_values,
+        )
+    )
+    timezone: Mapped[str] = mapped_column(String(64))
+    local_time: Mapped[time] = mapped_column(Time())
+    day_of_week: Mapped[int | None] = mapped_column(Integer)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_enqueued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class CatalogSchema(Base):
@@ -485,6 +597,74 @@ class CatalogColumn(Base):
     nullable: Mapped[bool] = mapped_column(Boolean)
     default_expression: Mapped[str | None] = mapped_column(Text)
     comment: Mapped[str | None] = mapped_column(Text)
+
+
+class CatalogColumnProfile(Base):
+    __tablename__ = "catalog_column_profiles"
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "column_id", name="uq_catalog_column_profile"),
+        CheckConstraint("sensitivity_confidence >= 0 AND sensitivity_confidence <= 1"),
+        CheckConstraint(
+            "sample_null_rate IS NULL OR (sample_null_rate >= 0 AND sample_null_rate <= 1)"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    column_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_columns.id", ondelete="CASCADE"), index=True
+    )
+    sample_row_count: Mapped[int] = mapped_column(Integer, default=0)
+    non_null_count: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_row_count: Mapped[int | None] = mapped_column(Integer)
+    sample_null_rate: Mapped[float | None] = mapped_column(Float)
+    sampled_distinct_count: Mapped[int | None] = mapped_column(Integer)
+    minimum_value: Mapped[str | None] = mapped_column(Text)
+    maximum_value: Mapped[str | None] = mapped_column(Text)
+    minimum_length: Mapped[int | None] = mapped_column(Integer)
+    maximum_length: Mapped[int | None] = mapped_column(Integer)
+    average_length: Mapped[float | None] = mapped_column(Float)
+    sensitivity_type: Mapped[str | None] = mapped_column(String(50), index=True)
+    sensitivity_confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    sensitivity_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    metric_sources: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CatalogSample(Base):
+    __tablename__ = "catalog_samples"
+    __table_args__ = (
+        UniqueConstraint("column_profile_id", "ordinal", name="uq_catalog_sample_ordinal"),
+        CheckConstraint("ordinal >= 1 AND ordinal <= 20"),
+        CheckConstraint("byte_count >= 0"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    column_profile_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_column_profiles.id", ondelete="CASCADE"), index=True
+    )
+    ordinal: Mapped[int] = mapped_column(Integer)
+    masked_value: Mapped[str] = mapped_column(String(256))
+    value_type: Mapped[str] = mapped_column(String(32))
+    byte_count: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class CatalogConstraint(Base):

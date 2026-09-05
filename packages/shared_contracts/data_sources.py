@@ -1,14 +1,17 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.platform_core.models import (
     DataSourceStatus,
     DataSourceType,
+    ProfilingStatus,
     ScanJobStatus,
     ScanJobTrigger,
     ScanJobType,
+    ScheduleFrequency,
     SnapshotStatus,
     TlsMode,
 )
@@ -90,6 +93,8 @@ class ScanJobResponse(BaseModel):
     id: uuid.UUID
     data_source_id: uuid.UUID
     snapshot_id: uuid.UUID | None
+    parent_job_id: uuid.UUID | None
+    retry_of_job_id: uuid.UUID | None
     job_type: ScanJobType
     trigger: ScanJobTrigger
     status: ScanJobStatus
@@ -98,6 +103,8 @@ class ScanJobResponse(BaseModel):
     error_code: str | None
     created_at: datetime
     started_at: datetime | None
+    heartbeat_at: datetime | None
+    cancel_requested_at: datetime | None
     finished_at: datetime | None
 
 
@@ -176,8 +183,143 @@ class CatalogSnapshotResponse(BaseModel):
     object_counts: dict[str, object]
     content_digest: str | None
     sampling_enabled: bool
+    profiling_status: ProfilingStatus
+    profiling_error_code: str | None
+    profiling_options: dict[str, object]
+    profile_counts: dict[str, object]
+    profiling_started_at: datetime | None
+    profiling_finished_at: datetime | None
     started_at: datetime
     completed_at: datetime | None
+
+
+class SamplingTableScope(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_name: str = Field(min_length=1, max_length=128)
+    table_name: str = Field(min_length=1, max_length=128)
+
+    @field_validator("schema_name", "table_name")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Identifiers must not be blank")
+        return normalized
+
+
+class SamplingPolicyUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(ge=0)
+    enabled: bool = False
+    schema_allowlist: list[str] = Field(default_factory=list, max_length=100)
+    table_allowlist: list[SamplingTableScope] = Field(default_factory=list, max_length=500)
+    max_rows_per_table: int = Field(default=20, ge=1, le=20)
+    max_values_per_column: int = Field(default=20, ge=1, le=20)
+    max_value_chars: int = Field(default=256, ge=16, le=256)
+    max_bytes_per_table: int = Field(default=65_536, ge=1_024, le=1_048_576)
+    max_bytes_per_job: int = Field(default=1_048_576, ge=1_024, le=10_485_760)
+    statement_timeout_seconds: int = Field(default=10, ge=1, le=10)
+
+    @field_validator("schema_allowlist")
+    @classmethod
+    def validate_schemas(cls, values: list[str]) -> list[str]:
+        normalized = [item.strip() for item in values]
+        if any(not item or len(item) > 128 for item in normalized):
+            raise ValueError("Schema names must contain 1 to 128 characters")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Schema names must be unique")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_scope_and_budget(self) -> "SamplingPolicyUpdateRequest":
+        table_keys = [(item.schema_name, item.table_name) for item in self.table_allowlist]
+        if len(table_keys) != len(set(table_keys)):
+            raise ValueError("Table scopes must be unique")
+        schemas = set(self.schema_allowlist)
+        if any(schema not in schemas for schema, _ in table_keys):
+            raise ValueError("Every table must belong to an allowed schema")
+        if self.enabled and not table_keys:
+            raise ValueError("Enabled sampling requires at least one table")
+        if self.max_bytes_per_job < self.max_bytes_per_table:
+            raise ValueError("Job byte budget must cover one table budget")
+        return self
+
+
+class SamplingPolicyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    data_source_id: uuid.UUID
+    enabled: bool
+    schema_allowlist: list[str]
+    table_allowlist: list[SamplingTableScope]
+    max_rows_per_table: int
+    max_values_per_column: int
+    max_value_chars: int
+    max_bytes_per_table: int
+    max_bytes_per_job: int
+    statement_timeout_seconds: int
+    version: int
+    updated_at: datetime | None
+
+
+class ScanScheduleUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(ge=0)
+    enabled: bool = False
+    frequency: ScheduleFrequency
+    timezone: str = Field(min_length=1, max_length=64)
+    local_time: time
+    day_of_week: int | None = Field(default=None, ge=0, le=6)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        normalized = value.strip()
+        try:
+            ZoneInfo(normalized)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("Timezone must be a valid IANA name") from exc
+        return normalized
+
+    @field_validator("local_time")
+    @classmethod
+    def validate_local_time(cls, value: time) -> time:
+        if value.tzinfo is not None:
+            raise ValueError("Local execution time must not include an offset")
+        return value
+
+    @model_validator(mode="after")
+    def validate_frequency(self) -> "ScanScheduleUpdateRequest":
+        if self.frequency is ScheduleFrequency.WEEKLY and self.day_of_week is None:
+            raise ValueError("Weekly schedules require day_of_week")
+        if self.frequency is ScheduleFrequency.DAILY and self.day_of_week is not None:
+            raise ValueError("Daily schedules cannot specify day_of_week")
+        return self
+
+
+class ScanScheduleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    data_source_id: uuid.UUID
+    enabled: bool
+    frequency: ScheduleFrequency
+    timezone: str
+    local_time: time
+    day_of_week: int | None
+    next_run_at: datetime | None
+    last_enqueued_at: datetime | None
+    version: int
+    updated_at: datetime | None
+
+    @field_validator("next_run_at", "last_enqueued_at", mode="before")
+    @classmethod
+    def normalize_utc_datetimes(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value
 
 
 class CatalogColumnResponse(BaseModel):

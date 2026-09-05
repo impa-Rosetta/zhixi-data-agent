@@ -71,7 +71,7 @@
 
 ## 切片五：安全采样、画像与定时刷新
 
-设计：`docs/superpowers/specs/2026-09-05-m2-safe-profiling-scheduling-design.md`。
+设计：`docs/superpowers/specs/2026-09-05-m2-safe-profiling-scheduling-design.md`。详细实施计划：`docs/plans/2026-09-05-m2-safe-profiling-scheduling-implementation-plan.md`。
 
 目标：在明确授权和资源预算内补充语义建模所需数据特征。
 

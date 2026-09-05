@@ -24,8 +24,10 @@ from packages.platform_core.models import (
     DataSource,
     DataSourceSecret,
     OutboxEvent,
+    SamplingPolicy,
     ScanJob,
     ScanJobStatus,
+    ScanSchedule,
     SnapshotStatus,
 )
 
@@ -191,6 +193,16 @@ def test_mysql_connector_availability_and_role_policy(
     ).json()
     analyst_headers = {"Authorization": f"Bearer {analyst_tokens['access_token']}"}
     assert client.post(base, headers=analyst_headers, json=source_payload()).status_code == 403
+    policy_url = f"{base}/{mysql_source.json()['data_source']['id']}/sampling-policy"
+    assert client.get(policy_url, headers=analyst_headers).status_code == 200
+    assert (
+        client.put(
+            policy_url,
+            headers=analyst_headers,
+            json={"version": 0, "enabled": False},
+        ).status_code
+        == 403
+    )
 
 
 def test_metadata_scan_and_versioned_catalog_api(api: tuple[TestClient, Engine]) -> None:
@@ -286,3 +298,230 @@ def test_metadata_scan_rejects_system_schema(api: tuple[TestClient, Engine]) -> 
         json={"schemas": ["pg_catalog"]},
     )
     assert response.status_code == 422
+
+
+def test_sampling_policy_is_default_off_versioned_and_catalog_scoped(
+    api: tuple[TestClient, Engine],
+) -> None:
+    client, engine = api
+    headers, workspace_id = bootstrap(client)
+    base = f"/api/v1/workspaces/{workspace_id}/data-sources"
+    created = client.post(base, headers=headers, json=source_payload()).json()
+    source_id = uuid.UUID(created["data_source"]["id"])
+    policy_url = f"{base}/{source_id}/sampling-policy"
+
+    default_policy = client.get(policy_url, headers=headers)
+    assert default_policy.status_code == 200
+    assert default_policy.json()["enabled"] is False
+    assert default_policy.json()["version"] == 0
+    assert default_policy.json()["table_allowlist"] == []
+
+    no_catalog = client.put(
+        policy_url,
+        headers=headers,
+        json={
+            "version": 0,
+            "enabled": True,
+            "schema_allowlist": ["public"],
+            "table_allowlist": [{"schema_name": "public", "table_name": "orders"}],
+        },
+    )
+    assert no_catalog.status_code == 422
+    assert no_catalog.json()["detail"]["code"] == "sampling.catalog_required"
+
+    document = MetadataDocument(
+        database_product="postgresql",
+        database_version="16.4",
+        schemas=(MetadataSchema("public", None),),
+        relations=(
+            MetadataRelation(
+                schema="public",
+                name="orders",
+                relation_type="table",
+                comment=None,
+                columns=(MetadataColumn("id", 1, "number", "bigint", False),),
+                constraints=(),
+                indexes=(),
+            ),
+        ),
+    )
+    with Session(engine) as db:
+        source = db.get(DataSource, source_id)
+        assert source is not None
+        source.status = "ready"
+        snapshot = CatalogSnapshot(
+            workspace_id=source.workspace_id,
+            data_source_id=source.id,
+            version=1,
+            status=SnapshotStatus.PUBLISHED,
+            database_product="postgresql",
+            database_version="16.4",
+            scan_options={},
+            object_counts={},
+            content_digest="1" * 64,
+            sampling_enabled=False,
+        )
+        db.add(snapshot)
+        db.flush()
+        replace_snapshot_document(
+            db,
+            snapshot_id=snapshot.id,
+            workspace_id=source.workspace_id,
+            data_source_id=source.id,
+            document=document,
+        )
+        source.active_snapshot_id = snapshot.id
+        db.commit()
+
+    updated = client.put(
+        policy_url,
+        headers=headers,
+        json={
+            "version": 0,
+            "enabled": True,
+            "schema_allowlist": ["public"],
+            "table_allowlist": [{"schema_name": "public", "table_name": "orders"}],
+            "max_rows_per_table": 10,
+            "max_values_per_column": 8,
+            "max_value_chars": 128,
+            "max_bytes_per_table": 4096,
+            "max_bytes_per_job": 8192,
+            "statement_timeout_seconds": 5,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["enabled"] is True
+    assert updated.json()["version"] == 1
+    assert updated.json()["max_rows_per_table"] == 10
+
+    stale = client.put(
+        policy_url,
+        headers=headers,
+        json={
+            "version": 0,
+            "enabled": False,
+            "schema_allowlist": [],
+            "table_allowlist": [],
+        },
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "sampling.version_conflict"
+    with Session(engine) as db:
+        stored = db.get(SamplingPolicy, source_id)
+        assert stored is not None and stored.enabled is True
+        audit = db.scalar(
+            select(AuditEvent).where(AuditEvent.action == "data_source.sampling_policy.update")
+        )
+        assert audit is not None and "tables=1" in (audit.detail or "")
+        assert "orders" not in (audit.detail or "")
+
+
+def test_sampling_policy_rejects_unsafe_scope_and_budget(
+    api: tuple[TestClient, Engine],
+) -> None:
+    client, _ = api
+    headers, workspace_id = bootstrap(client)
+    created = client.post(
+        f"/api/v1/workspaces/{workspace_id}/data-sources",
+        headers=headers,
+        json=source_payload(),
+    ).json()
+    url = (
+        f"/api/v1/workspaces/{workspace_id}/data-sources/"
+        f"{created['data_source']['id']}/sampling-policy"
+    )
+    for payload in (
+        {"version": 0, "enabled": True},
+        {
+            "version": 0,
+            "enabled": False,
+            "schema_allowlist": ["public"],
+            "table_allowlist": [{"schema_name": "other", "table_name": "orders"}],
+        },
+        {
+            "version": 0,
+            "enabled": False,
+            "max_bytes_per_table": 4096,
+            "max_bytes_per_job": 2048,
+        },
+        {"version": 0, "enabled": False, "max_rows_per_table": 21},
+    ):
+        assert client.put(url, headers=headers, json=payload).status_code == 422
+
+
+def test_scan_schedule_is_versioned_and_timezone_aware(api: tuple[TestClient, Engine]) -> None:
+    client, engine = api
+    headers, workspace_id = bootstrap(client)
+    created = client.post(
+        f"/api/v1/workspaces/{workspace_id}/data-sources",
+        headers=headers,
+        json=source_payload(),
+    ).json()
+    source_id = created["data_source"]["id"]
+    url = f"/api/v1/workspaces/{workspace_id}/data-sources/{source_id}/schedule"
+
+    missing = client.get(url, headers=headers)
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "schedule.not_configured"
+
+    created_schedule = client.put(
+        url,
+        headers=headers,
+        json={
+            "version": 0,
+            "enabled": True,
+            "frequency": "daily",
+            "timezone": "Asia/Shanghai",
+            "local_time": "03:30:00",
+        },
+    )
+    assert created_schedule.status_code == 200
+    body = created_schedule.json()
+    assert body["version"] == 1
+    assert body["next_run_at"].endswith("Z")
+    assert body["day_of_week"] is None
+
+    stale = client.put(
+        url,
+        headers=headers,
+        json={
+            "version": 0,
+            "enabled": False,
+            "frequency": "daily",
+            "timezone": "Asia/Shanghai",
+            "local_time": "03:30:00",
+        },
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "schedule.version_conflict"
+    assert (
+        client.put(
+            url,
+            headers=headers,
+            json={
+                "version": 1,
+                "enabled": True,
+                "frequency": "weekly",
+                "timezone": "Not/AZone",
+                "local_time": "03:30:00",
+            },
+        ).status_code
+        == 422
+    )
+    assert (
+        client.put(
+            url,
+            headers=headers,
+            json={
+                "version": 1,
+                "enabled": True,
+                "frequency": "weekly",
+                "timezone": "UTC",
+                "local_time": "03:30:00",
+            },
+        ).status_code
+        == 422
+    )
+    with Session(engine) as db:
+        stored = db.get(ScanSchedule, uuid.UUID(source_id))
+        assert stored is not None and stored.timezone == "Asia/Shanghai"

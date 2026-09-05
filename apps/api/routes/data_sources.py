@@ -18,6 +18,12 @@ from apps.api.services.data_sources import (
     list_data_sources,
     update_data_source,
 )
+from apps.api.services.sampling import (
+    get_sampling_policy,
+    get_scan_schedule,
+    update_sampling_policy,
+    update_scan_schedule,
+)
 from packages.platform_core.models import ScanJob, ScanJobTrigger
 from packages.platform_core.policy import Action
 from packages.platform_core.settings import get_settings
@@ -34,7 +40,11 @@ from packages.shared_contracts.data_sources import (
     DataSourceResponse,
     DataSourceUpdateRequest,
     MetadataScanRequest,
+    SamplingPolicyResponse,
+    SamplingPolicyUpdateRequest,
     ScanJobResponse,
+    ScanScheduleResponse,
+    ScanScheduleUpdateRequest,
     VersionRequest,
 )
 
@@ -237,6 +247,107 @@ def scan(
     _commit(db)
     db.refresh(job)
     return ScanJobResponse.model_validate(job)
+
+
+@router.get(
+    "/data-sources/{data_source_id}/sampling-policy",
+    response_model=SamplingPolicyResponse,
+)
+def sampling_policy(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> SamplingPolicyResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.CATALOG_READ)
+    try:
+        return get_sampling_policy(db, workspace_id=workspace_id, data_source_id=data_source_id)
+    except DataSourceServiceError as exc:
+        raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+
+
+@router.put(
+    "/data-sources/{data_source_id}/sampling-policy",
+    response_model=SamplingPolicyResponse,
+)
+def put_sampling_policy(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    payload: SamplingPolicyUpdateRequest,
+    db: DbSession,
+    user: CurrentUser,
+) -> SamplingPolicyResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.DATA_SOURCE_MANAGE)
+    try:
+        stored = update_sampling_policy(
+            db,
+            workspace_id=workspace_id,
+            data_source_id=data_source_id,
+            actor_user_id=user.id,
+            payload=payload,
+        )
+    except DataSourceServiceError as exc:
+        db.rollback()
+        code = (
+            status.HTTP_409_CONFLICT
+            if exc.code == "sampling.version_conflict"
+            else _service_status(exc, status.HTTP_422_UNPROCESSABLE_CONTENT)
+        )
+        raise _error(exc, code) from exc
+    _commit(db)
+    db.refresh(stored)
+    return SamplingPolicyResponse.model_validate(stored)
+
+
+@router.get(
+    "/data-sources/{data_source_id}/schedule",
+    response_model=ScanScheduleResponse,
+)
+def schedule(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> ScanScheduleResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.CATALOG_READ)
+    try:
+        stored = get_scan_schedule(db, workspace_id=workspace_id, data_source_id=data_source_id)
+    except DataSourceServiceError as exc:
+        raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+    return ScanScheduleResponse.model_validate(stored)
+
+
+@router.put(
+    "/data-sources/{data_source_id}/schedule",
+    response_model=ScanScheduleResponse,
+)
+def put_schedule(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    payload: ScanScheduleUpdateRequest,
+    db: DbSession,
+    user: CurrentUser,
+) -> ScanScheduleResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.DATA_SOURCE_MANAGE)
+    try:
+        stored = update_scan_schedule(
+            db,
+            workspace_id=workspace_id,
+            data_source_id=data_source_id,
+            actor_user_id=user.id,
+            payload=payload,
+        )
+    except DataSourceServiceError as exc:
+        db.rollback()
+        code = (
+            status.HTTP_409_CONFLICT
+            if exc.code == "schedule.version_conflict"
+            else _service_status(exc, status.HTTP_422_UNPROCESSABLE_CONTENT)
+        )
+        raise _error(exc, code) from exc
+    _commit(db)
+    db.refresh(stored)
+    return ScanScheduleResponse.model_validate(stored)
 
 
 @router.get(
