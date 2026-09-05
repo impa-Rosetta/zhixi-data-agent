@@ -57,6 +57,8 @@
 
 ## 子切片四：画像任务与不可变快照绑定
 
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M5-profile-task-lifecycle-acceptance.md`。
+
 目标：元数据发布后可靠创建独立画像任务，并原子发布画像结果。
 
 1. 元数据快照发布事务根据冻结策略创建 `profile_scan` 任务与 Outbox；

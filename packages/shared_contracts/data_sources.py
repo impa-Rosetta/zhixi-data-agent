@@ -193,6 +193,48 @@ class CatalogSnapshotResponse(BaseModel):
     completed_at: datetime | None
 
 
+class CatalogSampleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    ordinal: int
+    masked_value: str
+    value_type: str
+    byte_count: int
+
+
+class CatalogColumnProfileResponse(BaseModel):
+    id: uuid.UUID
+    column_id: uuid.UUID
+    schema_name: str
+    relation_name: str
+    column_name: str
+    data_type: str
+    native_type: str
+    sample_row_count: int
+    non_null_count: int
+    estimated_row_count: int | None
+    sample_null_rate: float | None
+    sampled_distinct_count: int | None
+    minimum_value: str | None
+    maximum_value: str | None
+    minimum_length: int | None
+    maximum_length: int | None
+    average_length: float | None
+    sensitivity_type: str | None
+    sensitivity_confidence: float
+    sensitivity_reasons: list[str]
+    metric_sources: dict[str, str]
+    samples: list[CatalogSampleResponse]
+
+
+class CatalogProfileListResponse(BaseModel):
+    snapshot_id: uuid.UUID
+    profiling_status: ProfilingStatus
+    profiling_error_code: str | None
+    profile_counts: dict[str, object]
+    items: list[CatalogColumnProfileResponse]
+
+
 class SamplingTableScope(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

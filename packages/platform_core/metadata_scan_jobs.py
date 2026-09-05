@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from packages.connectors.base import ConnectionTarget, ConnectorCredentials, ConnectorError
+from packages.connectors.base import ConnectionTarget, ConnectorError
 from packages.connectors.metadata import MetadataDocument, MetadataScanOptions
 from packages.connectors.registry import ConnectorRegistry, connector_registry
 from packages.platform_core.catalog import (
@@ -21,14 +21,13 @@ from packages.platform_core.catalog_store import (
     object_counts,
     replace_snapshot_document,
 )
+from packages.platform_core.data_source_runtime import load_runtime_credentials
 from packages.platform_core.models import (
     AuditEvent,
     CatalogDiff,
     CatalogSnapshot,
     DataSource,
-    DataSourceSecret,
     DataSourceStatus,
-    NetworkPolicy,
     OutboxEvent,
     ScanJob,
     ScanJobStatus,
@@ -36,13 +35,8 @@ from packages.platform_core.models import (
     ScanJobType,
     SnapshotStatus,
 )
-from packages.platform_core.network_policy import NetworkPolicyRules
-from packages.platform_core.secrets import (
-    EncryptedEnvelope,
-    EnvelopeSecretProvider,
-    SecretDecryptionError,
-    secret_aad,
-)
+from packages.platform_core.profile_scan_jobs import enqueue_profile_scan_for_snapshot
+from packages.platform_core.secrets import SecretDecryptionError
 from packages.platform_core.settings import Settings
 
 
@@ -119,41 +113,6 @@ def enqueue_metadata_scan_job(
     return job
 
 
-def _credentials(
-    db: Session, source: DataSource, settings: Settings
-) -> tuple[ConnectorCredentials, NetworkPolicyRules]:
-    secret = db.get(DataSourceSecret, source.id)
-    policy = db.get(NetworkPolicy, source.network_policy_id) if source.network_policy_id else None
-    if secret is None or secret.destroyed_at is not None or policy is None:
-        raise SecretDecryptionError("Data source runtime configuration is unavailable")
-    envelope = EncryptedEnvelope(
-        key_version=secret.key_version,
-        wrapped_data_key=secret.wrapped_data_key,
-        key_nonce=secret.key_nonce,
-        ciphertext=secret.ciphertext,
-        payload_nonce=secret.payload_nonce,
-        algorithm=secret.algorithm,
-        format_version=secret.format_version,
-    )
-    payload = EnvelopeSecretProvider.from_settings(settings).decrypt(
-        envelope, secret_aad(source.workspace_id, source.id)
-    )
-    username = payload.get("username")
-    password = payload.get("password")
-    ca = payload.get("tls_ca_certificate")
-    if not isinstance(username, str) or not isinstance(password, str):
-        raise SecretDecryptionError("Encrypted credential payload is invalid")
-    if ca is not None and not isinstance(ca, str):
-        raise SecretDecryptionError("Encrypted credential payload is invalid")
-    return (
-        ConnectorCredentials(username, password, ca),
-        NetworkPolicyRules.from_strings(
-            allowed_private_cidrs=policy.allowed_private_cidrs,
-            allowed_ports=policy.allowed_ports,
-        ),
-    )
-
-
 def _schemas(job: ScanJob) -> tuple[str, ...]:
     raw = job.parameters.get("schemas", [])
     if not isinstance(raw, list) or any(not isinstance(item, str) for item in raw):
@@ -164,10 +123,15 @@ def _schemas(job: ScanJob) -> tuple[str, ...]:
 def _cancelled(db: Session, job: ScanJob, source: DataSource) -> bool:
     db.refresh(job)
     db.refresh(source)
-    if job.status is ScanJobStatus.CANCELLED or source.status in {
-        DataSourceStatus.DISABLED,
-        DataSourceStatus.DELETED,
-    }:
+    if (
+        job.cancel_requested_at is not None
+        or job.status is ScanJobStatus.CANCELLED
+        or source.status
+        in {
+            DataSourceStatus.DISABLED,
+            DataSourceStatus.DELETED,
+        }
+    ):
         job.status = ScanJobStatus.CANCELLED
         job.phase = "cancelled"
         job.finished_at = datetime.now(UTC)
@@ -357,6 +321,12 @@ def _publish(
             ),
         )
     )
+    enqueue_profile_scan_for_snapshot(
+        db,
+        source=source,
+        snapshot=snapshot,
+        parent_job=job,
+    )
     db.commit()
 
 
@@ -387,7 +357,7 @@ def run_metadata_scan(
     db.commit()
 
     try:
-        credentials, rules = _credentials(db, source, settings)
+        credentials, rules = load_runtime_credentials(db, source, settings)
         document = registry.get(source.source_type).scan_metadata(
             ConnectionTarget(source.host, source.port, source.database_name, source.tls_mode),
             credentials,

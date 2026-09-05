@@ -18,18 +18,22 @@ from apps.api.services.data_sources import (
     list_data_sources,
     update_data_source,
 )
+from apps.api.services.profiles import get_snapshot_column_profile, list_snapshot_profiles
 from apps.api.services.sampling import (
     get_sampling_policy,
     get_scan_schedule,
     update_sampling_policy,
     update_scan_schedule,
 )
+from apps.api.services.scan_jobs import request_scan_job_cancel
 from packages.platform_core.models import ScanJob, ScanJobTrigger
 from packages.platform_core.policy import Action
 from packages.platform_core.settings import get_settings
 from packages.shared_contracts.data_sources import (
+    CatalogColumnProfileResponse,
     CatalogDiffPage,
     CatalogDiffResponse,
+    CatalogProfileListResponse,
     CatalogRelationResponse,
     CatalogResponse,
     CatalogSchemaResponse,
@@ -406,6 +410,54 @@ def catalog(
     )
 
 
+@router.get(
+    "/data-sources/{data_source_id}/catalog/snapshots/{snapshot_id}/profiles",
+    response_model=CatalogProfileListResponse,
+)
+def profiles(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> CatalogProfileListResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.CATALOG_READ)
+    try:
+        return list_snapshot_profiles(
+            db,
+            workspace_id=workspace_id,
+            data_source_id=data_source_id,
+            snapshot_id=snapshot_id,
+        )
+    except DataSourceServiceError as exc:
+        raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+
+
+@router.get(
+    "/data-sources/{data_source_id}/catalog/snapshots/{snapshot_id}/profiles/{column_id}",
+    response_model=CatalogColumnProfileResponse,
+)
+def profile_detail(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    snapshot_id: uuid.UUID,
+    column_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> CatalogColumnProfileResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.CATALOG_READ)
+    try:
+        return get_snapshot_column_profile(
+            db,
+            workspace_id=workspace_id,
+            data_source_id=data_source_id,
+            snapshot_id=snapshot_id,
+            column_id=column_id,
+        )
+    except DataSourceServiceError as exc:
+        raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+
+
 @router.get("/data-sources/{data_source_id}/diffs", response_model=CatalogDiffPage)
 def diffs(
     workspace_id: uuid.UUID,
@@ -556,4 +608,26 @@ def job_detail(
             status.HTTP_404_NOT_FOUND,
             detail={"code": "scan_job.not_found", "message": "Scan job not found"},
         )
+    return ScanJobResponse.model_validate(job)
+
+
+@router.post("/scan-jobs/{job_id}/cancel", response_model=ScanJobResponse)
+def cancel_job(
+    workspace_id: uuid.UUID,
+    job_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> ScanJobResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.DATA_SOURCE_MANAGE)
+    try:
+        job = request_scan_job_cancel(
+            db,
+            workspace_id=workspace_id,
+            job_id=job_id,
+            actor_user_id=user.id,
+        )
+    except DataSourceServiceError as exc:
+        raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+    _commit(db)
+    db.refresh(job)
     return ScanJobResponse.model_validate(job)
