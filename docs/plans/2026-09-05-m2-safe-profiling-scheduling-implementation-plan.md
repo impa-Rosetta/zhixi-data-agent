@@ -1,6 +1,6 @@
 # M2 安全采样、画像与定时刷新实施计划
 
-- 状态：执行中
+- 状态：已完成并通过整体验收（2026-09-05）
 - 日期：2026-09-05
 - 设计：`docs/superpowers/specs/2026-09-05-m2-safe-profiling-scheduling-design.md`
 
@@ -84,6 +84,8 @@
 7. 完成真实定时刷新、恢复验收并提交推送。
 
 ## 子切片六：M5 整体验收与文档
+
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M5-safe-profiling-overall-acceptance.md`。
 
 目标：证明安全、兼容、可靠性和可运维性满足设计完成定义。
 

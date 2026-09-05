@@ -61,13 +61,19 @@
 
 ### M2-01 数据源生命周期
 
+状态：已完成并验收。
+
 实现PostgreSQL/MySQL连接、加密凭证、只读校验、健康状态、连接池和启停。
 
 ### M2-02 元数据扫描
 
+状态：已完成并验收。
+
 扫描Schema、表、视图、字段、类型、注释、主外键、索引、行数估计和更新时间，生成版本化快照与差异。
 
 ### M2-03 安全采样
+
+状态：已完成并验收。详细设计、实施与证据见`docs/superpowers/specs/2026-09-05-m2-safe-profiling-scheduling-design.md`、`docs/plans/2026-09-05-m2-safe-profiling-scheduling-implementation-plan.md`及`docs/acceptance/M5-safe-profiling-overall-acceptance.md`。
 
 采集空值率、唯一值数、数值/日期范围、高频值和受限样例；敏感字段默认不采样。
 

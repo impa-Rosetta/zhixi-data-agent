@@ -16,10 +16,10 @@ function Invoke-Checked {
     }
 }
 
-Invoke-Checked { & $python -m ruff check apps packages tests } 'Ruff lint'
-Invoke-Checked { & $python -m ruff format --check apps packages tests } 'Ruff format'
-Invoke-Checked { & $python -m mypy } 'Mypy'
-Invoke-Checked { & $python -m pytest --cov=apps --cov=packages --cov-report=term-missing } 'Pytest'
+Invoke-Checked { & $python -m ruff check apps packages tests scripts } 'Ruff lint'
+Invoke-Checked { & $python -m ruff format --check apps packages tests scripts } 'Ruff format'
+Invoke-Checked { & $python -m mypy apps packages scripts } 'Mypy'
+Invoke-Checked { & $python -m pytest --cov=apps --cov=packages --cov-report=term-missing --cov-fail-under=85 } 'Pytest'
 Invoke-Checked { npm run lint } 'Frontend lint'
 Invoke-Checked { npm run test } 'Frontend tests'
 Invoke-Checked { npm run build } 'Frontend build'
