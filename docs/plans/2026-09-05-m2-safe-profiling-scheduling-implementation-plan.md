@@ -29,6 +29,8 @@
 
 ## 子切片二：敏感识别与方言无关画像契约
 
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M5-sensitive-profiling-engine-acceptance.md`。
+
 目标：输入有限行值后，能够确定性地产出无敏感原值的有界画像文档。
 
 1. 定义 `ProfileDocument`、关系画像、字段画像和样例值对象；
