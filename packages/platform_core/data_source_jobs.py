@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from packages.connectors.base import ConnectionTarget, ConnectorCredentials, ConnectorError
 from packages.connectors.registry import ConnectorRegistry, connector_registry
+from packages.platform_core.metadata_scan_jobs import enqueue_metadata_scan_job
 from packages.platform_core.models import (
     AuditEvent,
     DataSource,
@@ -213,6 +214,14 @@ def run_connection_test(
     source.health_code = None
     source.last_checked_at = now
     source.last_success_at = now
+    db.flush()
+    if source.active_snapshot_id is None:
+        enqueue_metadata_scan_job(
+            db,
+            source=source,
+            actor_user_id=job.requested_by_user_id,
+            trigger=job.trigger,
+        )
     db.add(
         AuditEvent(
             workspace_id=source.workspace_id,

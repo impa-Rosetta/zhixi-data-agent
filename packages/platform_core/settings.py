@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     data_source_active_key_version: str = "dev-v1"
     data_source_allowed_private_cidrs: list[str] = []
     data_source_allowed_ports: list[int] = [5432, 3306]
+    metadata_scan_max_objects: int = 10_000
     database_url: str = "postgresql+psycopg://zhixi:zhixi-local-only@localhost:5432/zhixi"
     redis_url: str = "redis://localhost:6379/0"
     s3_endpoint_url: str = "http://localhost:9000"
@@ -73,6 +74,8 @@ class Settings(BaseSettings):
             port < 1 or port > 65535 for port in self.data_source_allowed_ports
         ):
             raise ValueError("DATA_SOURCE_ALLOWED_PORTS must contain valid TCP ports")
+        if not 100 <= self.metadata_scan_max_objects <= 100_000:
+            raise ValueError("METADATA_SCAN_MAX_OBJECTS must be between 100 and 100000")
         return self
 
     def data_source_master_keyring(self) -> dict[str, bytes]:

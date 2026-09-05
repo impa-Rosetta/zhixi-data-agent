@@ -6,6 +6,7 @@ import psycopg
 import pytest
 
 from packages.connectors.base import ConnectionTarget, ConnectorCredentials, ConnectorError
+from packages.connectors.metadata import MetadataScanOptions
 from packages.connectors.postgresql import PostgreSQLConnector
 from packages.connectors.registry import ConnectorRegistry
 from packages.platform_core.models import DataSourceType, TlsMode
@@ -189,3 +190,86 @@ def test_registry_rejects_unavailable_connector() -> None:
     with pytest.raises(ConnectorError) as raised:
         ConnectorRegistry().get(DataSourceType.MYSQL)
     assert raised.value.code == "connector.unsupported"
+
+
+class MetadataCursor:
+    def __init__(self) -> None:
+        self.query = ""
+        self.params: object = None
+
+    def __enter__(self) -> "MetadataCursor":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, query: str, params: object = None) -> None:
+        self.query = query
+        self.params = params
+
+    def fetchone(self) -> tuple[str]:
+        return ("16.4",)
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        if "FROM pg_namespace" in self.query:
+            return [("analytics", "Reporting schema"), ("public", None)]
+        if "CASE c.relkind" in self.query:
+            return [("public", "orders", "table", "Production orders")]
+        if "FROM pg_attribute" in self.query:
+            return [
+                ("public", "orders", "id", 1, "bigint", "N", False, None, "Identity"),
+                ("public", "orders", "payload", 2, "jsonb", "U", True, None, None),
+            ]
+        if "FROM pg_constraint" in self.query:
+            return [("public", "orders", "orders_pkey", "primary_key", ["id"], None, None, [])]
+        if "FROM pg_index" in self.query:
+            return [("public", "orders", "orders_pkey", True, "btree", ["id"], None)]
+        raise AssertionError(f"Unexpected query: {self.query}")
+
+
+def test_postgresql_metadata_scan_normalizes_catalog(
+    monkeypatch: pytest.MonkeyPatch, rules: NetworkPolicyRules
+) -> None:
+    cursor = MetadataCursor()
+    patch_connection(monkeypatch, cursor)  # type: ignore[arg-type]
+    document = PostgreSQLConnector().scan_metadata(
+        target(TlsMode.DISABLE),
+        ConnectorCredentials("reader", "secret"),
+        rules,
+        MetadataScanOptions(schemas=("public",)),
+    )
+    assert [item.name for item in document.schemas] == ["public"]
+    relation = document.relations[0]
+    assert relation.relation_type == "table"
+    assert [(item.name, item.data_type) for item in relation.columns] == [
+        ("id", "number"),
+        ("payload", "json"),
+    ]
+    assert relation.constraints[0].constraint_type == "primary_key"
+    assert relation.indexes[0].method == "btree"
+    assert cursor.params == (["public"],)
+
+
+def test_postgresql_metadata_scan_rejects_unknown_schema_and_object_overflow(
+    monkeypatch: pytest.MonkeyPatch, rules: NetworkPolicyRules
+) -> None:
+    cursor = MetadataCursor()
+    patch_connection(monkeypatch, cursor)  # type: ignore[arg-type]
+    connector = PostgreSQLConnector()
+    with pytest.raises(ConnectorError) as unknown:
+        connector.scan_metadata(
+            target(TlsMode.DISABLE),
+            ConnectorCredentials("reader", "secret"),
+            rules,
+            MetadataScanOptions(schemas=("missing",)),
+        )
+    assert unknown.value.code == "connector.schema_not_found"
+
+    with pytest.raises(ConnectorError) as overflow:
+        connector.scan_metadata(
+            target(TlsMode.DISABLE),
+            ConnectorCredentials("reader", "secret"),
+            rules,
+            MetadataScanOptions(schemas=("public",), max_objects=2),
+        )
+    assert overflow.value.code == "connector.scan_limit_exceeded"

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
+from packages.connectors.metadata import MetadataDocument, MetadataScanOptions
 from packages.platform_core.models import DataSourceType, TlsMode
 from packages.platform_core.network_policy import NetworkPolicyRules
 
@@ -45,3 +46,11 @@ class DatabaseConnector(Protocol):
         credentials: ConnectorCredentials,
         network_rules: NetworkPolicyRules,
     ) -> ConnectionCheck: ...
+
+    def scan_metadata(
+        self,
+        target: ConnectionTarget,
+        credentials: ConnectorCredentials,
+        network_rules: NetworkPolicyRules,
+        options: MetadataScanOptions,
+    ) -> MetadataDocument: ...

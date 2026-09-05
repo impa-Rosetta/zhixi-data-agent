@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from packages.platform_core.settings import DEVELOPMENT_DATA_SOURCE_KEYRING, Settings
+from packages.platform_core.settings import DEVELOPMENT_DATA_SOURCE_KEYRING, Settings, get_settings
 
 
 def test_empty_secret_is_rejected() -> None:
@@ -39,3 +39,13 @@ def test_data_source_key_is_not_exposed_in_repr() -> None:
     )
     assert encoded not in repr(settings)
     assert settings.data_source_master_keyring() == {"v1": b"a" * 32}
+
+
+def test_metadata_scan_object_limit_is_bounded() -> None:
+    with pytest.raises(ValidationError, match="METADATA_SCAN_MAX_OBJECTS"):
+        Settings(metadata_scan_max_objects=1)
+
+
+def test_cached_settings_factory_returns_settings() -> None:
+    get_settings.cache_clear()
+    assert isinstance(get_settings(), Settings)

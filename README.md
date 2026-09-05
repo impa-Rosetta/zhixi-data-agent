@@ -1,6 +1,6 @@
 # 智析 Data Agent
 
-A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收；M2已完成数据源安全底座，正在实现真实数据库接入。
+A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收；M2已完成数据源安全底座、PostgreSQL连接与版本化元数据目录，正在扩展MySQL兼容能力。
 
 ## 快速开始
 
@@ -30,6 +30,7 @@ A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、�
 - `DATA_SOURCE_ACTIVE_KEY_VERSION`：新凭据使用的主密钥版本；
 - `DATA_SOURCE_ALLOWED_PRIVATE_CIDRS`：允许连接的私网CIDR，默认生产配置应为空并按部署环境显式开放；
 - `DATA_SOURCE_ALLOWED_PORTS`：允许的数据源端口，当前示例为PostgreSQL `5432`与MySQL `3306`。
+- `METADATA_SCAN_MAX_OBJECTS`：单次元数据扫描允许发布的最大对象数，默认`10000`；超限时拒绝快照发布。
 
 `.env.example`中的密钥和私网范围只用于本机Docker开发。生产部署会拒绝开发主密钥，并应采用独立随机密钥与最小CIDR白名单。
 
@@ -39,6 +40,10 @@ A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、�
 - `GET /api/v1/workspaces/{workspace_id}/data-sources`：分页查询；
 - `GET/PATCH /api/v1/workspaces/{workspace_id}/data-sources/{id}`：脱敏详情与乐观锁更新；
 - `POST /api/v1/workspaces/{workspace_id}/data-sources/{id}/test`：幂等连接测试；
+- `POST /api/v1/workspaces/{workspace_id}/data-sources/{id}/scans`：按Schema范围幂等投递元数据扫描；
+- `GET /api/v1/workspaces/{workspace_id}/data-sources/{id}/snapshots`：查询不可变快照版本；
+- `GET /api/v1/workspaces/{workspace_id}/data-sources/{id}/catalog`：读取当前或指定版本目录；
+- `GET /api/v1/workspaces/{workspace_id}/data-sources/{id}/diffs`：分页读取相邻快照的确定性结构差异；
 - `POST /api/v1/workspaces/{workspace_id}/data-sources/{id}/disable|enable`：停用或重新测试；
 - `DELETE /api/v1/workspaces/{workspace_id}/data-sources/{id}?version=...`：软删除并销毁密文；
 - `GET /api/v1/workspaces/{workspace_id}/data-sources/{id}/jobs`：数据源任务历史；

@@ -44,6 +44,8 @@
 
 ## 切片三：PostgreSQL元数据扫描与版本目录
 
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M3-postgresql-catalog-acceptance.md`。
+
 目标：从未写死结构的PostgreSQL读取并发布可追溯目录。
 
 1. 实现Schema范围选择和系统Schema排除；

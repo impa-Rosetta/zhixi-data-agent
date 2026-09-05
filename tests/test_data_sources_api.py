@@ -10,8 +10,24 @@ from sqlalchemy.pool import StaticPool
 
 from apps.api.main import app
 from apps.api.rate_limit import get_login_rate_limiter
+from packages.connectors.metadata import (
+    MetadataColumn,
+    MetadataDocument,
+    MetadataRelation,
+    MetadataSchema,
+)
+from packages.platform_core.catalog_store import replace_snapshot_document
 from packages.platform_core.database import Base, get_db
-from packages.platform_core.models import AuditEvent, DataSourceSecret, OutboxEvent
+from packages.platform_core.models import (
+    AuditEvent,
+    CatalogSnapshot,
+    DataSource,
+    DataSourceSecret,
+    OutboxEvent,
+    ScanJob,
+    ScanJobStatus,
+    SnapshotStatus,
+)
 
 
 class AllowRateLimiter:
@@ -175,3 +191,98 @@ def test_connector_availability_validation_and_role_policy(
     ).json()
     analyst_headers = {"Authorization": f"Bearer {analyst_tokens['access_token']}"}
     assert client.post(base, headers=analyst_headers, json=source_payload()).status_code == 403
+
+
+def test_metadata_scan_and_versioned_catalog_api(api: tuple[TestClient, Engine]) -> None:
+    client, engine = api
+    headers, workspace_id = bootstrap(client)
+    base = f"/api/v1/workspaces/{workspace_id}/data-sources"
+    created = client.post(base, headers=headers, json=source_payload()).json()
+    source_id = uuid.UUID(created["data_source"]["id"])
+    connection_job_id = uuid.UUID(created["job"]["id"])
+    with Session(engine) as db:
+        source = db.get(DataSource, source_id)
+        connection_job = db.get(ScanJob, connection_job_id)
+        assert source is not None and connection_job is not None
+        source.status = "ready"
+        connection_job.status = ScanJobStatus.CANCELLED
+        db.commit()
+
+    scan = client.post(
+        f"{base}/{source_id}/scans",
+        headers={**headers, "Idempotency-Key": "catalog-v1"},
+        json={"schemas": ["public"]},
+    )
+    assert scan.status_code == 202
+    assert scan.json()["job_type"] == "metadata_scan"
+    repeated = client.post(
+        f"{base}/{source_id}/scans",
+        headers={**headers, "Idempotency-Key": "catalog-v1"},
+        json={"schemas": ["public"]},
+    )
+    assert repeated.json()["id"] == scan.json()["id"]
+    unavailable = client.get(f"{base}/{source_id}/catalog", headers=headers)
+    assert unavailable.status_code == 409
+    assert unavailable.json()["detail"]["code"] == "catalog.not_available"
+
+    document = MetadataDocument(
+        database_product="postgresql",
+        database_version="16.4",
+        schemas=(MetadataSchema("public", "Business"),),
+        relations=(
+            MetadataRelation(
+                schema="public",
+                name="orders",
+                relation_type="table",
+                comment="Orders",
+                columns=(MetadataColumn("id", 1, "number", "bigint", False),),
+                constraints=(),
+                indexes=(),
+            ),
+        ),
+    )
+    with Session(engine) as db:
+        source = db.get(DataSource, source_id)
+        assert source is not None
+        snapshot = CatalogSnapshot(
+            workspace_id=source.workspace_id,
+            data_source_id=source.id,
+            version=1,
+            status=SnapshotStatus.PUBLISHED,
+            database_product="postgresql",
+            database_version="16.4",
+            scan_options={"schemas": ["public"]},
+            object_counts={"schemas": 1, "relations": 1, "columns": 1},
+            content_digest="0" * 64,
+            sampling_enabled=False,
+        )
+        db.add(snapshot)
+        db.flush()
+        replace_snapshot_document(
+            db,
+            snapshot_id=snapshot.id,
+            workspace_id=source.workspace_id,
+            data_source_id=source.id,
+            document=document,
+        )
+        source.active_snapshot_id = snapshot.id
+        db.commit()
+
+    catalog = client.get(f"{base}/{source_id}/catalog", headers=headers)
+    assert catalog.status_code == 200
+    assert catalog.json()["schemas"][0]["relations"][0]["columns"][0]["name"] == "id"
+    snapshots = client.get(f"{base}/{source_id}/snapshots", headers=headers)
+    assert snapshots.status_code == 200 and snapshots.json()[0]["version"] == 1
+    diffs = client.get(f"{base}/{source_id}/diffs", headers=headers)
+    assert diffs.status_code == 200 and diffs.json()["total"] == 0
+
+
+def test_metadata_scan_rejects_system_schema(api: tuple[TestClient, Engine]) -> None:
+    client, _ = api
+    headers, workspace_id = bootstrap(client)
+    response = client.post(
+        f"/api/v1/workspaces/{workspace_id}/data-sources/{uuid.uuid4()}/scans",
+        headers=headers,
+        json={"schemas": ["pg_catalog"]},
+    )
+    assert response.status_code == 422

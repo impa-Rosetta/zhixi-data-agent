@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from packages.connectors.base import ConnectionCheck, ConnectorError
@@ -19,6 +19,7 @@ from packages.platform_core.models import (
     DataSourceType,
     Membership,
     NetworkPolicy,
+    OutboxEvent,
     ScanJob,
     ScanJobStatus,
     ScanJobTrigger,
@@ -149,6 +150,16 @@ def test_connection_job_publishes_ready_state() -> None:
         assert source.last_success_at is not None
         assert job is not None and job.status is ScanJobStatus.SUCCEEDED
         assert job.progress == 100
+        metadata_job = db.scalar(
+            select(ScanJob).where(ScanJob.job_type == ScanJobType.METADATA_SCAN)
+        )
+        assert metadata_job is not None and metadata_job.status is ScanJobStatus.QUEUED
+        event = db.scalar(
+            select(OutboxEvent).where(
+                OutboxEvent.event_type == "data_source.metadata_scan.requested"
+            )
+        )
+        assert event is not None and event.payload == {"job_id": str(metadata_job.id)}
 
 
 @pytest.mark.parametrize("retryable", [False, True])

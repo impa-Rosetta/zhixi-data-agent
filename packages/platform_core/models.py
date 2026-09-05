@@ -321,6 +321,9 @@ class ScanJob(Base):
     data_source_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
     )
+    snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="SET NULL"), index=True
+    )
     job_type: Mapped[ScanJobType] = mapped_column(
         Enum(
             ScanJobType,
@@ -352,6 +355,7 @@ class ScanJob(Base):
     progress: Mapped[int] = mapped_column(Integer, default=0)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     error_code: Mapped[str | None] = mapped_column(String(100))
+    parameters: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
@@ -407,3 +411,163 @@ class CatalogSnapshot(Base):
     sampling_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CatalogSchema(Base):
+    __tablename__ = "catalog_schemas"
+    __table_args__ = (UniqueConstraint("snapshot_id", "stable_key", name="uq_catalog_schema_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    stable_key: Mapped[str] = mapped_column(String(700))
+    name: Mapped[str] = mapped_column(String(128))
+    normalized_name: Mapped[str] = mapped_column(String(128), index=True)
+    comment: Mapped[str | None] = mapped_column(Text)
+
+
+class CatalogRelation(Base):
+    __tablename__ = "catalog_relations"
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "stable_key", name="uq_catalog_relation_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    schema_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_schemas.id", ondelete="CASCADE"), index=True
+    )
+    stable_key: Mapped[str] = mapped_column(String(700))
+    name: Mapped[str] = mapped_column(String(128))
+    normalized_name: Mapped[str] = mapped_column(String(128), index=True)
+    relation_type: Mapped[str] = mapped_column(String(32))
+    comment: Mapped[str | None] = mapped_column(Text)
+
+
+class CatalogColumn(Base):
+    __tablename__ = "catalog_columns"
+    __table_args__ = (UniqueConstraint("snapshot_id", "stable_key", name="uq_catalog_column_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    relation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_relations.id", ondelete="CASCADE"), index=True
+    )
+    stable_key: Mapped[str] = mapped_column(String(700))
+    name: Mapped[str] = mapped_column(String(128))
+    normalized_name: Mapped[str] = mapped_column(String(128), index=True)
+    ordinal_position: Mapped[int] = mapped_column(Integer)
+    data_type: Mapped[str] = mapped_column(String(64), index=True)
+    native_type: Mapped[str] = mapped_column(String(256))
+    nullable: Mapped[bool] = mapped_column(Boolean)
+    default_expression: Mapped[str | None] = mapped_column(Text)
+    comment: Mapped[str | None] = mapped_column(Text)
+
+
+class CatalogConstraint(Base):
+    __tablename__ = "catalog_constraints"
+    __table_args__ = (
+        UniqueConstraint("snapshot_id", "stable_key", name="uq_catalog_constraint_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    relation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_relations.id", ondelete="CASCADE"), index=True
+    )
+    stable_key: Mapped[str] = mapped_column(String(700))
+    name: Mapped[str] = mapped_column(String(128))
+    constraint_type: Mapped[str] = mapped_column(String(32), index=True)
+    column_names: Mapped[list[str]] = mapped_column(JSON, default=list)
+    referenced_schema: Mapped[str | None] = mapped_column(String(128))
+    referenced_relation: Mapped[str | None] = mapped_column(String(128))
+    referenced_columns: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+
+class CatalogIndex(Base):
+    __tablename__ = "catalog_indexes"
+    __table_args__ = (UniqueConstraint("snapshot_id", "stable_key", name="uq_catalog_index_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    relation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_relations.id", ondelete="CASCADE"), index=True
+    )
+    stable_key: Mapped[str] = mapped_column(String(700))
+    name: Mapped[str] = mapped_column(String(128))
+    column_names: Mapped[list[str]] = mapped_column(JSON, default=list)
+    is_unique: Mapped[bool] = mapped_column(Boolean)
+    method: Mapped[str | None] = mapped_column(String(64))
+    predicate: Mapped[str | None] = mapped_column(Text)
+
+
+class CatalogDiff(Base):
+    __tablename__ = "catalog_diffs"
+    __table_args__ = (
+        UniqueConstraint(
+            "from_snapshot_id",
+            "to_snapshot_id",
+            "object_key",
+            "change_type",
+            name="uq_catalog_diff_change",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
+    )
+    from_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    to_snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("catalog_snapshots.id", ondelete="CASCADE"), index=True
+    )
+    change_type: Mapped[str] = mapped_column(String(32), index=True)
+    object_type: Mapped[str] = mapped_column(String(32), index=True)
+    object_key: Mapped[str] = mapped_column(String(700))
+    severity: Mapped[str] = mapped_column(String(32), index=True)
+    before_value: Mapped[dict[str, object] | None] = mapped_column(JSON)
+    after_value: Mapped[dict[str, object] | None] = mapped_column(JSON)

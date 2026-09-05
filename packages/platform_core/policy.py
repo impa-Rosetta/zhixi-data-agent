@@ -11,6 +11,7 @@ class Action(enum.StrEnum):
     MEMBER_INVITE = "member.invite"
     MEMBER_ROLE_UPDATE = "member.role.update"
     DATA_SOURCE_MANAGE = "data_source.manage"
+    CATALOG_READ = "catalog.read"
     ANALYSIS_RUN = "analysis.run"
     AUDIT_READ = "audit.read"
 
@@ -19,11 +20,19 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
     WorkspaceRole.SYSTEM_ADMIN: frozenset(Action),
     WorkspaceRole.WORKSPACE_ADMIN: frozenset(Action),
     WorkspaceRole.DATA_ADMIN: frozenset(
-        {Action.WORKSPACE_READ, Action.MEMBER_READ, Action.DATA_SOURCE_MANAGE, Action.ANALYSIS_RUN}
+        {
+            Action.WORKSPACE_READ,
+            Action.MEMBER_READ,
+            Action.DATA_SOURCE_MANAGE,
+            Action.CATALOG_READ,
+            Action.ANALYSIS_RUN,
+        }
     ),
-    WorkspaceRole.ANALYST: frozenset({Action.WORKSPACE_READ, Action.ANALYSIS_RUN}),
+    WorkspaceRole.ANALYST: frozenset(
+        {Action.WORKSPACE_READ, Action.CATALOG_READ, Action.ANALYSIS_RUN}
+    ),
     WorkspaceRole.AUDITOR: frozenset(
-        {Action.WORKSPACE_READ, Action.MEMBER_READ, Action.AUDIT_READ}
+        {Action.WORKSPACE_READ, Action.MEMBER_READ, Action.CATALOG_READ, Action.AUDIT_READ}
     ),
 }
 

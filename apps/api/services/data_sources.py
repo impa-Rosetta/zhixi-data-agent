@@ -5,6 +5,10 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from packages.platform_core.metadata_scan_jobs import (
+    MetadataScanQueueError,
+    enqueue_metadata_scan_job,
+)
 from packages.platform_core.models import (
     AuditEvent,
     DataSource,
@@ -218,6 +222,28 @@ def enqueue_connection_test(
     source.status = DataSourceStatus.TESTING
     source.health_code = None
     return job
+
+
+def enqueue_metadata_scan(
+    db: Session,
+    *,
+    source: DataSource,
+    actor_user_id: uuid.UUID | None,
+    trigger: ScanJobTrigger,
+    schemas: tuple[str, ...] = (),
+    idempotency_token: str | None = None,
+) -> ScanJob:
+    try:
+        return enqueue_metadata_scan_job(
+            db,
+            source=source,
+            actor_user_id=actor_user_id,
+            trigger=trigger,
+            schemas=schemas,
+            idempotency_token=idempotency_token,
+        )
+    except MetadataScanQueueError as exc:
+        raise DataSourceServiceError(exc.code, exc.message) from exc
 
 
 def create_data_source(

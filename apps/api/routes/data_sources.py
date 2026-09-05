@@ -7,11 +7,13 @@ from sqlalchemy.exc import IntegrityError
 
 from apps.api.authorization import authorize
 from apps.api.dependencies import CurrentUser, DbSession
+from apps.api.services.catalogs import get_catalog, list_diffs, list_snapshots
 from apps.api.services.data_sources import (
     DataSourceServiceError,
     change_data_source_state,
     create_data_source,
     enqueue_connection_test,
+    enqueue_metadata_scan,
     get_data_source,
     list_data_sources,
     update_data_source,
@@ -20,11 +22,18 @@ from packages.platform_core.models import ScanJob, ScanJobTrigger
 from packages.platform_core.policy import Action
 from packages.platform_core.settings import get_settings
 from packages.shared_contracts.data_sources import (
+    CatalogDiffPage,
+    CatalogDiffResponse,
+    CatalogRelationResponse,
+    CatalogResponse,
+    CatalogSchemaResponse,
+    CatalogSnapshotResponse,
     DataSourceCreateRequest,
     DataSourceCreateResponse,
     DataSourcePage,
     DataSourceResponse,
     DataSourceUpdateRequest,
+    MetadataScanRequest,
     ScanJobResponse,
     VersionRequest,
 )
@@ -44,6 +53,8 @@ def _service_status(exc: DataSourceServiceError, default: int) -> int:
         "data_source.invalid_state",
         "data_source.inactive",
         "data_source.test_in_progress",
+        "data_source.not_ready",
+        "catalog.not_available",
     }:
         return status.HTTP_409_CONFLICT
     return default
@@ -189,6 +200,129 @@ def test_connection(
     _commit(db)
     db.refresh(job)
     return ScanJobResponse.model_validate(job)
+
+
+@router.post(
+    "/data-sources/{data_source_id}/scans",
+    response_model=ScanJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def scan(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    payload: MetadataScanRequest,
+    db: DbSession,
+    user: CurrentUser,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> ScanJobResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.DATA_SOURCE_MANAGE)
+    if idempotency_key is not None and not 1 <= len(idempotency_key) <= 200:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "request.invalid_idempotency_key", "message": "Invalid key length"},
+        )
+    try:
+        source = get_data_source(db, workspace_id=workspace_id, data_source_id=data_source_id)
+        job = enqueue_metadata_scan(
+            db,
+            source=source,
+            actor_user_id=user.id,
+            trigger=ScanJobTrigger.MANUAL,
+            schemas=tuple(payload.schemas),
+            idempotency_token=idempotency_key,
+        )
+    except DataSourceServiceError as exc:
+        db.rollback()
+        raise _error(exc, _service_status(exc, status.HTTP_409_CONFLICT)) from exc
+    _commit(db)
+    db.refresh(job)
+    return ScanJobResponse.model_validate(job)
+
+
+@router.get(
+    "/data-sources/{data_source_id}/snapshots",
+    response_model=list[CatalogSnapshotResponse],
+)
+def snapshots(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> list[CatalogSnapshotResponse]:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.CATALOG_READ)
+    try:
+        items = list_snapshots(db, workspace_id=workspace_id, data_source_id=data_source_id)
+    except DataSourceServiceError as exc:
+        raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+    return [CatalogSnapshotResponse.model_validate(item) for item in items]
+
+
+@router.get("/data-sources/{data_source_id}/catalog", response_model=CatalogResponse)
+def catalog(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    snapshot_id: uuid.UUID | None = None,
+) -> CatalogResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.CATALOG_READ)
+    try:
+        snapshot, document = get_catalog(
+            db,
+            workspace_id=workspace_id,
+            data_source_id=data_source_id,
+            snapshot_id=snapshot_id,
+        )
+    except DataSourceServiceError as exc:
+        code = (
+            status.HTTP_409_CONFLICT
+            if exc.code == "catalog.not_available"
+            else status.HTTP_404_NOT_FOUND
+        )
+        raise _error(exc, code) from exc
+    schemas = []
+    for item in document.schemas:
+        relations = [
+            CatalogRelationResponse.model_validate(relation)
+            for relation in document.relations
+            if relation.schema == item.name
+        ]
+        schemas.append(
+            CatalogSchemaResponse(name=item.name, comment=item.comment, relations=relations)
+        )
+    return CatalogResponse(
+        snapshot=CatalogSnapshotResponse.model_validate(snapshot), schemas=schemas
+    )
+
+
+@router.get("/data-sources/{data_source_id}/diffs", response_model=CatalogDiffPage)
+def diffs(
+    workspace_id: uuid.UUID,
+    data_source_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    to_snapshot_id: uuid.UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> CatalogDiffPage:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.CATALOG_READ)
+    try:
+        items, total = list_diffs(
+            db,
+            workspace_id=workspace_id,
+            data_source_id=data_source_id,
+            to_snapshot_id=to_snapshot_id,
+            limit=limit,
+            offset=offset,
+        )
+    except DataSourceServiceError as exc:
+        raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+    return CatalogDiffPage(
+        items=[CatalogDiffResponse.model_validate(item) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def _state_change(

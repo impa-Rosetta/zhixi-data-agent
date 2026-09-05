@@ -9,6 +9,7 @@ from packages.platform_core.models import (
     ScanJobStatus,
     ScanJobTrigger,
     ScanJobType,
+    SnapshotStatus,
     TlsMode,
 )
 
@@ -88,6 +89,7 @@ class ScanJobResponse(BaseModel):
 
     id: uuid.UUID
     data_source_id: uuid.UUID
+    snapshot_id: uuid.UUID | None
     job_type: ScanJobType
     trigger: ScanJobTrigger
     status: ScanJobStatus
@@ -141,3 +143,114 @@ class DataSourcePage(BaseModel):
 class ErrorDetail(BaseModel):
     code: str
     message: str
+
+
+class MetadataScanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemas: list[str] = Field(default_factory=list, max_length=100)
+
+    @field_validator("schemas")
+    @classmethod
+    def validate_schemas(cls, values: list[str]) -> list[str]:
+        normalized = [item.strip() for item in values]
+        if any(not item or len(item) > 128 for item in normalized):
+            raise ValueError("Schema names must contain 1 to 128 characters")
+        if any(item == "information_schema" or item.startswith("pg_") for item in normalized):
+            raise ValueError("System schemas cannot be selected")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("Schema names must be unique")
+        return normalized
+
+
+class CatalogSnapshotResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    data_source_id: uuid.UUID
+    version: int
+    status: SnapshotStatus
+    database_product: str
+    database_version: str | None
+    scan_options: dict[str, object]
+    object_counts: dict[str, object]
+    content_digest: str | None
+    sampling_enabled: bool
+    started_at: datetime
+    completed_at: datetime | None
+
+
+class CatalogColumnResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    ordinal_position: int
+    data_type: str
+    native_type: str
+    nullable: bool
+    default_expression: str | None
+    comment: str | None
+
+
+class CatalogConstraintResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    constraint_type: str
+    columns: tuple[str, ...]
+    referenced_schema: str | None
+    referenced_relation: str | None
+    referenced_columns: tuple[str, ...]
+
+
+class CatalogIndexResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    columns: tuple[str, ...]
+    unique: bool
+    method: str | None
+    predicate: str | None
+
+
+class CatalogRelationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    relation_type: str
+    comment: str | None
+    columns: list[CatalogColumnResponse]
+    constraints: list[CatalogConstraintResponse]
+    indexes: list[CatalogIndexResponse]
+
+
+class CatalogSchemaResponse(BaseModel):
+    name: str
+    comment: str | None
+    relations: list[CatalogRelationResponse]
+
+
+class CatalogResponse(BaseModel):
+    snapshot: CatalogSnapshotResponse
+    schemas: list[CatalogSchemaResponse]
+
+
+class CatalogDiffResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    from_snapshot_id: uuid.UUID | None
+    to_snapshot_id: uuid.UUID
+    change_type: str
+    object_type: str
+    object_key: str
+    severity: str
+    before_value: dict[str, object] | None
+    after_value: dict[str, object] | None
+
+
+class CatalogDiffPage(BaseModel):
+    items: list[CatalogDiffResponse]
+    total: int
+    limit: int
+    offset: int
