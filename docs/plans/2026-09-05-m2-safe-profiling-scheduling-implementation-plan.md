@@ -43,6 +43,8 @@
 
 ## 子切片三：PostgreSQL 与 MySQL 安全画像
 
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M5-dual-database-profiling-acceptance.md`。
+
 目标：两个连接器均能在相同安全边界内读取白名单普通表并输出统一画像。
 
 1. 扩展连接器协议，加入受控画像方法；

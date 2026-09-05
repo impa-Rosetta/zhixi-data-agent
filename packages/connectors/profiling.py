@@ -23,6 +23,34 @@ class SamplingBudget:
 
 
 @dataclass(frozen=True)
+class ProfileColumnTarget:
+    name: str
+    data_type: str
+    native_type: str
+
+
+@dataclass(frozen=True)
+class ProfileTableTarget:
+    schema: str
+    name: str
+    columns: tuple[ProfileColumnTarget, ...]
+
+
+@dataclass(frozen=True)
+class ProfileScanOptions:
+    tables: tuple[ProfileTableTarget, ...]
+    budget: SamplingBudget
+    statement_timeout_seconds: int = 10
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.statement_timeout_seconds <= 10:
+            raise ValueError("statement_timeout_seconds must be between 1 and 10")
+        keys = [(table.schema, table.name) for table in self.tables]
+        if len(keys) != len(set(keys)):
+            raise ValueError("profile table targets must be unique")
+
+
+@dataclass(frozen=True)
 class SampledColumn:
     name: str
     data_type: str

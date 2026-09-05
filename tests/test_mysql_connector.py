@@ -16,6 +16,12 @@ from packages.connectors.mysql import (
     _temporary_ca,
     _tls_options,
 )
+from packages.connectors.profiling import (
+    ProfileColumnTarget,
+    ProfileScanOptions,
+    ProfileTableTarget,
+    SamplingBudget,
+)
 from packages.connectors.registry import ConnectorRegistry
 from packages.platform_core.models import DataSourceType, TlsMode
 from packages.platform_core.network_policy import NetworkPolicyRules
@@ -395,3 +401,66 @@ def test_mysql_rejects_network_policy_and_invalid_current_user(
     with pytest.raises(ConnectorError) as invalid:
         _grantee("missing-host")
     assert invalid.value.code == "connector.invalid_response"
+
+
+class ProfileCursor:
+    def __init__(self) -> None:
+        self.query = ""
+
+    def __enter__(self) -> "ProfileCursor":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, query: str, params: object = None) -> None:
+        self.query = query
+
+    def fetchone(self) -> tuple[int] | None:
+        return (300,)
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return [(1, "13800138000"), (2, None)]
+
+
+def test_mysql_profile_uses_bounded_contract_and_single_database(
+    monkeypatch: pytest.MonkeyPatch, rules: NetworkPolicyRules
+) -> None:
+    cursor = ProfileCursor()
+    patch_connection(monkeypatch, cursor)  # type: ignore[arg-type]
+    options = ProfileScanOptions(
+        tables=(
+            ProfileTableTarget(
+                "factory_demo",
+                "production_orders",
+                (
+                    ProfileColumnTarget("id", "number", "bigint"),
+                    ProfileColumnTarget("phone", "string", "varchar(32)"),
+                    ProfileColumnTarget("payload", "json", "json"),
+                ),
+            ),
+        ),
+        budget=SamplingBudget(max_rows_per_table=2),
+        statement_timeout_seconds=3,
+    )
+    document = MySQLConnector().profile_data(
+        target(TlsMode.DISABLE), ConnectorCredentials("reader", "secret"), rules, options
+    )
+    assert document.relations[0].estimated_row_count == 300
+    assert document.relations[0].columns[0].samples[0].masked_value == "1"
+    assert document.relations[0].columns[1].sensitivity_type == "phone"
+    assert document.relations[0].columns[1].samples == ()
+    assert document.relations[0].columns[2].skipped_reason == "unsupported_type"
+    assert "13800138000" not in repr(document)
+
+    cross_database = ProfileScanOptions(
+        tables=(ProfileTableTarget("other", "orders", ()),), budget=SamplingBudget()
+    )
+    with pytest.raises(ConnectorError) as raised:
+        MySQLConnector().profile_data(
+            target(TlsMode.DISABLE),
+            ConnectorCredentials("reader", "secret"),
+            rules,
+            cross_database,
+        )
+    assert raised.value.code == "sampling.scope_invalid"

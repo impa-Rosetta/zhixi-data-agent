@@ -60,6 +60,12 @@ class SensitivityMatch:
     sample_allowed: bool
 
 
+def is_sampleable_type(data_type: str, native_type: str) -> bool:
+    return data_type.casefold() not in _BLOCKED_TYPES and not any(
+        marker in native_type.casefold() for marker in _BLOCKED_NATIVE_MARKERS
+    )
+
+
 def _normalized_name(value: str) -> str:
     return re.sub(r"[^\w\u4e00-\u9fff]+", "_", value.casefold()).strip("_")
 
@@ -129,9 +135,7 @@ def _value_match(value: object) -> SensitivityMatch | None:
 def detect_sensitivity(column: SampledColumn) -> SensitivityMatch:
     portable_type = column.data_type.casefold()
     native_type = column.native_type.casefold()
-    if portable_type in _BLOCKED_TYPES or any(
-        marker in native_type for marker in _BLOCKED_NATIVE_MARKERS
-    ):
+    if not is_sampleable_type(portable_type, native_type):
         return SensitivityMatch("unsupported_type", 1.0, ("type:sample_blocked",), False)
     name_match = _name_match(column.name)
     if name_match is not None:

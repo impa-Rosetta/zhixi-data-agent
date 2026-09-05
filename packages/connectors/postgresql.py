@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
+from psycopg import sql
 
 from packages.connectors.base import (
     ConnectionCheck,
@@ -22,6 +23,12 @@ from packages.connectors.metadata import (
     MetadataScanOptions,
     MetadataSchema,
 )
+from packages.connectors.profiling import (
+    ProfileDocument,
+    ProfileScanOptions,
+    SampledColumn,
+    SampledRelation,
+)
 from packages.platform_core.models import DataSourceType, TlsMode
 from packages.platform_core.network_policy import (
     NetworkPolicyError,
@@ -30,6 +37,7 @@ from packages.platform_core.network_policy import (
     resolve_host,
     verify_connected_address,
 )
+from packages.platform_core.profiling import build_profile_document, is_sampleable_type
 
 _SSL_MODES = {
     TlsMode.DISABLE: "disable",
@@ -163,6 +171,120 @@ class PostgreSQLConnector:
             except psycopg.Error as exc:
                 last_error = exc
         raise self._map_connection_error(last_error)
+
+    def profile_data(
+        self,
+        target: ConnectionTarget,
+        credentials: ConnectorCredentials,
+        network_rules: NetworkPolicyRules,
+        options: ProfileScanOptions,
+    ) -> ProfileDocument:
+        try:
+            resolved = resolve_host(target.host)
+            authorized = authorize_destination(target.host, target.port, resolved, network_rules)
+        except NetworkPolicyError as exc:
+            raise ConnectorError(exc.code) from exc
+        last_error: Exception | None = None
+        for address in authorized:
+            try:
+                return self._profile_address(
+                    target, credentials, network_rules, authorized, address, options
+                )
+            except psycopg.Error as exc:
+                last_error = exc
+        raise self._map_connection_error(last_error)
+
+    def _profile_address(
+        self,
+        target: ConnectionTarget,
+        credentials: ConnectorCredentials,
+        network_rules: NetworkPolicyRules,
+        authorized: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...],
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+        options: ProfileScanOptions,
+    ) -> ProfileDocument:
+        with _temporary_ca(credentials.tls_ca_certificate) as ca_path:
+            kwargs: dict[str, Any] = {
+                "host": target.host,
+                "hostaddr": str(address),
+                "port": target.port,
+                "dbname": target.database_name,
+                "user": credentials.username,
+                "password": credentials.password,
+                "sslmode": _SSL_MODES[target.tls_mode],
+                "connect_timeout": 5,
+                "options": (
+                    "-c default_transaction_read_only=on "
+                    f"-c statement_timeout={options.statement_timeout_seconds * 1000} "
+                    "-c lock_timeout=5000"
+                ),
+                "application_name": "zhixi-data-agent-profile",
+            }
+            if ca_path is not None:
+                kwargs["sslrootcert"] = ca_path
+            with psycopg.connect(**kwargs) as connection:
+                try:
+                    connected = ipaddress.ip_address(connection.info.hostaddr)
+                    verify_connected_address(connected, authorized, network_rules)
+                except (ValueError, NetworkPolicyError) as exc:
+                    code = (
+                        exc.code
+                        if isinstance(exc, NetworkPolicyError)
+                        else "connector.invalid_response"
+                    )
+                    raise ConnectorError(code) from exc
+                sampled: list[SampledRelation] = []
+                with connection.cursor() as cursor:
+                    cursor.execute("SET TRANSACTION READ ONLY")
+                    for table in options.tables:
+                        cursor.execute(
+                            """
+                            SELECT GREATEST(c.reltuples::bigint, 0)
+                            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                            WHERE n.nspname = %s AND c.relname = %s
+                              AND c.relkind IN ('r', 'p')
+                              AND has_table_privilege(current_user, c.oid, 'SELECT')
+                            """,
+                            (table.schema, table.name),
+                        )
+                        estimate = cursor.fetchone()
+                        if estimate is None:
+                            raise ConnectorError("sampling.scope_invalid")
+                        selected = tuple(
+                            column
+                            for column in table.columns
+                            if is_sampleable_type(column.data_type, column.native_type)
+                        )
+                        rows: list[tuple[Any, ...]] = []
+                        if selected:
+                            query = sql.SQL("SELECT {} FROM {}.{} LIMIT %s").format(
+                                sql.SQL(", ").join(sql.Identifier(item.name) for item in selected),
+                                sql.Identifier(table.schema),
+                                sql.Identifier(table.name),
+                            )
+                            cursor.execute(query, (options.budget.max_rows_per_table,))
+                            rows = list(cursor.fetchall())
+                        values_by_name = {
+                            column.name: tuple(row[index] for row in rows)
+                            for index, column in enumerate(selected)
+                        }
+                        sampled.append(
+                            SampledRelation(
+                                table.schema,
+                                table.name,
+                                int(estimate[0]),
+                                tuple(
+                                    SampledColumn(
+                                        column.name,
+                                        column.data_type,
+                                        column.native_type,
+                                        values_by_name.get(column.name, ()),
+                                    )
+                                    for column in table.columns
+                                ),
+                            )
+                        )
+                return build_profile_document(tuple(sampled), options.budget)
 
     def _check_address(
         self,

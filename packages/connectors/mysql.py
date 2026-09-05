@@ -24,6 +24,12 @@ from packages.connectors.metadata import (
     MetadataScanOptions,
     MetadataSchema,
 )
+from packages.connectors.profiling import (
+    ProfileDocument,
+    ProfileScanOptions,
+    SampledColumn,
+    SampledRelation,
+)
 from packages.platform_core.models import DataSourceType, TlsMode
 from packages.platform_core.network_policy import (
     NetworkPolicyError,
@@ -32,6 +38,7 @@ from packages.platform_core.network_policy import (
     resolve_host,
     verify_connected_address,
 )
+from packages.platform_core.profiling import build_profile_document, is_sampleable_type
 
 _SYSTEM_SCHEMAS = {"information_schema", "mysql", "performance_schema", "sys"}
 _READ_ONLY_PRIVILEGES = {"SELECT", "SHOW VIEW", "USAGE"}
@@ -167,10 +174,12 @@ def _connect_address(
                 raw_socket.close()
 
 
-def _start_read_only(connection: pymysql.connections.Connection) -> None:
+def _start_read_only(
+    connection: pymysql.connections.Connection, statement_timeout_seconds: int = 10
+) -> None:
     with connection.cursor() as cursor:
         cursor.execute("SET SESSION TRANSACTION READ ONLY")
-        cursor.execute("SET SESSION MAX_EXECUTION_TIME = 10000")
+        cursor.execute(f"SET SESSION MAX_EXECUTION_TIME = {int(statement_timeout_seconds) * 1000}")
         cursor.execute("SET SESSION lock_wait_timeout = 5")
         cursor.execute("START TRANSACTION READ ONLY")
 
@@ -182,6 +191,10 @@ def _grantee(current_user: str) -> str:
     escaped_user = user.replace("'", "''")
     escaped_host = host.replace("'", "''")
     return f"'{escaped_user}'@'{escaped_host}'"
+
+
+def _quote_identifier(value: str) -> str:
+    return "`" + value.replace("`", "``") + "`"
 
 
 class MySQLConnector:
@@ -220,6 +233,28 @@ class MySQLConnector:
         for address in authorized:
             try:
                 return self._scan_address(
+                    target, credentials, network_rules, authorized, address, options
+                )
+            except (pymysql.MySQLError, OSError) as exc:
+                last_error = exc
+        raise self._map_connection_error(last_error)
+
+    def profile_data(
+        self,
+        target: ConnectionTarget,
+        credentials: ConnectorCredentials,
+        network_rules: NetworkPolicyRules,
+        options: ProfileScanOptions,
+    ) -> ProfileDocument:
+        if target.database_name.lower() in _SYSTEM_SCHEMAS or any(
+            table.schema != target.database_name for table in options.tables
+        ):
+            raise ConnectorError("sampling.scope_invalid")
+        authorized = self._authorized(target, network_rules)
+        last_error: Exception | None = None
+        for address in authorized:
+            try:
+                return self._profile_address(
                     target, credentials, network_rules, authorized, address, options
                 )
             except (pymysql.MySQLError, OSError) as exc:
@@ -352,6 +387,72 @@ class MySQLConnector:
                 constraint_rows,
                 index_rows,
             )
+
+    def _profile_address(
+        self,
+        target: ConnectionTarget,
+        credentials: ConnectorCredentials,
+        network_rules: NetworkPolicyRules,
+        authorized: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...],
+        address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+        options: ProfileScanOptions,
+    ) -> ProfileDocument:
+        with _connect_address(
+            target, credentials, network_rules, authorized, address
+        ) as connection:
+            _start_read_only(connection, options.statement_timeout_seconds)
+            sampled: list[SampledRelation] = []
+            with connection.cursor() as cursor:
+                for table in options.tables:
+                    cursor.execute(
+                        """
+                        SELECT TABLE_ROWS FROM information_schema.TABLES
+                        WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
+                          AND TABLE_TYPE = 'BASE TABLE'
+                        """,
+                        (table.schema, table.name),
+                    )
+                    estimate = cursor.fetchone()
+                    if estimate is None:
+                        raise ConnectorError("sampling.scope_invalid")
+                    selected = tuple(
+                        column
+                        for column in table.columns
+                        if is_sampleable_type(column.data_type, column.native_type)
+                    )
+                    rows: list[tuple[Any, ...]] = []
+                    if selected:
+                        selected_sql = ", ".join(
+                            _quote_identifier(column.name) for column in selected
+                        )
+                        query = (
+                            f"SELECT {selected_sql} FROM {_quote_identifier(table.schema)}."
+                            f"{_quote_identifier(table.name)} "
+                            f"LIMIT {options.budget.max_rows_per_table}"
+                        )
+                        cursor.execute(query)
+                        rows = list(cursor.fetchall())
+                    values_by_name = {
+                        column.name: tuple(row[index] for row in rows)
+                        for index, column in enumerate(selected)
+                    }
+                    sampled.append(
+                        SampledRelation(
+                            table.schema,
+                            table.name,
+                            None if estimate[0] is None else int(estimate[0]),
+                            tuple(
+                                SampledColumn(
+                                    column.name,
+                                    column.data_type,
+                                    column.native_type,
+                                    values_by_name.get(column.name, ()),
+                                )
+                                for column in table.columns
+                            ),
+                        )
+                    )
+            return build_profile_document(tuple(sampled), options.budget)
 
     @staticmethod
     def _relations(cursor: Any, schema: str) -> list[tuple[Any, ...]]:

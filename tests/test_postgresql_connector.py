@@ -8,6 +8,12 @@ import pytest
 from packages.connectors.base import ConnectionTarget, ConnectorCredentials, ConnectorError
 from packages.connectors.metadata import MetadataScanOptions
 from packages.connectors.postgresql import PostgreSQLConnector
+from packages.connectors.profiling import (
+    ProfileColumnTarget,
+    ProfileScanOptions,
+    ProfileTableTarget,
+    SamplingBudget,
+)
 from packages.connectors.registry import ConnectorRegistry
 from packages.platform_core.models import DataSourceType, TlsMode
 from packages.platform_core.network_policy import NetworkPolicyRules
@@ -273,3 +279,56 @@ def test_postgresql_metadata_scan_rejects_unknown_schema_and_object_overflow(
             MetadataScanOptions(schemas=("public",), max_objects=2),
         )
     assert overflow.value.code == "connector.scan_limit_exceeded"
+
+
+class ProfileCursor:
+    def __init__(self) -> None:
+        self.query: object = ""
+        self.params: object = None
+
+    def __enter__(self) -> "ProfileCursor":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, query: object, params: object = None) -> None:
+        self.query = query
+        self.params = params
+
+    def fetchone(self) -> tuple[int] | None:
+        return (200,)
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return [(1, "person@example.com"), (2, None)]
+
+
+def test_postgresql_profile_uses_bounded_contract_and_blocks_sensitive_values(
+    monkeypatch: pytest.MonkeyPatch, rules: NetworkPolicyRules
+) -> None:
+    cursor = ProfileCursor()
+    patch_connection(monkeypatch, cursor)  # type: ignore[arg-type]
+    options = ProfileScanOptions(
+        tables=(
+            ProfileTableTarget(
+                "public",
+                "orders",
+                (
+                    ProfileColumnTarget("id", "number", "bigint"),
+                    ProfileColumnTarget("email", "string", "text"),
+                    ProfileColumnTarget("payload", "json", "jsonb"),
+                ),
+            ),
+        ),
+        budget=SamplingBudget(max_rows_per_table=2),
+        statement_timeout_seconds=3,
+    )
+    document = PostgreSQLConnector().profile_data(
+        target(TlsMode.DISABLE), ConnectorCredentials("reader", "secret"), rules, options
+    )
+    assert document.relations[0].estimated_row_count == 200
+    assert document.relations[0].columns[0].samples[0].masked_value == "1"
+    assert document.relations[0].columns[1].sensitivity_type == "email"
+    assert document.relations[0].columns[1].samples == ()
+    assert document.relations[0].columns[2].skipped_reason == "unsupported_type"
+    assert "person@example.com" not in repr(document)
