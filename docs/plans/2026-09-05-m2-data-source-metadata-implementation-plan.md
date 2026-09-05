@@ -29,6 +29,8 @@
 
 ## 切片二：数据源API与PostgreSQL连接测试
 
+状态：已完成并通过验收（2026-09-05）。验收记录见`docs/acceptance/M2-postgresql-connection-acceptance.md`。
+
 目标：管理员可创建PostgreSQL数据源并获得真实、安全的连接测试结果。
 
 1. 定义数据源请求/响应契约、稳定错误码和脱敏规则；

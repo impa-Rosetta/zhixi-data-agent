@@ -33,6 +33,19 @@ A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、�
 
 `.env.example`中的密钥和私网范围只用于本机Docker开发。生产部署会拒绝开发主密钥，并应采用独立随机密钥与最小CIDR白名单。
 
+## M2数据源接口
+
+- `POST /api/v1/workspaces/{workspace_id}/data-sources`：保存加密配置并异步测试；
+- `GET /api/v1/workspaces/{workspace_id}/data-sources`：分页查询；
+- `GET/PATCH /api/v1/workspaces/{workspace_id}/data-sources/{id}`：脱敏详情与乐观锁更新；
+- `POST /api/v1/workspaces/{workspace_id}/data-sources/{id}/test`：幂等连接测试；
+- `POST /api/v1/workspaces/{workspace_id}/data-sources/{id}/disable|enable`：停用或重新测试；
+- `DELETE /api/v1/workspaces/{workspace_id}/data-sources/{id}?version=...`：软删除并销毁密文；
+- `GET /api/v1/workspaces/{workspace_id}/data-sources/{id}/jobs`：数据源任务历史；
+- `GET /api/v1/workspaces/{workspace_id}/scan-jobs/{job_id}`：轮询真实任务状态。
+
+Compose中的`source-postgres`是本地只读集成样例，宿主机端口为`55432`。它只用于开发验收，不作为平台业务数据库或生产凭据示例。
+
 ## M1产品界面
 
 - `/`：按平台状态自动进入首次初始化、登录或工作台；

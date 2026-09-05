@@ -46,3 +46,16 @@
 - 全量质量门禁通过：32项后端测试、90%覆盖率、4项前端测试、静态检查和生产构建；
 - 空白PostgreSQL数据库完成升级、回滚、再升级验证；真实Compose栈迁移至最新版本，全部服务健康且Worker在线；
 - 下一切片实现数据源API、PostgreSQL连接器和异步连接测试闭环。
+
+## 2026-09-05：M2 PostgreSQL连接闭环验收
+
+- 完成数据源创建、分页列表、详情、乐观锁更新、幂等测试、启停、软删除和任务查询API；
+- API响应、Outbox载荷、审计与Worker日志均不包含用户名、密码或可复原连接串；
+- 实现Connector协议、注册表和PostgreSQL Connector，连接通过`hostaddr`固定到已授权DNS结果；
+- 连接会话强制只读与超时，并校验角色高权限、数据库/Schema创建权限和业务表写权限；
+- 使用事务Outbox、独立Celery Beat调度器和幂等Worker任务实现可靠异步投递，瞬时错误最多重试2次；
+- 停用/删除和运行中配置更新具备竞态保护，旧任务不能覆盖新状态；
+- 新增独立PostgreSQL 16.4只读样例库，真实API→Outbox→Worker→Connector链路进入`ready`；
+- 真实错误密码返回`connector.authentication_failed`，高权限账户返回`connector.read_only_required`；
+- API与Worker容器改为非root用户，Worker并发限制为2，符合M2资源边界。
+- 全量质量门禁通过：53项后端测试、90%覆盖率、4项前端测试、静态检查和生产构建。

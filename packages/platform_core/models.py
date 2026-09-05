@@ -77,6 +77,10 @@ class SnapshotStatus(enum.StrEnum):
     REJECTED = "rejected"
 
 
+def _enum_values(enum_type: type[enum.Enum]) -> list[str]:
+    return [str(item.value) for item in enum_type]
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -229,14 +233,26 @@ class DataSource(Base):
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str | None] = mapped_column(Text)
     source_type: Mapped[DataSourceType] = mapped_column(
-        Enum(DataSourceType, name="data_source_type", native_enum=False)
+        Enum(
+            DataSourceType,
+            name="data_source_type",
+            native_enum=False,
+            values_callable=_enum_values,
+        )
     )
     host: Mapped[str] = mapped_column(String(253))
     port: Mapped[int] = mapped_column(Integer)
     database_name: Mapped[str] = mapped_column(String(128))
-    tls_mode: Mapped[TlsMode] = mapped_column(Enum(TlsMode, name="tls_mode", native_enum=False))
+    tls_mode: Mapped[TlsMode] = mapped_column(
+        Enum(TlsMode, name="tls_mode", native_enum=False, values_callable=_enum_values)
+    )
     status: Mapped[DataSourceStatus] = mapped_column(
-        Enum(DataSourceStatus, name="data_source_status", native_enum=False),
+        Enum(
+            DataSourceStatus,
+            name="data_source_status",
+            native_enum=False,
+            values_callable=_enum_values,
+        ),
         default=DataSourceStatus.DRAFT,
         index=True,
     )
@@ -306,13 +322,29 @@ class ScanJob(Base):
         ForeignKey("data_sources.id", ondelete="CASCADE"), index=True
     )
     job_type: Mapped[ScanJobType] = mapped_column(
-        Enum(ScanJobType, name="scan_job_type", native_enum=False)
+        Enum(
+            ScanJobType,
+            name="scan_job_type",
+            native_enum=False,
+            values_callable=_enum_values,
+        )
     )
     trigger: Mapped[ScanJobTrigger] = mapped_column(
-        Enum(ScanJobTrigger, name="scan_job_trigger", native_enum=False)
+        Enum(
+            ScanJobTrigger,
+            name="scan_job_trigger",
+            native_enum=False,
+            values_callable=_enum_values,
+        )
     )
     status: Mapped[ScanJobStatus] = mapped_column(
-        Enum(ScanJobStatus, name="scan_job_status", native_enum=False), index=True
+        Enum(
+            ScanJobStatus,
+            name="scan_job_status",
+            native_enum=False,
+            values_callable=_enum_values,
+        ),
+        index=True,
     )
     idempotency_key: Mapped[str] = mapped_column(String(100))
     celery_task_id: Mapped[str | None] = mapped_column(String(100))
@@ -359,7 +391,13 @@ class CatalogSnapshot(Base):
     )
     version: Mapped[int] = mapped_column(Integer)
     status: Mapped[SnapshotStatus] = mapped_column(
-        Enum(SnapshotStatus, name="snapshot_status", native_enum=False), index=True
+        Enum(
+            SnapshotStatus,
+            name="snapshot_status",
+            native_enum=False,
+            values_callable=_enum_values,
+        ),
+        index=True,
     )
     database_product: Mapped[str] = mapped_column(String(50))
     database_version: Mapped[str | None] = mapped_column(String(100))
