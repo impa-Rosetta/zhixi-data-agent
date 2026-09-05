@@ -7,7 +7,11 @@ celery_app = Celery(
     "zhixi",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["apps.worker.tasks.data_sources", "apps.worker.tasks.outbox"],
+    include=[
+        "apps.worker.tasks.data_sources",
+        "apps.worker.tasks.outbox",
+        "apps.worker.tasks.schedules",
+    ],
 )
 celery_app.conf.update(
     task_serializer="json",
@@ -20,7 +24,15 @@ celery_app.conf.update(
         "dispatch-transactional-outbox": {
             "task": "outbox.dispatch",
             "schedule": 5.0,
-        }
+        },
+        "dispatch-due-scan-schedules": {
+            "task": "schedules.dispatch_due",
+            "schedule": 30.0,
+        },
+        "recover-stale-scan-jobs": {
+            "task": "scan_jobs.recover_stale",
+            "schedule": 60.0,
+        },
     },
 )
 

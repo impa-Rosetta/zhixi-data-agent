@@ -25,7 +25,7 @@ from apps.api.services.sampling import (
     update_sampling_policy,
     update_scan_schedule,
 )
-from apps.api.services.scan_jobs import request_scan_job_cancel
+from apps.api.services.scan_jobs import request_scan_job_cancel, retry_scan_job
 from packages.platform_core.models import ScanJob, ScanJobTrigger
 from packages.platform_core.policy import Action
 from packages.platform_core.settings import get_settings
@@ -628,6 +628,40 @@ def cancel_job(
         )
     except DataSourceServiceError as exc:
         raise _error(exc, status.HTTP_404_NOT_FOUND) from exc
+    _commit(db)
+    db.refresh(job)
+    return ScanJobResponse.model_validate(job)
+
+
+@router.post("/scan-jobs/{job_id}/retry", response_model=ScanJobResponse)
+def retry_job(
+    workspace_id: uuid.UUID,
+    job_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> ScanJobResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.DATA_SOURCE_MANAGE)
+    if idempotency_key is not None and not 1 <= len(idempotency_key) <= 200:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "request.invalid_idempotency_key", "message": "Invalid key length"},
+        )
+    try:
+        job = retry_scan_job(
+            db,
+            workspace_id=workspace_id,
+            job_id=job_id,
+            actor_user_id=user.id,
+            idempotency_token=idempotency_key,
+        )
+    except DataSourceServiceError as exc:
+        code = (
+            status.HTTP_404_NOT_FOUND
+            if exc.code in {"scan_job.not_found", "catalog.not_found"}
+            else status.HTTP_409_CONFLICT
+        )
+        raise _error(exc, code) from exc
     _commit(db)
     db.refresh(job)
     return ScanJobResponse.model_validate(job)

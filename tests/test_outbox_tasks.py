@@ -14,6 +14,7 @@ def test_outbox_dispatches_known_events_and_quarantines_unknown_ones(monkeypatch
     Base.metadata.create_all(engine)
     known_id = uuid.uuid4()
     unknown_id = uuid.uuid4()
+    profile_id = uuid.uuid4()
     with Session(engine) as db:
         db.add_all(
             [
@@ -22,6 +23,14 @@ def test_outbox_dispatches_known_events_and_quarantines_unknown_ones(monkeypatch
                     aggregate_id=known_id,
                     event_type="data_source.connection_test.requested",
                     payload={"job_id": str(known_id)},
+                    attempts=0,
+                    available_at=datetime.now(UTC),
+                ),
+                OutboxEvent(
+                    aggregate_type="scan_job",
+                    aggregate_id=profile_id,
+                    event_type="data_source.profile_scan.requested",
+                    payload={"job_id": str(profile_id)},
                     attempts=0,
                     available_at=datetime.now(UTC),
                 ),
@@ -53,11 +62,12 @@ def test_outbox_dispatches_known_events_and_quarantines_unknown_ones(monkeypatch
         lambda name, args: sent.append((name, args)),
     )
 
-    assert outbox_tasks.dispatch_outbox.run() == 2
-    assert sent == [
-        ("data_sources.test_connection", [str(known_id)]),
-        ("data_sources.scan_metadata", [str(unknown_id)]),
-    ]
+    assert outbox_tasks.dispatch_outbox.run() == 3
+    assert {(name, tuple(args)) for name, args in sent} == {
+        ("data_sources.test_connection", (str(known_id),)),
+        ("data_sources.scan_metadata", (str(unknown_id),)),
+        ("data_sources.scan_profile", (str(profile_id),)),
+    }
     with Session(engine) as db:
         known = db.scalar(select(OutboxEvent).where(OutboxEvent.aggregate_id == known_id))
         unknown = db.scalar(select(OutboxEvent).where(OutboxEvent.aggregate_id == unknown_id))

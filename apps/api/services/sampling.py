@@ -1,6 +1,5 @@
 import uuid
-from datetime import UTC, date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,8 +11,8 @@ from packages.platform_core.models import (
     CatalogSchema,
     SamplingPolicy,
     ScanSchedule,
-    ScheduleFrequency,
 )
+from packages.platform_core.scheduling import ScheduleExpressionError, calculate_next_run
 from packages.shared_contracts.data_sources import (
     SamplingPolicyResponse,
     SamplingPolicyUpdateRequest,
@@ -159,39 +158,20 @@ def update_sampling_policy(
     return stored
 
 
-def _valid_local_candidate(local_day: date, payload: ScanScheduleUpdateRequest) -> datetime:
-    zone = ZoneInfo(payload.timezone)
-    naive = datetime.combine(local_day, payload.local_time)
-    candidate = naive.replace(tzinfo=zone, fold=0)
-    round_trip = candidate.astimezone(UTC).astimezone(zone)
-    if round_trip.replace(tzinfo=None) == naive:
-        return candidate
-    for minutes in range(1, 181):
-        shifted = naive + timedelta(minutes=minutes)
-        candidate = shifted.replace(tzinfo=zone, fold=0)
-        round_trip = candidate.astimezone(UTC).astimezone(zone)
-        if round_trip.replace(tzinfo=None) == shifted:
-            return candidate
-    raise DataSourceServiceError(
-        "schedule.invalid_expression", "No valid local execution time could be resolved"
-    )
-
-
 def next_schedule_run(
     payload: ScanScheduleUpdateRequest, *, now: datetime | None = None
 ) -> datetime | None:
-    if not payload.enabled:
-        return None
-    current = (now or datetime.now(UTC)).astimezone(ZoneInfo(payload.timezone))
-    local_day = current.date()
-    if payload.frequency is ScheduleFrequency.WEEKLY:
-        assert payload.day_of_week is not None
-        local_day += timedelta(days=(payload.day_of_week - local_day.weekday()) % 7)
-    candidate = _valid_local_candidate(local_day, payload)
-    if candidate <= current:
-        interval = 1 if payload.frequency is ScheduleFrequency.DAILY else 7
-        candidate = _valid_local_candidate(local_day + timedelta(days=interval), payload)
-    return candidate.astimezone(UTC)
+    try:
+        return calculate_next_run(
+            enabled=payload.enabled,
+            frequency=payload.frequency,
+            timezone=payload.timezone,
+            local_time=payload.local_time,
+            day_of_week=payload.day_of_week,
+            now=now,
+        )
+    except ScheduleExpressionError as exc:
+        raise DataSourceServiceError("schedule.invalid_expression", str(exc)) from exc
 
 
 def get_scan_schedule(

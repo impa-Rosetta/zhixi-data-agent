@@ -1,10 +1,11 @@
 import uuid
+from datetime import UTC, datetime, time, timedelta
 
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from apps.api.services.profiles import list_snapshot_profiles
-from apps.api.services.scan_jobs import request_scan_job_cancel
+from apps.api.services.scan_jobs import request_scan_job_cancel, retry_scan_job
 from packages.connectors.base import (
     ConnectionCheck,
     ConnectionTarget,
@@ -43,12 +44,18 @@ from packages.platform_core.models import (
     ScanJobStatus,
     ScanJobTrigger,
     ScanJobType,
+    ScanSchedule,
+    ScheduleFrequency,
     TlsMode,
     User,
     Workspace,
 )
 from packages.platform_core.profile_scan_jobs import run_profile_scan
 from packages.platform_core.profiling import build_profile_document
+from packages.platform_core.scheduled_scan_jobs import (
+    dispatch_due_schedules,
+    recover_stale_scan_jobs,
+)
 from packages.platform_core.secrets import EnvelopeSecretProvider, secret_aad
 from packages.platform_core.settings import Settings
 
@@ -345,3 +352,115 @@ def test_queued_profile_job_can_be_cancelled_idempotently() -> None:
             actor_user_id=user.id,
         )
         assert again.status is ScanJobStatus.CANCELLED
+
+
+def test_due_schedule_uses_slot_idempotency_and_advances() -> None:
+    settings = Settings()
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    current = datetime(2026, 9, 5, 4, 0, tzinfo=UTC)
+    with Session(engine) as db:
+        source, user = seed(db, settings)
+        due = current - timedelta(minutes=1)
+        schedule = ScanSchedule(
+            data_source_id=source.id,
+            workspace_id=source.workspace_id,
+            frequency=ScheduleFrequency.DAILY,
+            timezone="Asia/Shanghai",
+            local_time=time(12, 0),
+            enabled=True,
+            next_run_at=due,
+            version=1,
+            updated_by_user_id=user.id,
+        )
+        db.add(schedule)
+        db.commit()
+        assert dispatch_due_schedules(db, now=current) == 1
+        job = db.scalar(
+            select(ScanJob).where(
+                ScanJob.data_source_id == source.id,
+                ScanJob.trigger == ScanJobTrigger.SCHEDULED,
+            )
+        )
+        assert job is not None and job.job_type is ScanJobType.METADATA_SCAN
+        first_key = job.idempotency_key
+        assert schedule.next_run_at is not None and schedule.next_run_at > current.replace(
+            tzinfo=None
+        )
+
+        schedule.next_run_at = due
+        db.commit()
+        assert dispatch_due_schedules(db, now=current) == 1
+        jobs = list(
+            db.scalars(
+                select(ScanJob).where(
+                    ScanJob.data_source_id == source.id,
+                    ScanJob.trigger == ScanJobTrigger.SCHEDULED,
+                )
+            )
+        )
+        assert len(jobs) == 1 and jobs[0].idempotency_key == first_key
+
+
+def test_stale_profile_job_recovers_twice_then_exhausts() -> None:
+    settings = Settings()
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    current = datetime(2026, 9, 5, 4, 0, tzinfo=UTC)
+    with Session(engine) as db:
+        source, user = seed(db, settings)
+        snapshot, job = publish_catalog(db, settings, source, user, ProfilingConnector())
+        assert job is not None
+        for expected_attempt in (1, 2):
+            job.status = ScanJobStatus.RUNNING
+            job.started_at = current - timedelta(hours=1)
+            job.heartbeat_at = current - timedelta(hours=1)
+            snapshot.profiling_status = ProfilingStatus.RUNNING
+            db.commit()
+            assert recover_stale_scan_jobs(db, now=current) == 1
+            assert job.status is ScanJobStatus.QUEUED
+            assert job.attempt_count == expected_attempt
+            assert snapshot.profiling_status is ProfilingStatus.PENDING
+
+        job.status = ScanJobStatus.RUNNING
+        job.heartbeat_at = current - timedelta(hours=1)
+        db.commit()
+        assert recover_stale_scan_jobs(db, now=current) == 1
+        assert job.status is ScanJobStatus.FAILED
+        assert job.attempt_count == 3
+        assert snapshot.profiling_status is ProfilingStatus.FAILED
+        assert snapshot.profiling_error_code == "scan_job.worker_lost"
+
+
+def test_explicit_retry_is_idempotent_and_rebinds_profile_snapshot() -> None:
+    settings = Settings()
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        source, user = seed(db, settings)
+        snapshot, job = publish_catalog(db, settings, source, user, ProfilingConnector())
+        assert job is not None
+        job.status = ScanJobStatus.FAILED
+        job.phase = "failed"
+        snapshot.profiling_status = ProfilingStatus.FAILED
+        db.commit()
+        retried = retry_scan_job(
+            db,
+            workspace_id=source.workspace_id,
+            job_id=job.id,
+            actor_user_id=user.id,
+            idempotency_token="same-request",
+        )
+        db.commit()
+        assert retried.retry_of_job_id == job.id
+        assert retried.snapshot_id == snapshot.id
+        assert retried.status is ScanJobStatus.QUEUED
+        assert snapshot.profiling_status is ProfilingStatus.PENDING
+        repeated = retry_scan_job(
+            db,
+            workspace_id=source.workspace_id,
+            job_id=job.id,
+            actor_user_id=user.id,
+            idempotency_token="same-request",
+        )
+        assert repeated.id == retried.id
