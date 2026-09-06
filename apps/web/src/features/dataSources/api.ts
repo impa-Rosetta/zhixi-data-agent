@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '../../lib/api/client'
-import type { Catalog, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, ScanJob } from '../../lib/api/types'
+import type { Catalog, CatalogDiffPage, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, ScanJob } from '../../lib/api/types'
 
 export const dataSourceKeys = {
   all: (workspaceId: string) => ['workspaces', workspaceId, 'data-sources'] as const,
@@ -10,6 +10,7 @@ export const dataSourceKeys = {
   job: (workspaceId: string, jobId: string) => ['workspaces', workspaceId, 'scan-jobs', jobId] as const,
   snapshots: (workspaceId: string, dataSourceId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'snapshots'] as const,
   catalog: (workspaceId: string, dataSourceId: string, snapshotId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'catalog', snapshotId] as const,
+  diffs: (workspaceId: string, dataSourceId: string, snapshotId: string, offset: number) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'diffs', snapshotId, offset] as const,
 }
 
 function idempotencyHeaders() {
@@ -54,6 +55,13 @@ export function useCatalog(workspaceId: string, dataSourceId: string, snapshotId
   return useQuery({
     queryKey: snapshotId ? dataSourceKeys.catalog(workspaceId, dataSourceId, snapshotId) : ['catalog', 'disabled'],
     queryFn: () => apiClient.request<Catalog>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/catalog?snapshot_id=' + encodeURIComponent(snapshotId ?? '')),
+    enabled: Boolean(snapshotId),
+  })
+}
+export function useCatalogDiffs(workspaceId: string, dataSourceId: string, snapshotId: string | undefined, offset: number, limit = 50) {
+  return useQuery({
+    queryKey: snapshotId ? dataSourceKeys.diffs(workspaceId, dataSourceId, snapshotId, offset) : ['catalog-diffs', 'disabled'],
+    queryFn: () => apiClient.request<CatalogDiffPage>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/diffs?to_snapshot_id=' + encodeURIComponent(snapshotId ?? '') + '&limit=' + limit + '&offset=' + offset),
     enabled: Boolean(snapshotId),
   })
 }

@@ -235,3 +235,41 @@ th { color:#667085; background:#fafbfc; font-size:.76rem; text-transform:upperca
   .catalog-tree { max-height:310px; border-right:0; border-bottom:1px solid var(--line); }
   .catalog-technical-grid { grid-template-columns:1fr; }
 }
+/* catalog-diff */
+.diff-card { overflow:hidden; background:white; border:1px solid var(--line); border-radius:15px; box-shadow:0 5px 18px #18223008; }
+.diff-summary { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:18px 20px; border-bottom:1px solid var(--line); }
+.diff-summary>div { display:flex; align-items:baseline; gap:10px; }
+.diff-summary strong { font-size:1rem; }
+.diff-summary span { color:var(--muted); font-size:.76rem; }
+.diff-filters { display:grid; grid-template-columns:repeat(3,minmax(0,180px)); gap:10px; padding:14px 20px; background:#fafbfc; border-bottom:1px solid var(--line); }
+.diff-filters label { display:grid; gap:5px; color:var(--muted); font-size:.68rem; font-weight:700; }
+.diff-filters select { width:100%; padding:8px 9px; color:#344054; background:white; border:1px solid #d4dbe7; border-radius:8px; }
+.diff-list { display:grid; }
+.diff-item { border-bottom:1px solid #e8ecf3; }
+.diff-item:last-child { border-bottom:0; }
+.diff-item summary { display:grid; grid-template-columns:58px minmax(0,1fr) 90px 70px; align-items:center; gap:12px; padding:14px 20px; cursor:pointer; list-style:none; }
+.diff-item summary::-webkit-details-marker { display:none; }
+.diff-item summary:hover { background:#f8fafc; }
+.diff-item summary code { overflow:hidden; color:#344054; white-space:nowrap; text-overflow:ellipsis; font-size:.76rem; }
+.diff-change,.diff-severity,.diff-object { width:max-content; padding:4px 7px; border-radius:6px; font-size:.68rem; font-weight:800; }
+.diff-change.added { color:#137052; background:#eaf8f2; }
+.diff-change.removed { color:#a43a35; background:#fff0ef; }
+.diff-change.changed { color:#8c5a14; background:#fff6df; }
+.diff-object { color:#52627a; background:#eef1f5; }
+.diff-severity.info { color:#3155a0; background:#edf3ff; }
+.diff-severity.warning { color:#8c5a14; background:#fff6df; }
+.diff-severity.breaking { color:#a43a35; background:#ffe8e6; }
+.diff-values { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:0 20px 18px 90px; background:#fafbfc; }
+.diff-values section { min-width:0; }
+.diff-values h4 { margin:12px 0 7px; color:#667085; font-size:.72rem; }
+.diff-values pre { min-height:52px; max-height:220px; padding:11px; margin:0; overflow:auto; color:#344054; background:white; border:1px solid #e1e6ee; border-radius:8px; font-size:.7rem; line-height:1.55; }
+.diff-empty { padding:38px; color:var(--muted); text-align:center; }
+.diff-pagination { display:flex; align-items:center; justify-content:flex-end; gap:12px; padding:14px 20px; border-top:1px solid var(--line); }
+.diff-pagination span { color:var(--muted); font-size:.76rem; }
+@media (max-width:800px) {
+  .diff-section .section-heading { align-items:flex-start; gap:12px; flex-direction:column; }
+  .diff-filters { grid-template-columns:1fr; }
+  .diff-item summary { grid-template-columns:58px minmax(0,1fr); }
+  .diff-object,.diff-severity { grid-row:2; }
+  .diff-values { grid-template-columns:1fr; padding-left:20px; }
+}

@@ -13,6 +13,8 @@
 
 ### A1 结构差异界面
 
+状态：已完成并通过验收（2026-09-06）。验收记录见docs/acceptance/A1-catalog-diff-frontend-acceptance.md。
+
 - 定义目录差异前端契约与Query Hook；
 - 在版本化目录区域增加相邻版本变化摘要；
 - 支持新增、删除、修改分类与对象类型、严重度筛选；

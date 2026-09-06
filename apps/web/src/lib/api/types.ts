@@ -170,3 +170,21 @@ export type Catalog = {
   snapshot: CatalogSnapshot
   schemas: CatalogSchema[]
 }
+export type CatalogDiff = {
+  id: string
+  from_snapshot_id: string | null
+  to_snapshot_id: string
+  change_type: string
+  object_type: string
+  object_key: string
+  severity: string
+  before_value: Record<string, unknown> | null
+  after_value: Record<string, unknown> | null
+}
+
+export type CatalogDiffPage = {
+  items: CatalogDiff[]
+  total: number
+  limit: number
+  offset: number
+}
