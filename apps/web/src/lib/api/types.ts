@@ -43,3 +43,64 @@ export type Invitation = {
   expires_at: string
   invite_token: string
 }
+
+export type DataSourceType = 'postgresql' | 'mysql'
+export type DataSourceStatus = 'draft' | 'testing' | 'ready' | 'degraded' | 'disabled' | 'deleted'
+export type TlsMode = 'disable' | 'prefer' | 'require' | 'verify_ca' | 'verify_full'
+export type ScanJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type ScanJobType = 'connection_test' | 'metadata_scan' | 'profile_scan'
+
+export type DataSource = {
+  id: string
+  workspace_id: string
+  name: string
+  description: string | null
+  source_type: DataSourceType
+  host: string
+  port: number
+  database_name: string
+  tls_mode: TlsMode
+  network_policy_id: string | null
+  status: DataSourceStatus
+  health_code: string | null
+  active_snapshot_id: string | null
+  version: number
+  last_checked_at: string | null
+  last_success_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ScanJob = {
+  id: string
+  data_source_id: string
+  snapshot_id: string | null
+  parent_job_id: string | null
+  retry_of_job_id: string | null
+  job_type: ScanJobType
+  trigger: 'initial' | 'manual' | 'scheduled'
+  status: ScanJobStatus
+  phase: string | null
+  progress: number
+  error_code: string | null
+  created_at: string
+  started_at: string | null
+  heartbeat_at: string | null
+  cancel_requested_at: string | null
+  finished_at: string | null
+}
+
+export type DataSourcePage = { items: DataSource[]; total: number; limit: number; offset: number }
+
+export type DataSourceCreateInput = {
+  name: string
+  description: string | null
+  source_type: DataSourceType
+  host: string
+  port: number
+  database_name: string
+  tls_mode: TlsMode
+  credentials: { username: string; password: string; tls_ca_certificate: string | null }
+}
+
+export type DataSourceCreateResult = { data_source: DataSource; job: ScanJob }

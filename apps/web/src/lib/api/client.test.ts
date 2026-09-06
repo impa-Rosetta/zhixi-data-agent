@@ -52,3 +52,18 @@ test('clears the stored session and reports auth loss when refresh fails', async
   expect(window.localStorage.getItem(refreshTokenKey)).toBeNull()
   expect(onAuthLost).toHaveBeenCalledOnce()
 })
+
+test('parses structured API errors without losing the stable error code', async () => {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+    detail: { code: 'data_source.conflict', message: '数据源名称已存在' },
+  }), { status: 409, headers: { 'Content-Type': 'application/json' } }))
+  const client = new ApiClient()
+
+  try {
+    await client.request('/api/v1/example')
+    throw new Error('request should fail')
+  } catch (reason) {
+    expect(reason).toBeInstanceOf(ApiError)
+    expect(reason).toMatchObject({ status: 409, code: 'data_source.conflict', message: '数据源名称已存在' })
+  }
+})

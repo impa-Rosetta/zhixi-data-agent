@@ -5,7 +5,7 @@ import { useAuth } from '../../features/auth/context'
 const nav = [
   { to: '/app', label: '智能问析', end: true },
   { to: '/app/history', label: '分析记录', disabled: true },
-  { to: '/app/data', label: '数据管理', disabled: true },
+  { to: '/app/data', label: '数据管理' },
   { to: '/app/members', label: '成员与权限' },
   { to: '/app/audit', label: '审计日志', disabled: true },
 ]

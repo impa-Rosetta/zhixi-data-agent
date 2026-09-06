@@ -7,6 +7,7 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly code: string | null = null,
   ) {
     super(message)
   }
@@ -101,13 +102,20 @@ export class ApiClient {
     }
     if (!response.ok) {
       let detail: string | undefined
+      let code: string | null = null
       try {
-        const body = (await response.json()) as { detail?: string }
-        detail = body.detail
+        const body = (await response.json()) as {
+          detail?: string | { code?: string; message?: string }
+        }
+        if (typeof body.detail === 'string') detail = body.detail
+        else if (body.detail) {
+          detail = body.detail.message
+          code = body.detail.code ?? null
+        }
       } catch {
         detail = undefined
       }
-      throw new ApiError(response.status, errorMessage(response.status, detail))
+      throw new ApiError(response.status, errorMessage(response.status, detail), code)
     }
     if (response.status === 204) return undefined as T
     return (await response.json()) as T

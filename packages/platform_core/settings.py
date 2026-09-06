@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     s3_access_key: SecretStr = SecretStr("zhixi-local")
     s3_secret_key: SecretStr = SecretStr("zhixi-local-secret")
     s3_bucket: str = "zhixi-artifacts"
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
     login_rate_limit: int = 10
