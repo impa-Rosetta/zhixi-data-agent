@@ -124,3 +124,49 @@ export type CatalogSnapshot = {
   started_at: string
   completed_at: string | null
 }
+export type CatalogColumn = {
+  name: string
+  ordinal_position: number
+  data_type: string
+  native_type: string
+  nullable: boolean
+  default_expression: string | null
+  comment: string | null
+}
+
+export type CatalogConstraint = {
+  name: string
+  constraint_type: string
+  columns: string[]
+  referenced_schema: string | null
+  referenced_relation: string | null
+  referenced_columns: string[]
+}
+
+export type CatalogIndex = {
+  name: string
+  columns: string[]
+  unique: boolean
+  method: string | null
+  predicate: string | null
+}
+
+export type CatalogRelation = {
+  name: string
+  relation_type: string
+  comment: string | null
+  columns: CatalogColumn[]
+  constraints: CatalogConstraint[]
+  indexes: CatalogIndex[]
+}
+
+export type CatalogSchema = {
+  name: string
+  comment: string | null
+  relations: CatalogRelation[]
+}
+
+export type Catalog = {
+  snapshot: CatalogSnapshot
+  schemas: CatalogSchema[]
+}

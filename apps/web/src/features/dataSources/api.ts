@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '../../lib/api/client'
-import type { CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, ScanJob } from '../../lib/api/types'
+import type { Catalog, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, ScanJob } from '../../lib/api/types'
 
 export const dataSourceKeys = {
   all: (workspaceId: string) => ['workspaces', workspaceId, 'data-sources'] as const,
@@ -9,6 +9,7 @@ export const dataSourceKeys = {
   jobs: (workspaceId: string, dataSourceId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'jobs'] as const,
   job: (workspaceId: string, jobId: string) => ['workspaces', workspaceId, 'scan-jobs', jobId] as const,
   snapshots: (workspaceId: string, dataSourceId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'snapshots'] as const,
+  catalog: (workspaceId: string, dataSourceId: string, snapshotId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'catalog', snapshotId] as const,
 }
 
 function idempotencyHeaders() {
@@ -49,6 +50,13 @@ export function useCatalogSnapshots(workspaceId: string | undefined, dataSourceI
   })
 }
 
+export function useCatalog(workspaceId: string, dataSourceId: string, snapshotId: string | undefined) {
+  return useQuery({
+    queryKey: snapshotId ? dataSourceKeys.catalog(workspaceId, dataSourceId, snapshotId) : ['catalog', 'disabled'],
+    queryFn: () => apiClient.request<Catalog>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/catalog?snapshot_id=' + encodeURIComponent(snapshotId ?? '')),
+    enabled: Boolean(snapshotId),
+  })
+}
 export function useCreateDataSource(workspaceId: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({

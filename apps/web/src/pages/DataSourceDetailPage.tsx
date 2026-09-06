@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { useAuth } from '../features/auth/context'
+import { CatalogBrowser } from '../features/catalog/CatalogBrowser'
 import { useCancelScanJob, useCatalogSnapshots, useDataSourceDetail, useDataSourceJobs, useMetadataScan, useRetryScanJob } from '../features/dataSources/api'
 import { ApiError } from '../lib/api/client'
 import type { ScanJob, ScanJobStatus, ScanJobType } from '../lib/api/types'
@@ -99,6 +100,8 @@ export function DataSourceDetailPage() {
       <section className="detail-metrics"><article><span>连接地址</span><strong>{source.data.host}:{source.data.port}</strong><small>{source.data.database_name}</small></article><article><span>TLS策略</span><strong>{source.data.tls_mode}</strong><small>配置版本 v{source.data.version}</small></article><article><span>最近成功</span><strong>{formatTime(source.data.last_success_at)}</strong><small>{source.data.health_code || '健康检查通过'}</small></article><article><span>当前目录</span><strong>{source.data.active_snapshot_id ? `v${latestSnapshot?.version ?? '—'}` : '尚未扫描'}</strong><small>{latestSnapshot?.database_product || '等待元数据发布'}</small></article></section>
 
       <section className="detail-section"><div className="section-heading"><div><p className="eyebrow">版本化目录</p><h2>目录版本</h2></div><span>{snapshots.data?.length ?? 0} 个快照</span></div>{latestSnapshot ? <div className="snapshot-card"><div><span className="snapshot-version">目录 v{latestSnapshot.version}</span><strong>{latestSnapshot.database_product} {latestSnapshot.database_version}</strong><small>{formatTime(latestSnapshot.completed_at)}</small></div><dl><div><dt>Schema</dt><dd>{count(latestSnapshot.object_counts.schemas)} 个</dd></div><div><dt>关系</dt><dd>{count(latestSnapshot.object_counts.relations)} 个</dd></div><div><dt>字段</dt><dd>{count(latestSnapshot.object_counts.columns)} 个字段</dd></div><div><dt>画像</dt><dd>{latestSnapshot.profiling_status}</dd></div></dl></div> : <div className="section-empty">尚无已发布目录。点击“扫描数据库结构”创建第一个不可变快照。</div>}</section>
+
+      {snapshots.data && snapshots.data.length > 0 && workspace && dataSourceId && <CatalogBrowser workspaceId={workspace.id} dataSourceId={dataSourceId} snapshots={snapshots.data} />}
 
       <section className="detail-section"><div className="section-heading"><div><p className="eyebrow">异步执行记录</p><h2>扫描任务</h2></div><span>{jobs.data?.length ?? 0} 条记录</span></div>{actionError && <div className="alert error" role="alert">{actionError}</div>}<div className="table-card"><table className="jobs-table"><thead><tr><th>任务</th><th>状态</th><th>进度</th><th>创建时间</th><th>错误码</th><th>操作</th></tr></thead><tbody>{jobs.data?.map((job) => <JobRow key={job.id} job={job} busy={cancel.isPending || retry.isPending} onCancel={(id) => void cancelJob(id)} onRetry={(id) => void retryJob(id)} />)}</tbody></table>{jobs.data?.length === 0 && <p className="empty-state">暂无任务记录。</p>}</div></section>
     </>}
