@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { DataSourceWizard } from '../features/dataSources/DataSourceWizard'
 import { useDataSources, useScanJob, useTestConnection } from '../features/dataSources/api'
@@ -64,7 +65,7 @@ export function DataSourcesPage() {
     {sources.data && sources.data.items.length > 0 && <section className="source-grid" aria-label="数据源列表">{sources.data.items.map((source) => <article className="source-card" key={source.id}>
       <div className="source-card-head"><span className={`database-mark ${source.source_type}`}>{sourceIcon(source)}</span><div><h2>{source.name}</h2><p>{source.description || '未填写用途说明'}</p></div><span className={`source-status ${source.status}`}><i />{statusLabel[source.status]}</span></div>
       <dl><div><dt>连接地址</dt><dd>{source.host}:{source.port}</dd></div><div><dt>数据库</dt><dd>{source.database_name}</dd></div><div><dt>TLS策略</dt><dd>{source.tls_mode}</dd></div><div><dt>最近成功</dt><dd>{formatTime(source.last_success_at)}</dd></div></dl>
-      <footer><span>配置版本 v{source.version}</span><button className="text-button" disabled={testConnection.isPending || source.status === 'testing'} onClick={() => void retest(source.id)}>{source.status === 'testing' ? '检测中…' : '重新检测'}</button></footer>
+      <footer><span>配置版本 v{source.version}</span><div className="card-actions"><Link className="text-button" to={`/app/data/${source.id}`}>查看详情</Link><button className="text-button" disabled={testConnection.isPending || source.status === 'testing'} onClick={() => void retest(source.id)}>{source.status === 'testing' ? '检测中…' : '重新检测'}</button></div></footer>
     </article>)}</section>}
 
     {wizardOpen && workspace && <DataSourceWizard workspaceId={workspace.id} onClose={() => setWizardOpen(false)} onCreated={created} />}

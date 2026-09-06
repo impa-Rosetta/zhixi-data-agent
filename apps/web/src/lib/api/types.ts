@@ -104,3 +104,23 @@ export type DataSourceCreateInput = {
 }
 
 export type DataSourceCreateResult = { data_source: DataSource; job: ScanJob }
+export type CatalogSnapshot = {
+  id: string
+  data_source_id: string
+  version: number
+  status: 'building' | 'published' | 'rejected'
+  database_product: string
+  database_version: string | null
+  scan_options: Record<string, unknown>
+  object_counts: Record<string, unknown>
+  content_digest: string | null
+  sampling_enabled: boolean
+  profiling_status: 'disabled' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  profiling_error_code: string | null
+  profiling_options: Record<string, unknown>
+  profile_counts: Record<string, unknown>
+  profiling_started_at: string | null
+  profiling_finished_at: string | null
+  started_at: string
+  completed_at: string | null
+}

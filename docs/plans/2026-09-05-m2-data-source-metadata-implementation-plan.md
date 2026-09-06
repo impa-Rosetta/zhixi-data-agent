@@ -84,7 +84,7 @@
 
 ## 切片六：数据源管理前端与整体验收
 
-状态：执行中。数据源管理前端基础阶段已完成并通过验收（2026-09-06），记录见`docs/acceptance/M6-data-source-frontend-foundation-acceptance.md`。已交付导航、列表、PostgreSQL/MySQL分步接入、真实连接任务轮询和角色隔离；详情与目录能力继续按后续纵向子切片完成。
+状态：执行中。基础阶段与详情扫描阶段已完成并通过验收（2026-09-06），记录见`docs/acceptance/M6-data-source-frontend-foundation-acceptance.md`、`docs/acceptance/M7-data-source-scan-detail-acceptance.md`。已交付导航、列表、分步接入、真实连接与元数据扫描任务轮询、取消/重试、目录快照摘要和角色隔离；完整目录树、差异、画像与策略界面继续按后续纵向子切片完成。
 
 目标：从Web完成连接、测试、扫描、浏览和变化确认的真实闭环。
 
