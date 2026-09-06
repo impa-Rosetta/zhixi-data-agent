@@ -227,3 +227,33 @@ export type CatalogProfileList = {
   profile_counts: Record<string, unknown>
   items: CatalogColumnProfile[]
 }
+export type SamplingTableScope = { schema_name: string; table_name: string }
+export type SamplingPolicy = {
+  data_source_id: string
+  enabled: boolean
+  schema_allowlist: string[]
+  table_allowlist: SamplingTableScope[]
+  max_rows_per_table: number
+  max_values_per_column: number
+  max_value_chars: number
+  max_bytes_per_table: number
+  max_bytes_per_job: number
+  statement_timeout_seconds: number
+  version: number
+  updated_at: string | null
+}
+export type SamplingPolicyInput = Omit<SamplingPolicy, 'data_source_id' | 'updated_at'>
+
+export type ScanSchedule = {
+  data_source_id: string
+  enabled: boolean
+  frequency: 'daily' | 'weekly'
+  timezone: string
+  local_time: string
+  day_of_week: number | null
+  next_run_at: string | null
+  last_enqueued_at: string | null
+  version: number
+  updated_at: string | null
+}
+export type ScanScheduleInput = Pick<ScanSchedule, 'enabled' | 'frequency' | 'timezone' | 'local_time' | 'day_of_week' | 'version'>

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { apiClient } from '../../lib/api/client'
-import type { Catalog, CatalogDiffPage, CatalogProfileList, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, ScanJob } from '../../lib/api/types'
+import { ApiError, apiClient } from '../../lib/api/client'
+import type { Catalog, CatalogDiffPage, CatalogProfileList, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, SamplingPolicy, SamplingPolicyInput, ScanJob, ScanSchedule, ScanScheduleInput } from '../../lib/api/types'
 
 export const dataSourceKeys = {
   all: (workspaceId: string) => ['workspaces', workspaceId, 'data-sources'] as const,
@@ -12,6 +12,8 @@ export const dataSourceKeys = {
   catalog: (workspaceId: string, dataSourceId: string, snapshotId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'catalog', snapshotId] as const,
   diffs: (workspaceId: string, dataSourceId: string, snapshotId: string, offset: number) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'diffs', snapshotId, offset] as const,
   profiles: (workspaceId: string, dataSourceId: string, snapshotId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'profiles', snapshotId] as const,
+  samplingPolicy: (workspaceId: string, dataSourceId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'sampling-policy'] as const,
+  schedule: (workspaceId: string, dataSourceId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'schedule'] as const,
 }
 
 function idempotencyHeaders() {
@@ -71,6 +73,42 @@ export function useCatalogProfiles(workspaceId: string, dataSourceId: string, sn
     queryKey: snapshotId ? dataSourceKeys.profiles(workspaceId, dataSourceId, snapshotId) : ['catalog-profiles', 'disabled'],
     queryFn: () => apiClient.request<CatalogProfileList>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/catalog/snapshots/' + encodeURIComponent(snapshotId ?? '') + '/profiles'),
     enabled: Boolean(snapshotId),
+  })
+}
+export function useSamplingPolicy(workspaceId: string, dataSourceId: string) {
+  return useQuery({
+    queryKey: dataSourceKeys.samplingPolicy(workspaceId, dataSourceId),
+    queryFn: () => apiClient.request<SamplingPolicy>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/sampling-policy'),
+  })
+}
+
+export function useUpdateSamplingPolicy(workspaceId: string, dataSourceId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SamplingPolicyInput) => apiClient.request<SamplingPolicy>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/sampling-policy', { method: 'PUT', body: JSON.stringify(input) }),
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: dataSourceKeys.samplingPolicy(workspaceId, dataSourceId) }),
+  })
+}
+
+export function useScanSchedule(workspaceId: string, dataSourceId: string) {
+  return useQuery({
+    queryKey: dataSourceKeys.schedule(workspaceId, dataSourceId),
+    queryFn: async () => {
+      try {
+        return await apiClient.request<ScanSchedule>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/schedule')
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null
+        throw error
+      }
+    },
+  })
+}
+
+export function useUpdateScanSchedule(workspaceId: string, dataSourceId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ScanScheduleInput) => apiClient.request<ScanSchedule>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/schedule', { method: 'PUT', body: JSON.stringify(input) }),
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: dataSourceKeys.schedule(workspaceId, dataSourceId) }),
   })
 }
 export function useCreateDataSource(workspaceId: string | undefined) {

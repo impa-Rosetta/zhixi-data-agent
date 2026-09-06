@@ -5,6 +5,7 @@ import { useAuth } from '../features/auth/context'
 import { CatalogBrowser } from '../features/catalog/CatalogBrowser'
 import { CatalogDiffPanel } from '../features/catalog/CatalogDiffPanel'
 import { CatalogProfilePanel } from '../features/catalog/CatalogProfilePanel'
+import { DataSourcePoliciesPanel } from '../features/catalog/DataSourcePoliciesPanel'
 import { useCancelScanJob, useCatalogSnapshots, useDataSourceDetail, useDataSourceJobs, useMetadataScan, useRetryScanJob } from '../features/dataSources/api'
 import { ApiError } from '../lib/api/client'
 import type { ScanJob, ScanJobStatus, ScanJobType } from '../lib/api/types'
@@ -104,6 +105,7 @@ export function DataSourceDetailPage() {
       <section className="detail-section"><div className="section-heading"><div><p className="eyebrow">版本化目录</p><h2>目录版本</h2></div><span>{snapshots.data?.length ?? 0} 个快照</span></div>{latestSnapshot ? <div className="snapshot-card"><div><span className="snapshot-version">目录 v{latestSnapshot.version}</span><strong>{latestSnapshot.database_product} {latestSnapshot.database_version}</strong><small>{formatTime(latestSnapshot.completed_at)}</small></div><dl><div><dt>Schema</dt><dd>{count(latestSnapshot.object_counts.schemas)} 个</dd></div><div><dt>关系</dt><dd>{count(latestSnapshot.object_counts.relations)} 个</dd></div><div><dt>字段</dt><dd>{count(latestSnapshot.object_counts.columns)} 个字段</dd></div><div><dt>画像</dt><dd>{latestSnapshot.profiling_status}</dd></div></dl></div> : <div className="section-empty">尚无已发布目录。点击“扫描数据库结构”创建第一个不可变快照。</div>}</section>
 
       {snapshots.data && snapshots.data.length > 0 && workspace && dataSourceId && <CatalogBrowser workspaceId={workspace.id} dataSourceId={dataSourceId} snapshots={snapshots.data} />}
+      {latestSnapshot && workspace && dataSourceId && <DataSourcePoliciesPanel workspaceId={workspace.id} dataSourceId={dataSourceId} snapshotId={latestSnapshot.id} />}
       {snapshots.data && snapshots.data.length > 0 && workspace && dataSourceId && <CatalogProfilePanel workspaceId={workspace.id} dataSourceId={dataSourceId} snapshots={snapshots.data} />}
       {snapshots.data && snapshots.data.length > 0 && workspace && dataSourceId && <CatalogDiffPanel workspaceId={workspace.id} dataSourceId={dataSourceId} snapshots={snapshots.data} />}
 

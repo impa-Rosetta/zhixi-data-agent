@@ -5,7 +5,7 @@ import { expect, test, vi } from 'vitest'
 
 import { AuthContext, type AuthContextValue } from '../features/auth/context'
 import { apiClient } from '../lib/api/client'
-import type { CatalogSnapshot, DataSource, ScanJob } from '../lib/api/types'
+import type { Catalog, CatalogSnapshot, DataSource, SamplingPolicy, ScanJob, ScanSchedule } from '../lib/api/types'
 import { DataSourceDetailPage } from './DataSourceDetailPage'
 
 const source: DataSource = {
@@ -29,6 +29,28 @@ const snapshot: CatalogSnapshot = {
   started_at: '2026-09-06T00:30:00Z', completed_at: '2026-09-06T00:30:03Z',
 }
 
+const catalog: Catalog = { snapshot, schemas: [] }
+const policy: SamplingPolicy = {
+  data_source_id: 'source-1', enabled: false, schema_allowlist: [], table_allowlist: [],
+  max_rows_per_table: 10, max_values_per_column: 5, max_value_chars: 128,
+  max_bytes_per_table: 65536, max_bytes_per_job: 262144, statement_timeout_seconds: 3,
+  version: 1, updated_at: '2026-09-06T01:00:00Z',
+}
+const schedule: ScanSchedule = {
+  data_source_id: 'source-1', enabled: false, frequency: 'daily', timezone: 'Asia/Shanghai',
+  local_time: '03:30:00', day_of_week: null, next_run_at: null, last_enqueued_at: null,
+  version: 1, updated_at: '2026-09-06T01:00:00Z',
+}
+
+function readResponse(path: string) {
+  if (path.endsWith('/jobs')) return [job]
+  if (path.endsWith('/snapshots')) return [snapshot]
+  if (path.includes('/catalog?')) return catalog
+  if (path.endsWith('/sampling-policy')) return policy
+  if (path.endsWith('/schedule')) return schedule
+  return source
+}
+
 const auth: AuthContextValue = {
   status: 'authenticated', workspace: { id: 'workspace-1', name: '演示空间', slug: 'demo', role: 'data_admin' },
   user: { id: 'user-1', email: 'admin@example.com', display_name: '管理员', is_active: true, workspaces: [] },
@@ -42,9 +64,7 @@ function renderPage() {
 
 test('shows source overview, task history and published snapshot', async () => {
   vi.spyOn(apiClient, 'request').mockImplementation((path) => {
-    if (path.endsWith('/jobs')) return Promise.resolve([job])
-    if (path.endsWith('/snapshots')) return Promise.resolve([snapshot])
-    return Promise.resolve(source)
+    return Promise.resolve(readResponse(path))
   })
   renderPage()
   expect(await screen.findByRole('heading', { name: '生产库' })).toBeInTheDocument()
@@ -56,9 +76,7 @@ test('shows source overview, task history and published snapshot', async () => {
 test('starts a metadata scan with a normalized schema allowlist', async () => {
   const request = vi.spyOn(apiClient, 'request').mockImplementation((path, init) => {
     if (init?.method === 'POST') return Promise.resolve({ ...job, id: 'job-2', status: 'queued', progress: 0 })
-    if (path.endsWith('/jobs')) return Promise.resolve([job])
-    if (path.endsWith('/snapshots')) return Promise.resolve([snapshot])
-    return Promise.resolve(source)
+    return Promise.resolve(readResponse(path))
   })
   renderPage()
   fireEvent.click(await screen.findByRole('button', { name: '扫描数据库结构' }))

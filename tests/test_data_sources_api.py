@@ -393,6 +393,9 @@ def test_sampling_policy_is_default_off_versioned_and_catalog_scoped(
     assert updated.json()["enabled"] is True
     assert updated.json()["version"] == 1
     assert updated.json()["max_rows_per_table"] == 10
+    stored_policy = client.get(policy_url, headers=headers)
+    assert stored_policy.status_code == 200
+    assert stored_policy.json()["version"] == 1
 
     stale = client.put(
         policy_url,
@@ -480,6 +483,9 @@ def test_scan_schedule_is_versioned_and_timezone_aware(api: tuple[TestClient, En
     assert body["version"] == 1
     assert body["next_run_at"].endswith("Z")
     assert body["day_of_week"] is None
+    stored_schedule = client.get(url, headers=headers)
+    assert stored_schedule.status_code == 200
+    assert stored_schedule.json()["next_run_at"] == body["next_run_at"]
 
     stale = client.put(
         url,

@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-06
 - 规格：`docs/superpowers/specs/2026-09-06-a07-remaining-product-delivery-design.md`
-- 当前入口：M2 结构差异界面
+- 当前入口：A4 数据源生命周期
 
 ## 执行规则
 
@@ -33,6 +33,8 @@
 - 使用PostgreSQL与MySQL真实画像结果验收。
 
 ### A3 采样策略与定时刷新
+
+状态：已完成并通过验收（2026-09-06）。验收记录见docs/acceptance/A3-sampling-schedule-frontend-acceptance.md。
 
 - 实现默认关闭的采样策略编辑器；
 - 只能选择当前发布目录中的普通表；
