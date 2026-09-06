@@ -6,6 +6,7 @@ import { CatalogBrowser } from '../features/catalog/CatalogBrowser'
 import { CatalogDiffPanel } from '../features/catalog/CatalogDiffPanel'
 import { CatalogProfilePanel } from '../features/catalog/CatalogProfilePanel'
 import { DataSourcePoliciesPanel } from '../features/catalog/DataSourcePoliciesPanel'
+import { DataSourceLifecyclePanel } from '../features/dataSources/DataSourceLifecyclePanel'
 import { useCancelScanJob, useCatalogSnapshots, useDataSourceDetail, useDataSourceJobs, useMetadataScan, useRetryScanJob } from '../features/dataSources/api'
 import { ApiError } from '../lib/api/client'
 import type { ScanJob, ScanJobStatus, ScanJobType } from '../lib/api/types'
@@ -101,6 +102,8 @@ export function DataSourceDetailPage() {
     {source.data && <>
       <div className="detail-hero"><div className={`database-mark ${source.data.source_type}`}>{source.data.source_type === 'postgresql' ? 'PG' : 'MY'}</div><div><p className="eyebrow">数据源详情</p><h1>{source.data.name}</h1><p>{source.data.description || '未填写用途说明'}</p></div><span className={`source-status ${source.data.status}`}><i />{source.data.status === 'ready' ? '可用' : source.data.status}</span><button className="primary-button" disabled={source.data.status !== 'ready' || hasActiveJob} onClick={() => setScanOpen(true)}>{hasActiveJob ? '任务执行中…' : '扫描数据库结构'}</button></div>
       <section className="detail-metrics"><article><span>连接地址</span><strong>{source.data.host}:{source.data.port}</strong><small>{source.data.database_name}</small></article><article><span>TLS策略</span><strong>{source.data.tls_mode}</strong><small>配置版本 v{source.data.version}</small></article><article><span>最近成功</span><strong>{formatTime(source.data.last_success_at)}</strong><small>{source.data.health_code || '健康检查通过'}</small></article><article><span>当前目录</span><strong>{source.data.active_snapshot_id ? `v${latestSnapshot?.version ?? '—'}` : '尚未扫描'}</strong><small>{latestSnapshot?.database_product || '等待元数据发布'}</small></article></section>
+
+      {workspace && <DataSourceLifecyclePanel key={source.data.version} workspaceId={workspace.id} source={source.data} />}
 
       <section className="detail-section"><div className="section-heading"><div><p className="eyebrow">版本化目录</p><h2>目录版本</h2></div><span>{snapshots.data?.length ?? 0} 个快照</span></div>{latestSnapshot ? <div className="snapshot-card"><div><span className="snapshot-version">目录 v{latestSnapshot.version}</span><strong>{latestSnapshot.database_product} {latestSnapshot.database_version}</strong><small>{formatTime(latestSnapshot.completed_at)}</small></div><dl><div><dt>Schema</dt><dd>{count(latestSnapshot.object_counts.schemas)} 个</dd></div><div><dt>关系</dt><dd>{count(latestSnapshot.object_counts.relations)} 个</dd></div><div><dt>字段</dt><dd>{count(latestSnapshot.object_counts.columns)} 个字段</dd></div><div><dt>画像</dt><dd>{latestSnapshot.profiling_status}</dd></div></dl></div> : <div className="section-empty">尚无已发布目录。点击“扫描数据库结构”创建第一个不可变快照。</div>}</section>
 

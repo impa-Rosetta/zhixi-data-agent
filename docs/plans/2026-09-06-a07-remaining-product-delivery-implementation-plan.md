@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-06
 - 规格：`docs/superpowers/specs/2026-09-06-a07-remaining-product-delivery-design.md`
-- 当前入口：A4 数据源生命周期
+- 当前入口：A5 M2整体验收
 
 ## 执行规则
 
@@ -43,6 +43,8 @@
 - 处理乐观锁冲突、权限拒绝和无目录状态。
 
 ### A4 数据源生命周期
+
+状态：已完成并通过验收（2026-09-06）。验收记录见docs/acceptance/A4-data-source-lifecycle-frontend-acceptance.md。
 
 - 实现名称、说明、TLS、连接参数和凭据轮换；
 - 实现停用、启用、连接复测和软删除；

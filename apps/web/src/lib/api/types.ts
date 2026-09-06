@@ -104,6 +104,17 @@ export type DataSourceCreateInput = {
 }
 
 export type DataSourceCreateResult = { data_source: DataSource; job: ScanJob }
+export type DataSourceUpdateInput = {
+  version: number
+  name?: string
+  description?: string | null
+  host?: string
+  port?: number
+  database_name?: string
+  tls_mode?: TlsMode
+  network_policy_id?: string | null
+  credentials?: { username: string; password: string; tls_ca_certificate: string | null }
+}
 export type CatalogSnapshot = {
   id: string
   data_source_id: string

@@ -342,3 +342,33 @@ th { color:#667085; background:#fafbfc; font-size:.76rem; text-transform:upperca
   .policy-box>header { flex-direction:column; }
   .budget-grid,.schedule-grid { grid-template-columns:1fr; }
 }
+/* data-source-lifecycle */
+.lifecycle-card { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 20px; background:white; border:1px solid var(--line); border-radius:15px; box-shadow:0 5px 18px #18223008; }
+.lifecycle-card>div:first-child { min-width:220px; }
+.lifecycle-card p { margin:5px 0 0; color:var(--muted); font-size:.76rem; line-height:1.5; }
+.lifecycle-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+.secondary-button.warning { color:#8c5a14; border-color:#e7c77c; background:#fffaf0; }
+.danger-button { padding:11px 15px; color:white; background:#b42318; border:0; border-radius:9px; font-weight:750; }
+.danger-button:disabled { cursor:not-allowed; opacity:.45; }
+.lifecycle-dialog { width:min(760px,100%); max-height:calc(100vh - 48px); overflow:auto; background:white; border-radius:18px; box-shadow:0 28px 80px #07112655; }
+.lifecycle-dialog>header,.lifecycle-dialog>footer { display:flex; align-items:center; justify-content:space-between; padding:20px 24px; }
+.lifecycle-dialog>header { border-bottom:1px solid var(--line); }
+.lifecycle-dialog>header h2 { margin:3px 0 0; }
+.lifecycle-dialog>footer { justify-content:flex-end; gap:10px; border-top:1px solid var(--line); }
+.lifecycle-dialog-body { display:grid; gap:15px; padding:22px 24px; }
+.credential-rotation { display:grid; gap:13px; padding:16px; margin:0; border:1px solid #dfe5ee; border-radius:11px; }
+.credential-rotation legend { padding:0 7px; color:#344054; font-size:.82rem; font-weight:750; }
+.credential-rotation>p { margin:0; color:var(--muted); font-size:.72rem; }
+.confirm-dialog { width:min(470px,100%); padding:24px; background:white; border-radius:17px; box-shadow:0 28px 80px #07112655; }
+.confirm-dialog h2 { margin:4px 0 9px; }
+.confirm-dialog>p:not(.eyebrow) { margin:0 0 18px; color:var(--muted); line-height:1.6; }
+.confirm-dialog footer { display:flex; justify-content:flex-end; gap:9px; margin-top:20px; }
+@media (max-width:800px) {
+  .lifecycle-card { align-items:flex-start; flex-direction:column; }
+  .lifecycle-actions { justify-content:flex-start; }
+}
+@media (max-width:560px) {
+  .lifecycle-actions { width:100%; }
+  .lifecycle-actions button { flex:1 1 45%; }
+  .lifecycle-dialog { max-height:92vh; align-self:end; border-radius:18px 18px 0 0; }
+}

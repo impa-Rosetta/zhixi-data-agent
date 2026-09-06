@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError, apiClient } from '../../lib/api/client'
-import type { Catalog, CatalogDiffPage, CatalogProfileList, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, SamplingPolicy, SamplingPolicyInput, ScanJob, ScanSchedule, ScanScheduleInput } from '../../lib/api/types'
+import type { Catalog, CatalogDiffPage, CatalogProfileList, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, DataSourceUpdateInput, SamplingPolicy, SamplingPolicyInput, ScanJob, ScanSchedule, ScanScheduleInput } from '../../lib/api/types'
 
 export const dataSourceKeys = {
   all: (workspaceId: string) => ['workspaces', workspaceId, 'data-sources'] as const,
@@ -111,6 +111,38 @@ export function useUpdateScanSchedule(workspaceId: string, dataSourceId: string)
     onSuccess: async () => queryClient.invalidateQueries({ queryKey: dataSourceKeys.schedule(workspaceId, dataSourceId) }),
   })
 }
+export function useUpdateDataSource(workspaceId: string, dataSourceId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: DataSourceUpdateInput) => apiClient.request<DataSource>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId, { method: 'PATCH', body: JSON.stringify(input) }),
+    onSuccess: async () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: dataSourceKeys.detail(workspaceId, dataSourceId) }),
+      queryClient.invalidateQueries({ queryKey: dataSourceKeys.jobs(workspaceId, dataSourceId) }),
+      queryClient.invalidateQueries({ queryKey: dataSourceKeys.all(workspaceId) }),
+    ]),
+  })
+}
+
+export function useSetDataSourceState(workspaceId: string, dataSourceId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ action, version }: { action: 'disable' | 'enable'; version: number }) => apiClient.request<DataSource>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/' + action, { method: 'POST', body: JSON.stringify({ version }) }),
+    onSuccess: async () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: dataSourceKeys.detail(workspaceId, dataSourceId) }),
+      queryClient.invalidateQueries({ queryKey: dataSourceKeys.jobs(workspaceId, dataSourceId) }),
+      queryClient.invalidateQueries({ queryKey: dataSourceKeys.all(workspaceId) }),
+    ]),
+  })
+}
+
+export function useDeleteDataSource(workspaceId: string, dataSourceId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (version: number) => apiClient.request<void>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '?version=' + version, { method: 'DELETE' }),
+    onSuccess: async () => queryClient.invalidateQueries({ queryKey: dataSourceKeys.all(workspaceId) }),
+  })
+}
+
 export function useCreateDataSource(workspaceId: string | undefined) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -127,12 +159,21 @@ export function useCreateDataSource(workspaceId: string | undefined) {
 }
 
 export function useTestConnection(workspaceId: string | undefined) {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (dataSourceId: string) => {
       if (!workspaceId) throw new Error('没有可用的工作空间。')
       return apiClient.request<ScanJob>(`/api/v1/workspaces/${workspaceId}/data-sources/${dataSourceId}/test`, {
         method: 'POST', headers: idempotencyHeaders(),
       })
+    },
+    onSuccess: async (_, dataSourceId) => {
+      if (!workspaceId) return
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: dataSourceKeys.detail(workspaceId, dataSourceId) }),
+        queryClient.invalidateQueries({ queryKey: dataSourceKeys.jobs(workspaceId, dataSourceId) }),
+        queryClient.invalidateQueries({ queryKey: dataSourceKeys.all(workspaceId) }),
+      ])
     },
   })
 }
