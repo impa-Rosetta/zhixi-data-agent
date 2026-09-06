@@ -188,3 +188,42 @@ export type CatalogDiffPage = {
   limit: number
   offset: number
 }
+export type CatalogSample = {
+  ordinal: number
+  masked_value: string
+  value_type: string
+  byte_count: number
+}
+
+export type CatalogColumnProfile = {
+  id: string
+  column_id: string
+  schema_name: string
+  relation_name: string
+  column_name: string
+  data_type: string
+  native_type: string
+  sample_row_count: number
+  non_null_count: number
+  estimated_row_count: number | null
+  sample_null_rate: number | null
+  sampled_distinct_count: number | null
+  minimum_value: string | null
+  maximum_value: string | null
+  minimum_length: number | null
+  maximum_length: number | null
+  average_length: number | null
+  sensitivity_type: string | null
+  sensitivity_confidence: number
+  sensitivity_reasons: string[]
+  metric_sources: Record<string, string>
+  samples: CatalogSample[]
+}
+
+export type CatalogProfileList = {
+  snapshot_id: string
+  profiling_status: CatalogSnapshot['profiling_status']
+  profiling_error_code: string | null
+  profile_counts: Record<string, unknown>
+  items: CatalogColumnProfile[]
+}

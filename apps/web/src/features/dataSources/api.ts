@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '../../lib/api/client'
-import type { Catalog, CatalogDiffPage, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, ScanJob } from '../../lib/api/types'
+import type { Catalog, CatalogDiffPage, CatalogProfileList, CatalogSnapshot, DataSource, DataSourceCreateInput, DataSourceCreateResult, DataSourcePage, ScanJob } from '../../lib/api/types'
 
 export const dataSourceKeys = {
   all: (workspaceId: string) => ['workspaces', workspaceId, 'data-sources'] as const,
@@ -11,6 +11,7 @@ export const dataSourceKeys = {
   snapshots: (workspaceId: string, dataSourceId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'snapshots'] as const,
   catalog: (workspaceId: string, dataSourceId: string, snapshotId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'catalog', snapshotId] as const,
   diffs: (workspaceId: string, dataSourceId: string, snapshotId: string, offset: number) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'diffs', snapshotId, offset] as const,
+  profiles: (workspaceId: string, dataSourceId: string, snapshotId: string) => ['workspaces', workspaceId, 'data-sources', dataSourceId, 'profiles', snapshotId] as const,
 }
 
 function idempotencyHeaders() {
@@ -62,6 +63,13 @@ export function useCatalogDiffs(workspaceId: string, dataSourceId: string, snaps
   return useQuery({
     queryKey: snapshotId ? dataSourceKeys.diffs(workspaceId, dataSourceId, snapshotId, offset) : ['catalog-diffs', 'disabled'],
     queryFn: () => apiClient.request<CatalogDiffPage>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/diffs?to_snapshot_id=' + encodeURIComponent(snapshotId ?? '') + '&limit=' + limit + '&offset=' + offset),
+    enabled: Boolean(snapshotId),
+  })
+}
+export function useCatalogProfiles(workspaceId: string, dataSourceId: string, snapshotId: string | undefined) {
+  return useQuery({
+    queryKey: snapshotId ? dataSourceKeys.profiles(workspaceId, dataSourceId, snapshotId) : ['catalog-profiles', 'disabled'],
+    queryFn: () => apiClient.request<CatalogProfileList>('/api/v1/workspaces/' + workspaceId + '/data-sources/' + dataSourceId + '/catalog/snapshots/' + encodeURIComponent(snapshotId ?? '') + '/profiles'),
     enabled: Boolean(snapshotId),
   })
 }
