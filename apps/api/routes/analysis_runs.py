@@ -9,6 +9,7 @@ from apps.api.services.analysis_runs import (
     AnalysisRunServiceError,
     append_message,
     cancel_run,
+    confirm_run,
     create_run,
     get_run,
     list_events,
@@ -19,6 +20,7 @@ from packages.shared_contracts.agents import (
     AnalysisEventResponse,
     AnalysisRunResponse,
     AppendAnalysisMessageRequest,
+    ConfirmAnalysisRunRequest,
     CreateAnalysisRunRequest,
 )
 
@@ -127,6 +129,30 @@ def retry(
     authorize(db, user=user, workspace_id=workspace_id, action=Action.ANALYSIS_RUN)
     try:
         result = retry_run(db, workspace_id=workspace_id, run_id=run_id, actor_user_id=user.id)
+    except AnalysisRunServiceError as exc:
+        db.rollback()
+        raise _error(exc) from exc
+    db.commit()
+    return result
+
+
+@router.post("/{run_id}/confirm", response_model=AnalysisRunResponse)
+def confirm(
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    payload: ConfirmAnalysisRunRequest,
+    db: DbSession,
+    user: CurrentUser,
+) -> AnalysisRunResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.ANALYSIS_RUN)
+    try:
+        result = confirm_run(
+            db,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            actor_user_id=user.id,
+            payload=payload,
+        )
     except AnalysisRunServiceError as exc:
         db.rollback()
         raise _error(exc) from exc

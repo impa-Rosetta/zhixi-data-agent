@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from apps.api.services.analysis_runs import create_run
+from apps.api.services.analysis_runs import append_message, create_run
 from apps.worker.analysis_runtime import run_analysis
 from packages.agent_core.persistence import AnalysisRun, AnalysisRunStatus
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
@@ -18,7 +18,10 @@ from packages.semantic_model.models import (
     SemanticModelVersion,
     SemanticVersionStatus,
 )
-from packages.shared_contracts.agents import CreateAnalysisRunRequest
+from packages.shared_contracts.agents import (
+    AppendAnalysisMessageRequest,
+    CreateAnalysisRunRequest,
+)
 
 
 def _fake(content: dict[str, object]) -> FakeGateway:
@@ -80,6 +83,16 @@ def test_runtime_pauses_low_confidence_and_is_idempotent() -> None:
     assert stored is not None
     assert stored.status is AnalysisRunStatus.WAITING_FOR_CLARIFICATION
     assert len(gateway.calls) == 1
+    append_message(
+        db,
+        workspace_id=workspace.id,
+        run_id=run_id,
+        actor_user_id=user.id,
+        idempotency_key="clarification-1",
+        payload=AppendAnalysisMessageRequest(message="我指的是不良率"),
+    )
+    assert stored.status is AnalysisRunStatus.QUEUED
+    assert "intent" not in stored.context
 
 
 def test_runtime_persists_plan_result_and_evidence() -> None:

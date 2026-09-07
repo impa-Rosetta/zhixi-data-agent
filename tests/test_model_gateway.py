@@ -66,4 +66,3 @@ def test_gateway_maps_auth_failure_without_leaking_secret() -> None:
     with pytest.raises(ModelGatewayError, match="model.authentication_failed") as error:
         gateway.complete(GatewayRequest(messages=(GatewayMessage(role="user", content="hi"),)))
     assert "never-print-this" not in str(error.value)
-

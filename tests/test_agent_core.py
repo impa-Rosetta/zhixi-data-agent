@@ -61,4 +61,3 @@ def test_registry_exposes_twelve_versioned_governed_tools() -> None:
     assert metric.version == "1.0.0"
     assert metric.required_action == "analysis.run"
     assert metric.idempotent is True
-

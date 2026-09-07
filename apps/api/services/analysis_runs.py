@@ -16,6 +16,7 @@ from packages.shared_contracts.agents import (
     AnalysisEventResponse,
     AnalysisRunResponse,
     AppendAnalysisMessageRequest,
+    ConfirmAnalysisRunRequest,
     CreateAnalysisRunRequest,
 )
 
@@ -248,7 +249,11 @@ def append_message(
         )
     )
     was_confirmation = run.status is AnalysisRunStatus.WAITING_FOR_CONFIRMATION
-    run.context = {**run.context, "latest_user_message": payload.message}
+    context = {**run.context, "latest_user_message": payload.message}
+    if not was_confirmation:
+        for key in ("intent", "binding", "plan"):
+            context.pop(key, None)
+    run.context = context
     run.status = AnalysisRunStatus.QUEUED
     run.current_node = "policy_check" if was_confirmation else "understand"
     run.error_code = None
@@ -265,6 +270,51 @@ def append_message(
     add_audit_event(
         db,
         action="analysis_run.message_added",
+        outcome="success",
+        resource_type="analysis_run",
+        resource_id=str(run.id),
+        actor_user_id=actor_user_id,
+        workspace_id=workspace_id,
+    )
+    db.flush()
+    return _response(run)
+
+
+def confirm_run(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    payload: ConfirmAnalysisRunRequest,
+) -> AnalysisRunResponse:
+    run = _get_run(db, workspace_id, run_id)
+    if run.status is not AnalysisRunStatus.WAITING_FOR_CONFIRMATION:
+        raise AnalysisRunServiceError(
+            "analysis_run.confirmation_not_allowed", "Run is not waiting for confirmation"
+        )
+    if payload.approved:
+        run.context = {**run.context, "plan_confirmed": True}
+        run.status = AnalysisRunStatus.QUEUED
+        run.current_node = "execute"
+        add_event(db, run, "run.confirmed")
+        db.add(
+            OutboxEvent(
+                aggregate_type="analysis_run",
+                aggregate_id=run.id,
+                event_type="analysis.run.requested",
+                payload={"run_id": str(run.id)},
+            )
+        )
+    else:
+        run.status = AnalysisRunStatus.CANCELLED
+        run.current_node = "cancelled"
+        run.finished_at = datetime.now(UTC)
+        add_event(db, run, "run.confirmation_rejected")
+    run.version += 1
+    add_audit_event(
+        db,
+        action="analysis_run.confirmed" if payload.approved else "analysis_run.rejected",
         outcome="success",
         resource_type="analysis_run",
         resource_id=str(run.id),

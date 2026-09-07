@@ -92,7 +92,12 @@ def build_default_registry() -> ToolRegistry:
             _schema("query"),
             "semantic",
         ),
-        ("query.metric", "Compile and execute a trusted metric query", _schema("metric"), "query"),
+        (
+            "query.metric",
+            "Compile and execute a trusted metric query",
+            _schema("semantic_model_id", "metrics"),
+            "query",
+        ),
         (
             "query.explore",
             "Validate and execute exploratory read-only SQL",

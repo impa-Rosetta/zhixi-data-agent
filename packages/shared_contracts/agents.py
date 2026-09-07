@@ -30,6 +30,11 @@ class AppendAnalysisMessageRequest(BaseModel):
     message: str = Field(min_length=1, max_length=10_000)
 
 
+class ConfirmAnalysisRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approved: bool
+
+
 class AnalysisRunResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID

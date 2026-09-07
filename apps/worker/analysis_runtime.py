@@ -208,7 +208,7 @@ def run_analysis(
             )
         run.context = {**run.context, "plan": plan.model_dump(mode="json")}
         _checkpoint(db, run, "policy_check")
-    if plan.requires_confirmation:
+    if plan.requires_confirmation and run.context.get("plan_confirmed") is not True:
         run.status = AnalysisRunStatus.WAITING_FOR_CONFIRMATION
         add_event(db, run, "run.confirmation_required", {"plan": plan.model_dump(mode="json")})
         db.commit()
@@ -252,7 +252,12 @@ def run_analysis(
             step.status = AnalysisStepStatus.RUNNING
             step.started_at = datetime.now(UTC)
             _checkpoint(db, run, "execute")
-            result = executor(db, run, plan)
+            registry = build_default_registry()
+            registry.bind(
+                "query.metric",
+                lambda _: executor(db, run, plan),
+            )
+            result = registry.invoke(planned_step.tool, planned_step.arguments)
             call = AnalysisToolCall(
                 workspace_id=run.workspace_id,
                 run_id=run.id,
