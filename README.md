@@ -1,6 +1,6 @@
 # 智析 Data Agent
 
-A07 企业数据底座智能问析 Agent 系统。M0、M1、M2与M3已完成产品级验收：具备身份权限、PostgreSQL/MySQL安全接入、版本化元数据目录、结构差异、安全画像、采样与刷新治理，以及完整数据源生命周期控制台。当前进入M4查询安全与执行。
+A07 企业数据底座智能问析 Agent 系统。M0至M5已完成产品级验收：具备身份权限、PostgreSQL/MySQL安全接入、版本化目录、质量语义模型、安全查询内核，以及可恢复的 DeepSeek Agent 后端闭环。当前进入 M6 智能问析工作台。
 
 ## 快速开始
 
@@ -59,6 +59,20 @@ Compose中的`source-postgres`与`source-mysql`是本地只读集成样例，宿
 
 安全采样只接受已发布目录中的普通表，不接受用户SQL。每次任务冻结策略版本和表范围，并同时限制每表行数、每字段样例数、单值字符、表级字节、任务字节和语句超时。敏感或复杂字段失败关闭，敏感原值不会进入画像、任务参数、Outbox、审计或日志。可使用`scripts/accept_m5_live.py`在空的本地Compose平台库上执行双数据库真实闭环验收；管理员密码和样例源密码分别通过`M5_ADMIN_PASSWORD`、`M5_SOURCE_PASSWORD`环境变量提供。
 
+## M5 Agent运行配置与接口
+
+DeepSeek 通过供应商无关 Model Gateway 接入。生产和本地真实模型运行均需以部署 Secret 或环境变量 DEEPSEEK_API_KEY 提供密钥；禁止提交到 Git、写入数据库或输出到日志。默认模型为 deepseek-v4-pro，Base URL 为 https://api.deepseek.com。
+
+- POST /api/v1/workspaces/{workspace_id}/analysis-runs：使用 Idempotency-Key 创建运行；
+- GET /api/v1/workspaces/{workspace_id}/analysis-runs/{run_id}：读取可恢复状态、预算和结果引用；
+- GET /api/v1/workspaces/{workspace_id}/analysis-runs/{run_id}/events：按序读取运行事件；
+- POST /api/v1/workspaces/{workspace_id}/analysis-runs/{run_id}/messages：追加澄清消息；
+- POST /api/v1/workspaces/{workspace_id}/analysis-runs/{run_id}/confirm：确认或拒绝高影响计划；
+- POST /api/v1/workspaces/{workspace_id}/analysis-runs/{run_id}/cancel：幂等取消；
+- POST /api/v1/workspaces/{workspace_id}/analysis-runs/{run_id}/retry：从可恢复失败继续。
+
+没有配置模型密钥时，运行会明确进入 failed_retryable/model.not_configured，不会使用模拟答案冒充成功。M5 的正式验收见 docs/acceptance/M5-agent-core-overall-acceptance.md。
+
 ## 产品界面
 
 - `/`：按平台状态自动进入首次初始化、登录或工作台；
@@ -71,7 +85,7 @@ Compose中的`source-postgres`与`source-mysql`是本地只读集成样例，宿
 - `/app/semantic`：制造质量语义模型、指标口径、目录字段映射与不可变版本发布；
 - `/app/members`：成员邀请和角色管理。
 
-前端不会模拟尚未实现的Agent回答。数据源管理已支持创建、连接检测、元数据扫描、任务恢复、历史快照、完整技术目录、结构差异、安全字段画像、表级采样策略、时区刷新计划和完整数据源生命周期；语义模型已开放，查询编译与Agent执行将在后续里程碑开放。
+前端不会模拟尚未实现的Agent回答。数据治理、语义模型、查询实验室和 Agent 后端均已开放；M6 将把现有 AnalysisRun、事件、计划、结果和证据接入正式问析工作台及 SSE 断线续传。
 
 ## 本地质量检查
 

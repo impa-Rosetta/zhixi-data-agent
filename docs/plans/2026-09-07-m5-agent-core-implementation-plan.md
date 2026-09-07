@@ -1,6 +1,6 @@
 # M5 Agent 核心闭环实施计划
 
-- 状态：执行中
+- 状态：已完成并通过验收（2026-09-08）
 - 日期：2026-09-07
 - 规格：`docs/superpowers/specs/2026-09-07-m5-agent-core-design.md`
 
@@ -10,6 +10,8 @@
 
 ## 切片一：模型网关与严格契约
 
+状态：已完成。
+
 - 定义供应商无关消息、工具、结构化响应、流式事件、用量和错误契约；
 - 实现 DeepSeek OpenAI-compatible 适配器、超时、重试、错误映射及秘密安全；
 - 实现可复现 Fake Gateway；
@@ -17,11 +19,15 @@
 
 ## 切片二：运行状态与迁移
 
+状态：已完成。
+
 - 建立 AnalysisRun、Message、Plan、Step、ToolCall、Artifact、Evidence、Validation、Checkpoint 和 Event；
 - 实现工作空间隔离、乐观锁、单调事件、幂等键、预算和生命周期约束；
 - 完成 Alembic 升降级与模型测试。
 
 ## 切片三：意图、语义绑定、Planner 与 Registry
+
+状态：已完成。
 
 - 定义严格 Intent、Binding、AnalysisPlan 和 ContextPatch；
 - 绑定已发布语义版本和可信指标，低置信度暂停澄清；
@@ -30,12 +36,16 @@
 
 ## 切片四：执行图、Worker 与 API
 
+状态：已完成。
+
 - 实现 understand、bind、plan、policy、clarify/confirm、execute、verify、replan、present 状态图；
 - 节点边界保存检查点，Outbox 幂等投递 Worker；
 - 提供创建、读取、追加消息、确认、取消、重试和事件读取 API；
 - 增加权限、错误和重复投递测试。
 
 ## 切片五：恢复、多轮与整体验收
+
+状态：已完成。验收记录见 docs/acceptance/M5-agent-core-overall-acceptance.md。
 
 - 实现结构化上下文补丁和多轮继承；
 - 验证服务/Worker 中断恢复、取消、预算耗尽和模型故障保留产物；

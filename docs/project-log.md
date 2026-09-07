@@ -230,3 +230,11 @@
 - MySQL 与 PostgreSQL 真实 API 链路均成功，各返回 2 行并生成独立证据摘要；Playwright 桌面 Chrome 产品验收通过；
 - Alembic 已升级到 `20260907_0008 (head)`；后端 Ruff、严格 MyPy 与 173 项测试通过，前端 TypeScript、ESLint、23 项测试和生产构建通过；
 - API/Worker Dockerfile 调整为依赖层优先缓存，后续仅源码变更不再重复下载全部 Python 依赖。
+## 2026-09-08：M5 Agent 核心闭环验收
+
+- 完成 DeepSeek V4 Pro 官方协议 Model Gateway、结构化输出、流式事件、思考模式、用量、超时重试和错误分类；
+- 完成 10 表 AnalysisRun 持久化、声明式 Planner、十二项 Tool Registry、LangGraph 拓扑、多轮澄清、确认、取消、重试和检查点恢复；
+- Agent 的 query.metric 工具复用 M4 的语义编译、安全验证和验证 ID 执行，不允许模型直接访问数据库或改写指标；
+- 修复 Celery Beat 非 root 状态文件权限及 Outbox run_id/job_id 路由，真实 API→Outbox→Worker 链路通过；
+- Ruff、严格 MyPy 和 189 项 Pytest 通过，M5 迁移在一次性 PostgreSQL 数据库完成升降级往返，Compose 服务健康；
+- 详细证据见 docs/acceptance/M5-agent-core-overall-acceptance.md。
