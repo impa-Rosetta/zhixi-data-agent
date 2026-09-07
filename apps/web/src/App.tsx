@@ -9,6 +9,7 @@ import { DataSourcesPage } from './pages/DataSourcesPage'
 import { InvitePage } from './pages/InvitePage'
 import { LoginPage } from './pages/LoginPage'
 import { MembersPage } from './pages/MembersPage'
+import { QueryLabPage } from './pages/QueryLabPage'
 import { SetupPage } from './pages/SetupPage'
 import { SemanticModelsPage } from './pages/SemanticModelsPage'
 import { StartPage } from './pages/StartPage'
@@ -31,6 +32,7 @@ export function App() {
         <Route path="data" element={<DataSourcesPage />} />
         <Route path="data/:dataSourceId" element={<DataSourceDetailPage />} />
         <Route path="semantic" element={<SemanticModelsPage />} />
+        <Route path="queries" element={<QueryLabPage />} />
         <Route path="members" element={<MembersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
