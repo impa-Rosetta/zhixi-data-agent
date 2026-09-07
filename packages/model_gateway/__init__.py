@@ -117,8 +117,6 @@ class DeepSeekGateway:
         max_attempts: int = 3,
         client: httpx.Client | None = None,
     ) -> None:
-        if not api_key:
-            raise ModelGatewayError("model.not_configured")
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model
@@ -126,6 +124,8 @@ class DeepSeekGateway:
         self._client = client or httpx.Client(timeout=timeout_seconds)
 
     def complete(self, request: GatewayRequest) -> GatewayResponse:
+        if not self._api_key:
+            raise ModelGatewayError("model.not_configured")
         for attempt in range(self._max_attempts):
             try:
                 response = self._client.post(

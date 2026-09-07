@@ -8,6 +8,7 @@ celery_app = Celery(
     broker=settings.redis_url,
     backend=settings.redis_url,
     include=[
+        "apps.worker.tasks.analysis_runs",
         "apps.worker.tasks.data_sources",
         "apps.worker.tasks.outbox",
         "apps.worker.tasks.schedules",

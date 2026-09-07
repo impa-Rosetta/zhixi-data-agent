@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 30
     login_rate_limit: int = 10
     login_rate_window_seconds: int = 60
+    deepseek_api_key: SecretStr = SecretStr("")
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-v4-pro"
+    deepseek_timeout_seconds: float = 45.0
+    deepseek_max_attempts: int = 3
+    agent_confidence_threshold: float = 0.72
 
     @field_validator("app_secret_key")
     @classmethod
@@ -76,6 +82,12 @@ class Settings(BaseSettings):
             raise ValueError("DATA_SOURCE_ALLOWED_PORTS must contain valid TCP ports")
         if not 100 <= self.metadata_scan_max_objects <= 100_000:
             raise ValueError("METADATA_SCAN_MAX_OBJECTS must be between 100 and 100000")
+        if not self.deepseek_base_url.startswith("https://"):
+            raise ValueError("DEEPSEEK_BASE_URL must use HTTPS")
+        if not 1 <= self.deepseek_max_attempts <= 5:
+            raise ValueError("DEEPSEEK_MAX_ATTEMPTS must be between 1 and 5")
+        if not 0.5 <= self.agent_confidence_threshold <= 0.95:
+            raise ValueError("AGENT_CONFIDENCE_THRESHOLD must be between 0.5 and 0.95")
         return self
 
     def data_source_master_keyring(self) -> dict[str, bytes]:
