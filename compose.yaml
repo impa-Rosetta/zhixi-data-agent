@@ -128,7 +128,14 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
-    command: ["celery", "-A", "apps.worker.celery_app:celery_app", "beat", "--loglevel=INFO"]
+    command:
+      - "celery"
+      - "-A"
+      - "apps.worker.celery_app:celery_app"
+      - "beat"
+      - "--loglevel=INFO"
+      - "--schedule=/tmp/celerybeat-schedule"
+      - "--pidfile=/tmp/celerybeat.pid"
     env_file: [.env]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://zhixi:zhixi-local-only@postgres:5432/zhixi}

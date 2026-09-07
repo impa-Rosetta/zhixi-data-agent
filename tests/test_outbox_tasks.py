@@ -15,9 +15,18 @@ def test_outbox_dispatches_known_events_and_quarantines_unknown_ones(monkeypatch
     known_id = uuid.uuid4()
     unknown_id = uuid.uuid4()
     profile_id = uuid.uuid4()
+    run_id = uuid.uuid4()
     with Session(engine) as db:
         db.add_all(
             [
+                OutboxEvent(
+                    aggregate_type="analysis_run",
+                    aggregate_id=run_id,
+                    event_type="analysis.run.requested",
+                    payload={"run_id": str(run_id)},
+                    attempts=0,
+                    available_at=datetime.now(UTC),
+                ),
                 OutboxEvent(
                     aggregate_type="scan_job",
                     aggregate_id=known_id,
@@ -62,11 +71,12 @@ def test_outbox_dispatches_known_events_and_quarantines_unknown_ones(monkeypatch
         lambda name, args: sent.append((name, args)),
     )
 
-    assert outbox_tasks.dispatch_outbox.run() == 3
+    assert outbox_tasks.dispatch_outbox.run() == 4
     assert {(name, tuple(args)) for name, args in sent} == {
         ("data_sources.test_connection", (str(known_id),)),
         ("data_sources.scan_metadata", (str(unknown_id),)),
         ("data_sources.scan_profile", (str(profile_id),)),
+        ("analysis_runs.execute", (str(run_id),)),
     }
     with Session(engine) as db:
         known = db.scalar(select(OutboxEvent).where(OutboxEvent.aggregate_id == known_id))
