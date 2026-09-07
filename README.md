@@ -1,6 +1,6 @@
 # 智析 Data Agent
 
-A07 企业数据底座智能问析 Agent 系统。M0工程基线与M1身份、权限及企业工作台已验收；M2已完成数据源安全底座、PostgreSQL/MySQL双连接器、版本化元数据目录，以及默认关闭的安全采样、字段画像和定时刷新闭环，并已开放首个数据源管理前端纵向切片。
+A07 企业数据底座智能问析 Agent 系统。M0、M1与M2已完成产品级验收：具备身份权限、PostgreSQL/MySQL安全接入、版本化元数据目录、结构差异、安全画像、采样与刷新治理，以及完整数据源生命周期控制台。当前进入M3质量语义模型。
 
 ## 快速开始
 
@@ -77,6 +77,16 @@ Compose中的`source-postgres`与`source-mysql`是本地只读集成样例，宿
 ```powershell
 ./scripts/quality.ps1
 ```
+
+## 浏览器与真实链路验收
+
+```powershell
+$env:E2E_PASSWORD = '<demo-admin-password>'
+$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE = '<chrome-or-edge-executable>'
+npm run test:e2e
+```
+
+A5错误矩阵通过`A5_ADMIN_PASSWORD`、`A5_READER_PASSWORD`和`A5_WRITER_PASSWORD`环境变量运行`python scripts/accept_a5_live.py`。密码只应存在于当前终端。详细操作见`docs/runbooks/m2-data-source-operations.md`，验收证据见`docs/acceptance/A5-m2-overall-acceptance.md`。
 
 ## 目录
 

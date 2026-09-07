@@ -7,7 +7,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "lint": "eslint . --max-warnings 0",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.e2e.json --pretty false"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.1",

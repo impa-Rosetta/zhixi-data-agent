@@ -6,8 +6,15 @@
     "dev": "npm --workspace apps/web run dev",
     "build": "npm --workspace apps/web run build",
     "lint": "npm --workspace apps/web run lint",
-    "test": "npm --workspace apps/web run test"
+    "test": "npm --workspace apps/web run test",
+    "test:e2e": "playwright test",
+    "typecheck": "npm --workspace apps/web run typecheck"
   },
-  "workspaces": ["apps/web"]
+  "workspaces": [
+    "apps/web"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.4.1"
+  }
 }
-

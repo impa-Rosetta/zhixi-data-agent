@@ -11,7 +11,7 @@ dependencies = [
   "alembic>=1.14,<2",
   "argon2-cffi>=23.1,<26",
   "celery[redis]>=5.4,<6",
-  "cryptography>=45,<47",
+  "cryptography>=50,<51",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "minio>=7.2,<8",
@@ -27,9 +27,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "mypy>=1.14,<2",
-  "pytest>=8.3,<9",
-  "pytest-asyncio>=0.25,<1",
-  "pytest-cov>=6,<7",
+  "pytest>=9.0.3,<10",
+  "pytest-asyncio>=1.4,<2",
+  "pytest-cov>=7.1,<8",
   "types-pymysql>=1.1,<2",
   "ruff>=0.9,<1",
 ]

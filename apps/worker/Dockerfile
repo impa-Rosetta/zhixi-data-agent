@@ -5,7 +5,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY apps ./apps
 COPY packages ./packages
-RUN pip install --no-cache-dir .
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2" && pip install --no-cache-dir .
 RUN groupadd --system zhixi && useradd --system --gid zhixi --home-dir /app zhixi \
     && chown -R zhixi:zhixi /app
 USER zhixi

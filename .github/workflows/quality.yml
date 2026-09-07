@@ -11,11 +11,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
-      - run: pip install -e '.[dev]'
-      - run: ruff check apps packages tests
-      - run: ruff format --check apps packages tests
-      - run: mypy
-      - run: pytest --cov=apps --cov=packages
+      - run: python -m pip install --upgrade 'pip>=26.2'
+      - run: pip install -e '.[dev]' pip-audit
+      - run: python scripts/check_secrets.py
+      - run: ruff check apps packages tests scripts
+      - run: ruff format --check apps packages tests scripts
+      - run: mypy apps packages scripts
+      - run: pytest --cov=apps --cov=packages --cov-report=term-missing --cov-fail-under=90
+      - run: pip-audit --local --skip-editable
 
   frontend:
     runs-on: ubuntu-latest
@@ -23,8 +26,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: '22', cache: npm}
-      - run: npm install
+      - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
       - run: npm run lint
+      - run: npm run typecheck
       - run: npm run test
       - run: npm run build
 
@@ -35,4 +40,3 @@ jobs:
       - run: cp .env.example .env
       - run: docker compose config --quiet
       - run: docker compose build
-

@@ -531,3 +531,53 @@ def test_scan_schedule_is_versioned_and_timezone_aware(api: tuple[TestClient, En
     with Session(engine) as db:
         stored = db.get(ScanSchedule, uuid.UUID(source_id))
         assert stored is not None and stored.timezone == "Asia/Shanghai"
+
+
+def test_soft_deleted_source_name_can_be_reused(api: tuple[TestClient, Engine]) -> None:
+    client, _ = api
+    headers, workspace_id = bootstrap(client)
+    base = f"/api/v1/workspaces/{workspace_id}/data-sources"
+    first = client.post(base, headers=headers, json=source_payload())
+    assert first.status_code == 201
+
+    duplicate = client.post(base, headers=headers, json=source_payload())
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["code"] == "data_source.conflict"
+
+    source_id = first.json()["data_source"]["id"]
+    deleted = client.delete(f"{base}/{source_id}?version=1", headers=headers)
+    assert deleted.status_code == 204
+
+    recreated = client.post(base, headers=headers, json=source_payload())
+    assert recreated.status_code == 201
+    assert recreated.json()["data_source"]["id"] != source_id
+
+
+def test_cancel_and_idempotent_retry_api(api: tuple[TestClient, Engine]) -> None:
+    client, _ = api
+    headers, workspace_id = bootstrap(client)
+    created = client.post(
+        f"/api/v1/workspaces/{workspace_id}/data-sources",
+        headers=headers,
+        json=source_payload(name="Cancellation source"),
+    ).json()
+    original_id = created["job"]["id"]
+    job_base = f"/api/v1/workspaces/{workspace_id}/scan-jobs"
+
+    cancelled = client.post(f"{job_base}/{original_id}/cancel", headers=headers)
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+
+    retry_headers = {**headers, "Idempotency-Key": "a5-retry-key"}
+    retried = client.post(f"{job_base}/{original_id}/retry", headers=retry_headers)
+    assert retried.status_code == 200
+    assert retried.json()["status"] == "queued"
+    assert retried.json()["retry_of_job_id"] == original_id
+
+    repeated = client.post(f"{job_base}/{original_id}/retry", headers=retry_headers)
+    assert repeated.status_code == 200
+    assert repeated.json()["id"] == retried.json()["id"]
+
+    detail = client.get(f"{job_base}/{retried.json()['id']}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["phase"] == "queued"

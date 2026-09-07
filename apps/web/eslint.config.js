@@ -12,7 +12,7 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
-      parserOptions: { project: ['./tsconfig.app.json', './tsconfig.node.json'] },
+      parserOptions: { project: ['./tsconfig.app.json', './tsconfig.node.json', './tsconfig.e2e.json'] },
     },
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {

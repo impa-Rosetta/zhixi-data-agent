@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-06
 - 规格：`docs/superpowers/specs/2026-09-06-a07-remaining-product-delivery-design.md`
-- 当前入口：A5 M2整体验收
+- 当前入口：B1 语义模型领域与迁移
 
 ## 执行规则
 
@@ -52,6 +52,8 @@
 - 运行中任务与配置更新竞态必须由后端状态机裁决。
 
 ### A5 M2整体验收
+
+状态：已完成并通过验收（2026-09-07）。验收记录见docs/acceptance/A5-m2-overall-acceptance.md。
 
 - PostgreSQL/MySQL桌面和窄屏真实浏览器流程；
 - 错误密码、权限过高、超时、取消、重试、版本冲突；

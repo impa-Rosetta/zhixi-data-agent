@@ -90,6 +90,16 @@ th { color:#667085; background:#fafbfc; font-size:.76rem; text-transform:upperca
   .alert.success { align-items:stretch; flex-direction:column; }
 }
 
+
+@media (max-width:480px) {
+  .topbar { gap:8px; }
+  .topbar .brand>span:last-child { display:none; }
+  .topbar-actions { min-width:0; gap:7px; }
+  .workspace-picker { min-width:0; }
+  .workspace-picker select { max-width:170px; padding-left:9px; padding-right:9px; }
+  .user-button { flex:none; padding:8px; font-size:0; white-space:nowrap; }
+  .user-button span { font-size:.78rem; }
+}
 /* data-source-management */
 .field select,.field textarea { width:100%; border:1px solid #cfd7e6; border-radius:10px; padding:11px 13px; color:#182230; background:white; outline:none; resize:vertical; }
 .field select:focus,.field textarea:focus { border-color:var(--blue); box-shadow:0 0 0 3px #2556d81c; }

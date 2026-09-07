@@ -111,6 +111,15 @@ def create(
     except DataSourceServiceError as exc:
         db.rollback()
         raise _error(exc, status.HTTP_422_UNPROCESSABLE_CONTENT) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "code": "data_source.conflict",
+                "message": "A data source with the same name already exists",
+            },
+        ) from exc
     _commit(db)
     db.refresh(source)
     db.refresh(job)

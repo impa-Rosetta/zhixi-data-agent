@@ -50,7 +50,7 @@ def test_sensitive_names_fail_closed(name: str, expected: str) -> None:
         ("13800138000", "phone"),
         ("11010519491231002X", "national_id"),
         ("4111111111111111", "bank_card"),
-        ("sk-abcdefghijklmnop1234", "secret_token"),
+        ("sk-test-placeholder", "secret_token"),
         ("eyJhbGciOiJIUzI1NiJ9.payload.signature", "secret_token"),
     ],
 )
@@ -78,7 +78,7 @@ def test_unsupported_types_never_allow_samples(data_type: str, native_type: str)
 def test_mask_text_redacts_embedded_values() -> None:
     original = (
         "contact person@example.com or 13800138000; card 4111111111111111; "
-        "token sk-abcdefghijklmnop1234"
+        "token sk-test-placeholder"
     )
     masked = mask_text(original)
     assert masked == "contact [EMAIL] or [PHONE]; card [NUMBER]; token [TOKEN]"

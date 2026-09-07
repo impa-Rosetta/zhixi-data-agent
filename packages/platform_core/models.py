@@ -236,7 +236,14 @@ class NetworkPolicy(Base):
 class DataSource(Base):
     __tablename__ = "data_sources"
     __table_args__ = (
-        UniqueConstraint("workspace_id", "name", name="uq_data_source_workspace_name"),
+        Index(
+            "uq_data_source_workspace_name",
+            "workspace_id",
+            "name",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
+        ),
         CheckConstraint("port >= 1 AND port <= 65535", name="ck_data_source_port"),
     )
 

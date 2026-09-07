@@ -265,6 +265,7 @@ def create_data_source(
         settings=settings,
     )
     source = DataSource(
+        id=uuid.uuid4(),
         workspace_id=workspace_id,
         network_policy_id=policy.id,
         name=payload.name.strip(),
@@ -280,7 +281,6 @@ def create_data_source(
         updated_by_user_id=actor_user_id,
     )
     db.add(source)
-    db.flush()
     _write_secret(
         db,
         source=source,
