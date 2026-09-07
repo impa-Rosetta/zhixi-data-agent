@@ -12,6 +12,8 @@ class Action(enum.StrEnum):
     MEMBER_ROLE_UPDATE = "member.role.update"
     DATA_SOURCE_MANAGE = "data_source.manage"
     CATALOG_READ = "catalog.read"
+    SEMANTIC_READ = "semantic.read"
+    SEMANTIC_MANAGE = "semantic.manage"
     ANALYSIS_RUN = "analysis.run"
     AUDIT_READ = "audit.read"
 
@@ -29,10 +31,16 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
         }
     ),
     WorkspaceRole.ANALYST: frozenset(
-        {Action.WORKSPACE_READ, Action.CATALOG_READ, Action.ANALYSIS_RUN}
+        {Action.WORKSPACE_READ, Action.CATALOG_READ, Action.SEMANTIC_READ, Action.ANALYSIS_RUN}
     ),
     WorkspaceRole.AUDITOR: frozenset(
-        {Action.WORKSPACE_READ, Action.MEMBER_READ, Action.CATALOG_READ, Action.AUDIT_READ}
+        {
+            Action.WORKSPACE_READ,
+            Action.MEMBER_READ,
+            Action.CATALOG_READ,
+            Action.SEMANTIC_READ,
+            Action.AUDIT_READ,
+        }
     ),
 }
 

@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-06
 - 规格：`docs/superpowers/specs/2026-09-06-a07-remaining-product-delivery-design.md`
-- 当前入口：B1 语义模型领域与迁移
+- 当前入口：B5 语义查询协议与编译器（M3 已于 2026-09-07 完成）
 
 ## 执行规则
 

@@ -10,6 +10,7 @@ import { InvitePage } from './pages/InvitePage'
 import { LoginPage } from './pages/LoginPage'
 import { MembersPage } from './pages/MembersPage'
 import { SetupPage } from './pages/SetupPage'
+import { SemanticModelsPage } from './pages/SemanticModelsPage'
 import { StartPage } from './pages/StartPage'
 
 function ProtectedRoute() {
@@ -29,6 +30,7 @@ export function App() {
         <Route index element={<AnalysisHomePage />} />
         <Route path="data" element={<DataSourcesPage />} />
         <Route path="data/:dataSourceId" element={<DataSourceDetailPage />} />
+        <Route path="semantic" element={<SemanticModelsPage />} />
         <Route path="members" element={<MembersPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
