@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.routes.analysis_runs import router as analysis_runs_router
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.data_sources import router as data_sources_router
 from apps.api.routes.health import router as health_router
@@ -38,3 +39,4 @@ app.include_router(workspaces_router)
 app.include_router(data_sources_router)
 app.include_router(semantic_models_router)
 app.include_router(queries_router)
+app.include_router(analysis_runs_router)
