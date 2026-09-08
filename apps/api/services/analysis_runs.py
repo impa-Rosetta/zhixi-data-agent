@@ -1,6 +1,11 @@
+import asyncio
+import json
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from time import monotonic
 
+from anyio import to_thread
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -402,6 +407,64 @@ def list_events(
         )
         for item in events
     ]
+
+
+def encode_sse_event(event: AnalysisEventResponse) -> str:
+    event_name = event.event_type.replace("\r", "").replace("\n", "")
+    payload = json.dumps(
+        event.model_dump(mode="json"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"id: {event.sequence}\nevent: {event_name}\ndata: {payload}\n\n"
+
+
+async def stream_events(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    after: int = 0,
+    poll_interval_seconds: float = 0.5,
+    heartbeat_seconds: float = 15.0,
+) -> AsyncIterator[str]:
+    _get_run(db, workspace_id, run_id)
+    bind = db.get_bind()
+    cursor = max(0, after)
+    next_heartbeat = monotonic() + max(1.0, heartbeat_seconds)
+    while True:
+        def read_batch(
+            after_sequence: int,
+        ) -> tuple[list[AnalysisEventResponse], AnalysisRunStatus, int]:
+            with Session(bind=bind) as polling_db:
+                events = list_events(
+                    polling_db,
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    after=after_sequence,
+                    limit=200,
+                )
+                stream_state = polling_db.execute(
+                    select(AnalysisRun.status, AnalysisRun.next_event_sequence).where(
+                        AnalysisRun.id == run_id,
+                        AnalysisRun.workspace_id == workspace_id,
+                    )
+                ).one()
+                return events, stream_state[0], stream_state[1]
+
+        events, run_status, next_event_sequence = await to_thread.run_sync(read_batch, cursor)
+        for event in events:
+            cursor = event.sequence
+            yield encode_sse_event(event)
+
+        if run_status in TERMINAL and cursor >= next_event_sequence - 1:
+            return
+
+        now = monotonic()
+        if now >= next_heartbeat:
+            yield ": keep-alive\n\n"
+            next_heartbeat = now + max(1.0, heartbeat_seconds)
+        await asyncio.sleep(max(0.05, poll_interval_seconds))
 
 
 def cancel_run(

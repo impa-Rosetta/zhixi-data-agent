@@ -172,3 +172,58 @@ def test_run_view_does_not_cross_workspace_boundary(client: TestClient) -> None:
     )
 
     assert response.status_code == 403
+
+
+def test_event_stream_replays_persisted_events_and_closes_for_terminal_run(
+    client: TestClient,
+) -> None:
+    headers, workspace_id = _session(client)
+    headers["Idempotency-Key"] = "stream-replay"
+    run = client.post(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs",
+        headers=headers,
+        json={"message": "重放分析事件"},
+    ).json()
+    client.post(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs/{run['id']}/cancel",
+        headers=headers,
+    )
+
+    with client.stream(
+        "GET",
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs/{run['id']}/events/stream",
+        headers=headers,
+    ) as response:
+        content = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "id: 1\nevent: run.created\n" in content
+    assert "id: 2\nevent: run.cancelled\n" in content
+    assert "restricted_reasoning" not in content
+
+
+def test_event_stream_resumes_after_last_event_id(client: TestClient) -> None:
+    headers, workspace_id = _session(client)
+    headers["Idempotency-Key"] = "stream-resume"
+    run = client.post(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs",
+        headers=headers,
+        json={"message": "续传分析事件"},
+    ).json()
+    client.post(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs/{run['id']}/cancel",
+        headers=headers,
+    )
+    stream_headers = {**headers, "Last-Event-ID": "1"}
+
+    with client.stream(
+        "GET",
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs/{run['id']}/events/stream",
+        headers=stream_headers,
+    ) as response:
+        content = "".join(response.iter_text())
+
+    assert response.status_code == 200
+    assert "id: 1\n" not in content
+    assert "id: 2\nevent: run.cancelled\n" in content

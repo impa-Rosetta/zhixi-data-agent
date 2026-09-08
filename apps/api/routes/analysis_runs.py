@@ -2,6 +2,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 
 from apps.api.authorization import authorize
 from apps.api.dependencies import CurrentUser, DbSession
@@ -16,6 +17,7 @@ from apps.api.services.analysis_runs import (
     list_events,
     list_runs,
     retry_run,
+    stream_events,
 )
 from packages.platform_core.policy import Action
 from packages.shared_contracts.agents import (
@@ -92,6 +94,40 @@ def view(
         return get_run_view(db, workspace_id=workspace_id, run_id=run_id)
     except AnalysisRunServiceError as exc:
         raise _error(exc) from exc
+
+
+@router.get("/{run_id}/events/stream", response_class=StreamingResponse)
+def event_stream(
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    after: int = Query(default=0, ge=0),
+    last_event_id: Annotated[
+        int | None,
+        Header(alias="Last-Event-ID", ge=0),
+    ] = None,
+) -> StreamingResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.ANALYSIS_RUN)
+    try:
+        get_run(db, workspace_id=workspace_id, run_id=run_id)
+    except AnalysisRunServiceError as exc:
+        raise _error(exc) from exc
+    cursor = last_event_id if last_event_id is not None else after
+    return StreamingResponse(
+        stream_events(
+            db,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            after=cursor,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/{run_id}/events", response_model=list[AnalysisEventResponse])

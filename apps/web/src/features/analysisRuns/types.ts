@@ -129,3 +129,10 @@ export type AnalysisRunView = {
   validations: AnalysisValidation[]
   last_event_sequence: number
 }
+
+export type AnalysisEvent = {
+  sequence: number
+  event_type: string
+  payload: Record<string, unknown>
+  created_at: string
+}

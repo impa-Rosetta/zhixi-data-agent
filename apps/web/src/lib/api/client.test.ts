@@ -67,3 +67,27 @@ test('parses structured API errors without losing the stable error code', async 
     expect(reason).toMatchObject({ status: 409, code: 'data_source.conflict', message: '数据源名称已存在' })
   }
 })
+
+test('opens an authenticated event stream without consuming the response body', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response('id: 1\ndata: {}\n\n', {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }),
+  )
+  const client = new ApiClient()
+  client.setTokens({
+    access_token: 'stream-access',
+    refresh_token: 'stream-refresh',
+    token_type: 'bearer',
+    expires_in: 900,
+  })
+
+  const response = await client.requestStream('/api/v1/example/events')
+
+  expect(response.headers.get('Content-Type')).toBe('text/event-stream')
+  const request = fetchMock.mock.calls[0]?.[1]
+  expect(new Headers(request?.headers).get('Authorization')).toBe('Bearer stream-access')
+  expect(new Headers(request?.headers).get('Accept')).toBe('text/event-stream')
+  await expect(response.text()).resolves.toContain('id: 1')
+})

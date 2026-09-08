@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 
@@ -5,7 +6,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from apps.api.services.analysis_runs import append_message, create_run, get_run_view
+from apps.api.services.analysis_runs import (
+    append_message,
+    create_run,
+    get_run_view,
+    stream_events,
+)
 from apps.worker.analysis_runtime import run_analysis
 from packages.agent_core.persistence import AnalysisRun, AnalysisRunStatus
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
@@ -165,3 +171,38 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     assert len(view.validations) == 1
     assert view.validations[0].outcome == "passed"
     assert view.last_event_sequence >= 1
+
+
+def test_event_stream_sends_heartbeat_while_run_is_active(
+    monkeypatch,
+) -> None:
+    db, user, workspace = _database()
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="heartbeat",
+        payload=CreateAnalysisRunRequest(message="保持事件连接"),
+    ).id
+    db.commit()
+    ticks = iter([0.0, 2.0])
+    monkeypatch.setattr(
+        "apps.api.services.analysis_runs.monotonic",
+        lambda: next(ticks),
+    )
+    stream = stream_events(
+        db,
+        workspace_id=workspace.id,
+        run_id=run_id,
+        heartbeat_seconds=1.0,
+    )
+
+    async def read_stream() -> tuple[str, str]:
+        first = await anext(stream)
+        second = await anext(stream)
+        await stream.aclose()
+        return first, second
+
+    first, second = asyncio.run(read_stream())
+    assert "event: run.created" in first
+    assert second == ": keep-alive\n\n"

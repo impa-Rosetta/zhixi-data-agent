@@ -91,32 +91,50 @@ export class ApiClient {
     }
   }
 
-  private async raw<T>(path: string, init: RequestInit): Promise<T> {
+  async requestStream(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
     const headers = new Headers(init.headers)
-    if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
-    let response: Response
+    headers.set('Accept', 'text/event-stream')
+    if (this.accessToken) headers.set('Authorization', `Bearer ${this.accessToken}`)
+    const response = await this.fetchResponse(path, { ...init, headers })
+    if (response.status === 401 && retry && this.hasRefreshToken()) {
+      await this.refresh()
+      return this.requestStream(path, init, false)
+    }
+    if (!response.ok) throw await this.responseError(response)
+    return response
+  }
+
+  private async fetchResponse(path: string, init: RequestInit): Promise<Response> {
     try {
-      response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers })
+      return await fetch(`${apiBaseUrl}${path}`, init)
     } catch {
       throw new ApiError(0, '无法连接服务，请检查网络或稍后重试。')
     }
-    if (!response.ok) {
-      let detail: string | undefined
-      let code: string | null = null
-      try {
-        const body = (await response.json()) as {
-          detail?: string | { code?: string; message?: string }
-        }
-        if (typeof body.detail === 'string') detail = body.detail
-        else if (body.detail) {
-          detail = body.detail.message
-          code = body.detail.code ?? null
-        }
-      } catch {
-        detail = undefined
+  }
+
+  private async responseError(response: Response): Promise<ApiError> {
+    let detail: string | undefined
+    let code: string | null = null
+    try {
+      const body = (await response.json()) as {
+        detail?: string | { code?: string; message?: string }
       }
-      throw new ApiError(response.status, errorMessage(response.status, detail), code)
+      if (typeof body.detail === 'string') detail = body.detail
+      else if (body.detail) {
+        detail = body.detail.message
+        code = body.detail.code ?? null
+      }
+    } catch {
+      detail = undefined
     }
+    return new ApiError(response.status, errorMessage(response.status, detail), code)
+  }
+
+  private async raw<T>(path: string, init: RequestInit): Promise<T> {
+    const headers = new Headers(init.headers)
+    if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+    const response = await this.fetchResponse(path, { ...init, headers })
+    if (!response.ok) throw await this.responseError(response)
     if (response.status === 204) return undefined as T
     return (await response.json()) as T
   }
