@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from apps.api.services.analysis_runs import append_message, create_run
+from apps.api.services.analysis_runs import append_message, create_run, get_run_view
 from apps.worker.analysis_runtime import run_analysis
 from packages.agent_core.persistence import AnalysisRun, AnalysisRunStatus
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
@@ -151,3 +151,17 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     assert stored.status is AnalysisRunStatus.COMPLETED
     assert stored.context["result"]["rows"] == [[2.5]]
     assert stored.total_tokens == 30
+    view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    assert view.plan is not None
+    assert view.plan.goal == "分析不良率"
+    assert len(view.steps) == 1
+    assert view.steps[0].tool_name == "query.metric"
+    assert len(view.tool_calls) == 1
+    assert view.tool_calls[0].result_summary["rows"] == [[2.5]]
+    assert len(view.artifacts) == 1
+    assert view.artifacts[0].summary["rows"] == [[2.5]]
+    assert len(view.evidence) == 1
+    assert view.evidence[0].evidence_digest == "b" * 64
+    assert len(view.validations) == 1
+    assert view.validations[0].outcome == "passed"
+    assert view.last_event_sequence >= 1

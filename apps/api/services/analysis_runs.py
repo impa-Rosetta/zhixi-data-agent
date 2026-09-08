@@ -1,20 +1,36 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.audit import add_audit_event
 from packages.agent_core.persistence import (
+    AnalysisArtifact,
     AnalysisEvent,
+    AnalysisEvidence,
     AnalysisMessage,
+    AnalysisPlanRecord,
     AnalysisRun,
     AnalysisRunStatus,
+    AnalysisStepRecord,
+    AnalysisToolCall,
+    AnalysisValidation,
 )
 from packages.platform_core.models import OutboxEvent
 from packages.shared_contracts.agents import (
+    AnalysisArtifactResponse,
     AnalysisEventResponse,
+    AnalysisEvidenceResponse,
+    AnalysisMessageResponse,
+    AnalysisPlanResponse,
+    AnalysisRunPage,
     AnalysisRunResponse,
+    AnalysisRunSummaryResponse,
+    AnalysisRunViewResponse,
+    AnalysisStepResponse,
+    AnalysisToolCallResponse,
+    AnalysisValidationResponse,
     AppendAnalysisMessageRequest,
     ConfirmAnalysisRunRequest,
     CreateAnalysisRunRequest,
@@ -59,9 +75,214 @@ def _response(run: AnalysisRun) -> AnalysisRunResponse:
         replan_count=run.replan_count,
         error_code=run.error_code,
         version=run.version,
+        cancel_requested_at=run.cancel_requested_at,
+        started_at=run.started_at,
         created_at=run.created_at,
         updated_at=run.updated_at,
         finished_at=run.finished_at,
+    )
+
+
+def _summary(run: AnalysisRun) -> AnalysisRunSummaryResponse:
+    goal = run.context.get("goal", "")
+    return AnalysisRunSummaryResponse(
+        id=run.id,
+        status=run.status.value,
+        current_node=run.current_node,
+        goal=goal if isinstance(goal, str) else "",
+        error_code=run.error_code,
+        model_calls=run.model_calls,
+        tool_calls=run.tool_calls,
+        total_tokens=run.total_tokens,
+        created_at=run.created_at,
+        updated_at=run.updated_at,
+        finished_at=run.finished_at,
+    )
+
+
+def list_runs(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    limit: int = 30,
+    offset: int = 0,
+) -> AnalysisRunPage:
+    bounded_limit = max(1, min(limit, 100))
+    bounded_offset = max(0, offset)
+    total = db.scalar(
+        select(func.count()).select_from(AnalysisRun).where(
+            AnalysisRun.workspace_id == workspace_id
+        )
+    )
+    runs = db.scalars(
+        select(AnalysisRun)
+        .where(AnalysisRun.workspace_id == workspace_id)
+        .order_by(AnalysisRun.updated_at.desc(), AnalysisRun.id.desc())
+        .offset(bounded_offset)
+        .limit(bounded_limit)
+    ).all()
+    return AnalysisRunPage(
+        items=[_summary(run) for run in runs],
+        total=int(total or 0),
+        limit=bounded_limit,
+        offset=bounded_offset,
+    )
+
+
+def get_run_view(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+) -> AnalysisRunViewResponse:
+    run = _get_run(db, workspace_id, run_id)
+    messages = db.scalars(
+        select(AnalysisMessage)
+        .where(
+            AnalysisMessage.run_id == run.id,
+            AnalysisMessage.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisMessage.created_at, AnalysisMessage.id)
+    ).all()
+    plan = db.scalar(
+        select(AnalysisPlanRecord)
+        .where(
+            AnalysisPlanRecord.run_id == run.id,
+            AnalysisPlanRecord.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisPlanRecord.revision.desc())
+        .limit(1)
+    )
+    steps = (
+        db.scalars(
+            select(AnalysisStepRecord)
+            .where(
+                AnalysisStepRecord.plan_id == plan.id,
+                AnalysisStepRecord.workspace_id == workspace_id,
+            )
+            .order_by(AnalysisStepRecord.step_key)
+        ).all()
+        if plan is not None
+        else []
+    )
+    tool_calls = db.scalars(
+        select(AnalysisToolCall)
+        .where(
+            AnalysisToolCall.run_id == run.id,
+            AnalysisToolCall.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisToolCall.created_at, AnalysisToolCall.id)
+    ).all()
+    artifacts = db.scalars(
+        select(AnalysisArtifact)
+        .where(
+            AnalysisArtifact.run_id == run.id,
+            AnalysisArtifact.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisArtifact.created_at, AnalysisArtifact.id)
+    ).all()
+    evidence = db.scalars(
+        select(AnalysisEvidence)
+        .where(
+            AnalysisEvidence.run_id == run.id,
+            AnalysisEvidence.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisEvidence.created_at, AnalysisEvidence.id)
+    ).all()
+    validations = db.scalars(
+        select(AnalysisValidation)
+        .where(
+            AnalysisValidation.run_id == run.id,
+            AnalysisValidation.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisValidation.created_at, AnalysisValidation.id)
+    ).all()
+    return AnalysisRunViewResponse(
+        run=_response(run),
+        messages=[
+            AnalysisMessageResponse(
+                id=item.id,
+                role=item.role,
+                content=item.content,
+                context_patch=dict(item.context_patch),
+                created_at=item.created_at,
+            )
+            for item in messages
+        ],
+        plan=(
+            AnalysisPlanResponse(
+                id=plan.id,
+                revision=plan.revision,
+                goal=plan.goal,
+                document=dict(plan.document),
+                requires_confirmation=plan.requires_confirmation,
+                confirmed_at=plan.confirmed_at,
+                created_at=plan.created_at,
+            )
+            if plan is not None
+            else None
+        ),
+        steps=[
+            AnalysisStepResponse(
+                id=item.id,
+                plan_id=item.plan_id,
+                step_key=item.step_key,
+                tool_name=item.tool_name,
+                arguments=dict(item.arguments),
+                dependencies=list(item.dependencies),
+                status=item.status.value,
+                error_code=item.error_code,
+                started_at=item.started_at,
+                finished_at=item.finished_at,
+            )
+            for item in steps
+        ],
+        tool_calls=[
+            AnalysisToolCallResponse(
+                id=item.id,
+                step_id=item.step_id,
+                tool_name=item.tool_name,
+                tool_version=item.tool_version,
+                argument_digest=item.argument_digest,
+                status=item.status.value,
+                result_summary=dict(item.result_summary),
+                error_code=item.error_code,
+                created_at=item.created_at,
+            )
+            for item in tool_calls
+        ],
+        artifacts=[
+            AnalysisArtifactResponse(
+                id=item.id,
+                artifact_type=item.artifact_type,
+                summary=dict(item.summary),
+                content_digest=item.content_digest,
+                created_at=item.created_at,
+            )
+            for item in artifacts
+        ],
+        evidence=[
+            AnalysisEvidenceResponse(
+                id=item.id,
+                artifact_id=item.artifact_id,
+                evidence_type=item.evidence_type,
+                reference=dict(item.reference),
+                evidence_digest=item.evidence_digest,
+                created_at=item.created_at,
+            )
+            for item in evidence
+        ],
+        validations=[
+            AnalysisValidationResponse(
+                id=item.id,
+                validation_type=item.validation_type,
+                outcome=item.outcome,
+                findings=list(item.findings),
+                created_at=item.created_at,
+            )
+            for item in validations
+        ],
+        last_event_sequence=max(0, run.next_event_sequence - 1),
     )
 
 

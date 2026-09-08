@@ -91,3 +91,84 @@ def test_cancel_is_idempotent_and_terminal(client: TestClient) -> None:
     second = client.post(endpoint, headers=headers)
     assert first.status_code == second.status_code == 200
     assert second.json()["status"] == "cancelled"
+
+
+def test_list_runs_is_paginated_and_workspace_scoped(client: TestClient) -> None:
+    headers, workspace_id = _session(client)
+    created_ids: list[str] = []
+    for index in range(2):
+        request_headers = {**headers, "Idempotency-Key": f"list-{index}"}
+        response = client.post(
+            f"/api/v1/workspaces/{workspace_id}/analysis-runs",
+            headers=request_headers,
+            json={"message": f"分析第 {index + 1} 个质量问题"},
+        )
+        assert response.status_code == 201
+        created_ids.append(response.json()["id"])
+
+    page = client.get(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs?limit=1&offset=0",
+        headers=headers,
+    )
+
+    assert page.status_code == 200
+    body = page.json()
+    assert body["total"] == 2
+    assert body["limit"] == 1
+    assert body["offset"] == 0
+    assert len(body["items"]) == 1
+    assert body["items"][0]["id"] in created_ids
+    assert body["items"][0]["goal"].startswith("分析第")
+    assert "context" not in body["items"][0]
+    assert "idempotency_key" not in body["items"][0]
+
+
+def test_run_view_restores_messages_without_sensitive_internal_state(
+    client: TestClient,
+) -> None:
+    headers, workspace_id = _session(client)
+    request_headers = {**headers, "Idempotency-Key": "view-001"}
+    created = client.post(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs",
+        headers=request_headers,
+        json={"message": "比较本月与上月不良率"},
+    ).json()
+
+    response = client.get(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs/{created['id']}/view",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["run"]["id"] == created["id"]
+    assert body["messages"][0]["role"] == "user"
+    assert body["messages"][0]["content"] == "比较本月与上月不良率"
+    assert body["plan"] is None
+    assert body["steps"] == []
+    assert body["tool_calls"] == []
+    assert body["artifacts"] == []
+    assert body["evidence"] == []
+    assert body["validations"] == []
+    assert body["last_event_sequence"] == 1
+    serialized = response.text
+    assert "idempotency_key" not in serialized
+    assert "restricted_reasoning" not in serialized
+    assert "next_event_sequence" not in serialized
+
+
+def test_run_view_does_not_cross_workspace_boundary(client: TestClient) -> None:
+    headers, workspace_id = _session(client)
+    headers["Idempotency-Key"] = "workspace-boundary"
+    run = client.post(
+        f"/api/v1/workspaces/{workspace_id}/analysis-runs",
+        headers=headers,
+        json={"message": "验证工作空间边界"},
+    ).json()
+    other_workspace_id = "00000000-0000-0000-0000-000000000001"
+    response = client.get(
+        f"/api/v1/workspaces/{other_workspace_id}/analysis-runs/{run['id']}/view",
+        headers=headers,
+    )
+
+    assert response.status_code == 403
