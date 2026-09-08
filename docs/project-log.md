@@ -238,3 +238,13 @@
 - 修复 Celery Beat 非 root 状态文件权限及 Outbox run_id/job_id 路由，真实 API→Outbox→Worker 链路通过；
 - Ruff、严格 MyPy 和 189 项 Pytest 通过，M5 迁移在一次性 PostgreSQL 数据库完成升降级往返，Compose 服务健康；
 - 详细证据见 docs/acceptance/M5-agent-core-overall-acceptance.md。
+
+## 2026-09-08：M6-A 运行列表与完整投影验收
+
+- 新增工作空间隔离的 AnalysisRun 分页列表和完整工作台投影；
+- 投影覆盖消息、最新计划、步骤、工具调用、产物、Evidence、Validation 和最后事件序号；
+- 显式排除幂等键、内部事件游标、对象存储键和受限检查点推理；
+- 前端新增稳定 TypeScript 契约、查询键及列表/投影 API 层；
+- Ruff、严格 MyPy、192 项 Pytest、ESLint、TypeScript 和 25 项 Vitest 全部通过；
+- API/Web 镜像从 Git 提交构建并健康部署，真实列表和投影 HTTP 验收通过；
+- 详细证据见 docs/acceptance/M6-A-run-projection-acceptance.md，下一切片进入 M6-B SSE。
