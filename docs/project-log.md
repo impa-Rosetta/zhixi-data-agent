@@ -248,3 +248,12 @@
 - Ruff、严格 MyPy、192 项 Pytest、ESLint、TypeScript 和 25 项 Vitest 全部通过；
 - API/Web 镜像从 Git 提交构建并健康部署，真实列表和投影 HTTP 验收通过；
 - 详细证据见 docs/acceptance/M6-A-run-projection-acceptance.md，下一切片进入 M6-B SSE。
+
+## 2026-09-08：M6-B 可重放 SSE 验收
+
+- 新增基于持久化事件日志的 AnalysisRun SSE，支持 Last-Event-ID、历史重放、心跳和终态关闭；
+- 服务端采用异步等待和短数据库会话，不长期持有事务或轮询线程；
+- 前端实现认证 Fetch 流、分块解析、令牌刷新、退避重连、去重、空洞恢复和未知事件兼容；
+- Ruff、严格 MyPy、195 项 Pytest、ESLint、TypeScript 和 33 项 Vitest 全部通过；
+- 真实终态任务的全量流与断点续传结果符合单调序号约定，未暴露受限推理；
+- 详细证据见 docs/acceptance/M6-B-resumable-sse-acceptance.md，下一切片进入 M6-C 工作台。

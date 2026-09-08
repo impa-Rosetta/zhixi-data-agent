@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-08
 - 规格：`docs/superpowers/specs/2026-09-08-m6-analysis-workbench-design.md`
-- 当前入口：M6-B 可重放 SSE 与客户端恢复
+- 当前入口：M6-C 三栏问析工作台
 
 ## 执行规则
 
@@ -21,7 +21,7 @@
 
 ## M6-B：可重放 SSE 与客户端恢复
 
-状态：待实施。
+状态：已完成并通过验收（2026-09-08）。验收记录见 docs/acceptance/M6-B-resumable-sse-acceptance.md。
 
 - 实现 `text/event-stream` 响应、历史分批重放、心跳和终态关闭；
 - 支持 `Last-Event-ID` 与 `after`，保证单调序号和断线续传；
