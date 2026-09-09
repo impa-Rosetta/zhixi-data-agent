@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '../../lib/api/client'
-import type { AnalysisRunPage, AnalysisRunView } from './types'
+import type { AnalysisRun, AnalysisRunPage, AnalysisRunView } from './types'
 
 export const analysisRunKeys = {
   all: (workspaceId: string) => ['workspaces', workspaceId, 'analysis-runs'] as const,
@@ -27,6 +27,65 @@ export function getAnalysisRunView(
 ): Promise<AnalysisRunView> {
   return apiClient.request(
     `/api/v1/workspaces/${workspaceId}/analysis-runs/${runId}/view`,
+  )
+}
+
+export function createAnalysisRun(
+  workspaceId: string,
+  message: string,
+  idempotencyKey: string,
+): Promise<AnalysisRun> {
+  return apiClient.request(`/api/v1/workspaces/${workspaceId}/analysis-runs`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ message }),
+  })
+}
+
+export function appendAnalysisMessage(
+  workspaceId: string,
+  runId: string,
+  message: string,
+  idempotencyKey: string,
+): Promise<AnalysisRun> {
+  return apiClient.request(
+    `/api/v1/workspaces/${workspaceId}/analysis-runs/${runId}/messages`,
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ message }),
+    },
+  )
+}
+
+export function confirmAnalysisRun(
+  workspaceId: string,
+  runId: string,
+  approved: boolean,
+): Promise<AnalysisRun> {
+  return apiClient.request(
+    `/api/v1/workspaces/${workspaceId}/analysis-runs/${runId}/confirm`,
+    { method: 'POST', body: JSON.stringify({ approved }) },
+  )
+}
+
+export function cancelAnalysisRun(
+  workspaceId: string,
+  runId: string,
+): Promise<AnalysisRun> {
+  return apiClient.request(
+    `/api/v1/workspaces/${workspaceId}/analysis-runs/${runId}/cancel`,
+    { method: 'POST' },
+  )
+}
+
+export function retryAnalysisRun(
+  workspaceId: string,
+  runId: string,
+): Promise<AnalysisRun> {
+  return apiClient.request(
+    `/api/v1/workspaces/${workspaceId}/analysis-runs/${runId}/retry`,
+    { method: 'POST' },
   )
 }
 
@@ -56,4 +115,46 @@ export function useAnalysisRunView(
     queryFn: () => getAnalysisRunView(workspaceId!, runId!),
     enabled: Boolean(workspaceId && runId),
   })
+}
+
+export function useAnalysisRunCommands(workspaceId: string | undefined) {
+  const queryClient = useQueryClient()
+  const refresh = async (run: AnalysisRun): Promise<void> => {
+    if (!workspaceId) return
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: analysisRunKeys.all(workspaceId) }),
+      queryClient.invalidateQueries({
+        queryKey: analysisRunKeys.view(workspaceId, run.id),
+      }),
+    ])
+  }
+  const create = useMutation({
+    mutationFn: (input: { message: string; idempotencyKey: string }) =>
+      createAnalysisRun(workspaceId!, input.message, input.idempotencyKey),
+    onSuccess: refresh,
+  })
+  const message = useMutation({
+    mutationFn: (input: { runId: string; message: string; idempotencyKey: string }) =>
+      appendAnalysisMessage(
+        workspaceId!,
+        input.runId,
+        input.message,
+        input.idempotencyKey,
+      ),
+    onSuccess: refresh,
+  })
+  const confirmation = useMutation({
+    mutationFn: (input: { runId: string; approved: boolean }) =>
+      confirmAnalysisRun(workspaceId!, input.runId, input.approved),
+    onSuccess: refresh,
+  })
+  const cancel = useMutation({
+    mutationFn: (runId: string) => cancelAnalysisRun(workspaceId!, runId),
+    onSuccess: refresh,
+  })
+  const retry = useMutation({
+    mutationFn: (runId: string) => retryAnalysisRun(workspaceId!, runId),
+    onSuccess: refresh,
+  })
+  return { create, message, confirmation, cancel, retry }
 }

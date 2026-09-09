@@ -29,6 +29,7 @@ export function App() {
       <Route path="/invite" element={<InvitePage />} />
       <Route path="/app" element={<ProtectedRoute />}>
         <Route index element={<AnalysisHomePage />} />
+        <Route path="analysis/:runId" element={<AnalysisHomePage />} />
         <Route path="data" element={<DataSourcesPage />} />
         <Route path="data/:dataSourceId" element={<DataSourceDetailPage />} />
         <Route path="semantic" element={<SemanticModelsPage />} />
