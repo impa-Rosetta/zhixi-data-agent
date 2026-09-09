@@ -257,3 +257,14 @@
 - Ruff、严格 MyPy、195 项 Pytest、ESLint、TypeScript 和 33 项 Vitest 全部通过；
 - 真实终态任务的全量流与断点续传结果符合单调序号约定，未暴露受限推理；
 - 详细证据见 docs/acceptance/M6-B-resumable-sse-acceptance.md，下一切片进入 M6-C 工作台。
+
+## 2026-09-09：M6-C 三栏问析工作台验收
+
+- 正式分析入口替换占位页面，交付任务列表、对话、执行与证据三栏工作台，并以 `/app/analysis/:runId` 持久化当前运行；
+- 接通真实创建、澄清、计划批准/拒绝、取消和检查点重试命令，前端不生成 Agent 答案；
+- Fetch SSE 增量状态接入 React Query 权威投影，支持重放、去重、空洞刷新及跨任务隔离；
+- 桌面三栏与 390px 移动端分区导航均通过真实 Chrome 验收，无横向溢出；
+- Ruff、严格 MyPy、195 项 Pytest、ESLint、TypeScript、39 项 Vitest和Vite生产构建全部通过；
+- Web 镜像从已提交源码构建并健康部署，完整 Compose 服务恢复健康；
+- Docker 4.46 新复现 `userAnalyticsOtlpHttp.sock` 陈旧套接字，预检脚本已在原有 `dockerInference` 之外覆盖该根因，恢复仍不触碰镜像、卷或数据库；
+- 详细证据见 docs/acceptance/M6-C-analysis-workbench-acceptance.md，下一切片进入 M6-D 结果与 Evidence。

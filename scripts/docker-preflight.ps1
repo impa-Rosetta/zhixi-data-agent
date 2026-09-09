@@ -2,7 +2,10 @@ param([switch]$Recover)
 
 $ErrorActionPreference = 'Stop'
 $dockerRun = Join-Path $env:LOCALAPPDATA 'Docker\run'
-$inferenceSocket = Join-Path $dockerRun 'dockerInference'
+$knownStaleSockets = @(
+    (Join-Path $dockerRun 'dockerInference'),
+    (Join-Path $dockerRun 'userAnalyticsOtlpHttp.sock')
+)
 
 docker info *> $null
 if ($LASTEXITCODE -eq 0) {
@@ -10,12 +13,14 @@ if ($LASTEXITCODE -eq 0) {
     exit 0
 }
 
-if (-not (Test-Path -LiteralPath $inferenceSocket)) {
-    Write-Error 'Docker engine is unavailable, but the known dockerInference stale socket was not found.'
+$detectedSockets = @($knownStaleSockets | Where-Object { Test-Path -LiteralPath $_ })
+if ($detectedSockets.Count -eq 0) {
+    Write-Error 'Docker engine is unavailable, but no known stale Docker Desktop socket was found.'
 }
 
 if (-not $Recover) {
-    Write-Error 'Known stale dockerInference socket detected. Re-run with -Recover for the reversible recovery.'
+    $names = ($detectedSockets | ForEach-Object { Split-Path -Leaf $_ }) -join ', '
+    Write-Error "Known stale Docker Desktop socket detected ($names). Re-run with -Recover for the reversible recovery."
 }
 
 Get-Process 'Docker Desktop','com.docker.backend' -ErrorAction SilentlyContinue |

@@ -10,15 +10,18 @@
 
 健康时脚本立即返回，不做任何修改。
 
-## 已知 `dockerInference` 残留套接字
+## 已知残留套接字
 
-仅当脚本同时确认 Docker 引擎不可用，且 `%LOCALAPPDATA%\Docker\run\dockerInference` 存在时，运行：
+仅当脚本同时确认 Docker 引擎不可用，且检测到以下至少一个已知瞬态套接字时，运行恢复：
+
+- `%LOCALAPPDATA%\Docker\run\dockerInference`；
+- `%LOCALAPPDATA%\Docker\run\userAnalyticsOtlpHttp.sock`。
 
 ```powershell
 .\scripts\docker-preflight.ps1 -Recover
 ```
 
-恢复操作只处理 Docker Desktop 自身的瞬态运行目录：停止 Docker Desktop 相关进程、终止 `docker-desktop` WSL 发行版、把 `run` 目录重命名为带时间戳的备份并重启 Docker Desktop。它不删除镜像、容器、卷或项目数据库，也不终止普通 Ubuntu WSL 发行版。
+恢复操作只处理 Docker Desktop 自身的瞬态运行目录：停止 Docker Desktop 相关进程、终止 `docker-desktop` WSL 发行版、把 `run` 目录重命名为带时间戳的备份并重启 Docker Desktop。它不删除镜像、容器、卷或项目数据库，也不终止普通 Ubuntu WSL 发行版。2026-09-09 的复现表明两个套接字可能依次阻塞启动，因此预检必须覆盖二者，不能只清理首个报错文件。
 
 ## 禁止项
 
