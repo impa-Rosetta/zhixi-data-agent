@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 
 import { errorLabel, nodeLabel, runStatusLabel } from './presentation'
+import { AnalysisResultPanel } from './AnalysisResultPanel'
 import type { AnalysisRunView } from './types'
 
 type Props = {
@@ -105,6 +106,7 @@ export function AnalysisConversation(props: Props) {
           </article>
         )}
         {failure && <div className="analysis-run-warning">{failure}</div>}
+        <AnalysisResultPanel view={props.view} />
       </section>
 
       {run.status === 'waiting_for_clarification' && (

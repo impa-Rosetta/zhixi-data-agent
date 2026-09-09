@@ -83,6 +83,54 @@ export function AnalysisInspector({ view, events, connection, streamError }: Pro
         <div><span>Token</span><strong>{view.run.total_tokens}</strong></div>
       </section>
 
+      <section className="analysis-inspector-section">
+        <div className="analysis-section-title">
+          <h3>Evidence</h3>
+          <span>{view.evidence.length} 条</span>
+        </div>
+        {view.evidence.length === 0 ? (
+          <p className="analysis-panel-message">结果产生后会固化证据引用。</p>
+        ) : (
+          <div className="analysis-evidence-list">
+            {view.evidence.map((item) => (
+              <article id={`evidence-${item.id}`} tabIndex={-1} key={item.id}>
+                <header>
+                  <strong>{evidenceLabel(item.evidence_type)}</strong>
+                  <span>{shortDigest(item.evidence_digest)}</span>
+                </header>
+                <dl>
+                  <EvidenceField label="查询" value={item.reference.validated_query_id} />
+                  <EvidenceField label="执行" value={item.reference.execution_id} />
+                  <EvidenceField label="语义版本" value={item.reference.semantic_version_id} />
+                  <EvidenceField label="目录快照" value={item.reference.snapshot_ids} />
+                </dl>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="analysis-inspector-section">
+        <div className="analysis-section-title">
+          <h3>验证结论</h3>
+          <span>{view.validations.length} 项</span>
+        </div>
+        <div className="analysis-validation-list">
+          {view.validations.length === 0 && (
+            <p className="analysis-panel-message">尚无验证记录。</p>
+          )}
+          {view.validations.map((item) => (
+            <div className={item.outcome} key={item.id}>
+              <span>{item.outcome === 'passed' ? '✓' : '!'}</span>
+              <p>
+                <strong>{validationLabel(item.validation_type)}</strong>
+                <small>{validationOutcome(item.outcome)} · {item.findings.length} 个发现</small>
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <details className="analysis-technical-details">
         <summary>技术详情</summary>
         <dl>
@@ -131,6 +179,39 @@ function eventLabel(eventType: string): string {
     'run.cancelled': '任务已取消',
     'message.accepted': '补充已接收',
   }[eventType] ?? eventType
+}
+
+function EvidenceField({ label, value }: { label: string; value: unknown }) {
+  const rendered = displayTechnicalValue(value)
+  if (!rendered) return null
+  return <div><dt>{label}</dt><dd title={rendered}>{rendered}</dd></div>
+}
+
+function displayTechnicalValue(value: unknown): string | null {
+  if (typeof value === 'string' || typeof value === 'number') return String(value)
+  if (Array.isArray(value)) {
+    const items = value.filter((item): item is string | number =>
+      typeof item === 'string' || typeof item === 'number',
+    )
+    return items.length > 0 ? items.join(', ') : null
+  }
+  return null
+}
+
+function shortDigest(value: string): string {
+  return value.length > 14 ? `${value.slice(0, 12)}…` : value
+}
+
+function evidenceLabel(value: string): string {
+  return value === 'query_execution' ? '查询执行证据' : value
+}
+
+function validationLabel(value: string): string {
+  return value === 'evidence' ? '证据完整性' : value
+}
+
+function validationOutcome(value: string): string {
+  return ({ passed: '通过', failed: '未通过', warning: '需关注' } as Record<string, string>)[value] ?? value
 }
 
 function displayIdentifier(value: unknown): string {
