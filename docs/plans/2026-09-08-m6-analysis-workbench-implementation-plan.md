@@ -1,9 +1,9 @@
 # M6 智能问析工作台实施计划
 
-- 状态：执行中
+- 状态：已完成并通过验收（2026-09-09）
 - 日期：2026-09-08
 - 规格：`docs/superpowers/specs/2026-09-08-m6-analysis-workbench-design.md`
-- 当前入口：M6-D 结果、证据与整体验收
+- 当前入口：M7 分析与报告
 
 ## 执行规则
 
@@ -41,7 +41,7 @@
 
 ## M6-D：结果、证据与整体验收
 
-状态：待实施。
+状态：已完成并通过验收（2026-09-09）。验收记录见 docs/acceptance/M6-D-results-evidence-acceptance.md 和 docs/acceptance/M6-analysis-workbench-overall-acceptance.md。
 
 - 展示真实指标卡、通用表格、空/截断/部分结果和可信等级；
 - 实现数字到 Evidence、查询、冻结版本和验证记录的定位；

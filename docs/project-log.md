@@ -268,3 +268,14 @@
 - Web 镜像从已提交源码构建并健康部署，完整 Compose 服务恢复健康；
 - Docker 4.46 新复现 `userAnalyticsOtlpHttp.sock` 陈旧套接字，预检脚本已在原有 `dockerInference` 之外覆盖该根因，恢复仍不触碰镜像、卷或数据库；
 - 详细证据见 docs/acceptance/M6-C-analysis-workbench-acceptance.md，下一切片进入 M6-D 结果与 Evidence。
+
+## 2026-09-09：M6-D 结果证据与 M6 整体验收
+
+- 新增安全通用结果渲染器：单行结果使用指标卡，多行使用可滚动表格，并覆盖空结果、截断、未知值和可信/探索标签；
+- 结果可定位到 Evidence，右栏展示验证 ID、执行 ID、冻结语义版本、目录快照、摘要及验证结论；
+- DeepSeek 结构化输出升级为显式 JSON Schema，首次不合格时只允许一次受控纠正，两次调用与 Token 全部计入预算；
+- 官方 `deepseek-v4-pro` 凭据与模型列表验证通过，密钥仅注入本地 Worker 运行环境，未写入代码、Git、数据库或日志；
+- 真实运行 `a78f5741-db0f-4b1d-b71d-b762f371bb40` 完成：1 次模型调用、1 次工具调用、1 行 trusted 结果及 Artifact/Evidence/Validation 各 1 条；
+- 桌面与390px移动端Chrome均通过已完成结果、证据定位、验证结论和无横向溢出验收；
+- 最终门禁为 Ruff、严格 MyPy 101 文件、196 项 Pytest、44 项 Vitest、TypeScript、ESLint和Vite生产构建全绿；
+- M6四个切片全部完成，下一阶段进入 M7 统计、图表和报告。
