@@ -298,3 +298,13 @@
 - 运行仍具备计划、步骤、内部处理调用、工具预算、检查点和完成事件，刷新与审计语义不降级；
 - 模型可见 Registry 继续保持官方设计的 12 个治理工具，能力处理器不扩大模型攻击面；
 - 完整门禁为 Ruff、严格 MyPy 81 个源文件和 205 项 Pytest 全绿。
+
+## 2026-09-09：M6.1-C 授权目录探索闭环
+
+- catalog.search 接入当前工作空间 DataSource 的 active published CatalogSnapshot，只读取持久化结构元数据；
+- 支持自然语言中出现的数据源、Schema、表/视图和字段名，并对“有哪些数据”等宽泛问题返回有限目录摘要；
+- catalog_result 仅包含显示名、数据库类型、快照、表/视图和字段结构，不包含 host、端口、库名、凭据或原始样例；
+- 对数据源、表和每表字段设置硬上限，并明确 truncated 与 samples_included=false；
+- 每个来源生成 catalog_snapshot Evidence，并生成 authorization_scope 与 sensitive_output Validation；
+- 无发布目录时以 catalog.not_available 受控失败，不伪造空数据成功；
+- 完整门禁为 Ruff、严格 MyPy 82 个源文件和 207 项 Pytest 全绿。

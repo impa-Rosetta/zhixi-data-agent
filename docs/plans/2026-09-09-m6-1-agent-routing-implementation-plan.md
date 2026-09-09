@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-09
 - 规格：`docs/superpowers/specs/2026-09-09-m6-1-agent-routing-design.md`
-- 当前入口：M6.1-C 授权目录探索闭环
+- 当前入口：M6.1-D 指标默认策略与多轮修订
 
 ## 执行规则
 
@@ -35,7 +35,7 @@
 
 ## M6.1-C：授权目录探索闭环
 
-状态：待实施。
+状态：已完成并通过验收（2026-09-09）。验收记录见 docs/acceptance/M6.1-C-catalog-exploration-acceptance.md。
 
 - 为 `catalog.search` 实现数据库处理器，检索当前工作空间已发布目录快照；
 - 支持数据源、Schema、表/视图和字段的有限搜索及确定性摘要；

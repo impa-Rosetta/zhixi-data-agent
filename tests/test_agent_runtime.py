@@ -14,9 +14,25 @@ from apps.api.services.analysis_runs import (
 )
 from apps.worker.analysis_runtime import run_analysis
 from packages.agent_core.persistence import AnalysisRun, AnalysisRunStatus
+from packages.connectors.metadata import (
+    MetadataColumn,
+    MetadataDocument,
+    MetadataRelation,
+    MetadataSchema,
+)
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
+from packages.platform_core.catalog_store import replace_snapshot_document
 from packages.platform_core.database import Base
-from packages.platform_core.models import User, Workspace
+from packages.platform_core.models import (
+    CatalogSnapshot,
+    DataSource,
+    DataSourceStatus,
+    DataSourceType,
+    SnapshotStatus,
+    TlsMode,
+    User,
+    Workspace,
+)
 from packages.semantic_model.manufacturing import manufacturing_quality_template
 from packages.semantic_model.models import (
     SemanticModel,
@@ -63,6 +79,70 @@ def _database() -> tuple[Session, User, Workspace]:
     db.add_all([user, workspace])
     db.flush()
     return db, user, workspace
+
+
+def _published_catalog(
+    db: Session,
+    user: User,
+    workspace: Workspace,
+    *,
+    name: str = "制造质量库",
+) -> DataSource:
+    source = DataSource(
+        workspace_id=workspace.id,
+        name=name,
+        source_type=DataSourceType.POSTGRESQL,
+        host="never-return.example",
+        port=5432,
+        database_name="never_return",
+        tls_mode=TlsMode.REQUIRE,
+        status=DataSourceStatus.READY,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(source)
+    db.flush()
+    snapshot = CatalogSnapshot(
+        workspace_id=workspace.id,
+        data_source_id=source.id,
+        version=2,
+        status=SnapshotStatus.PUBLISHED,
+        database_product="postgresql",
+        database_version="16.4",
+        object_counts={"schemas": 1, "relations": 1, "columns": 2},
+        content_digest="c" * 64,
+        sampling_enabled=False,
+    )
+    db.add(snapshot)
+    db.flush()
+    replace_snapshot_document(
+        db,
+        snapshot_id=snapshot.id,
+        workspace_id=workspace.id,
+        data_source_id=source.id,
+        document=MetadataDocument(
+            database_product="postgresql",
+            database_version="16.4",
+            schemas=(MetadataSchema("public", "业务数据"),),
+            relations=(
+                MetadataRelation(
+                    schema="public",
+                    name="inspection",
+                    relation_type="table",
+                    comment="质检记录",
+                    columns=(
+                        MetadataColumn("defect_quantity", 1, "number", "integer", False),
+                        MetadataColumn("inspected_quantity", 2, "number", "integer", False),
+                    ),
+                    constraints=(),
+                    indexes=(),
+                ),
+            ),
+        ),
+    )
+    source.active_snapshot_id = snapshot.id
+    db.commit()
+    return source
 
 
 def test_runtime_pauses_low_confidence_and_is_idempotent() -> None:
@@ -248,6 +328,85 @@ def test_capability_help_respects_tool_budget_and_fails_inside_run_lifecycle() -
     assert stored.error_code == "agent.tool_budget_exhausted"
     view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
     assert view.artifacts == []
+
+
+def test_runtime_searches_only_published_catalogs_in_the_run_workspace() -> None:
+    db, user, workspace = _database()
+    source = _published_catalog(db, user, workspace)
+    other = Workspace(name="Other", slug=f"other-{uuid.uuid4().hex}")
+    db.add(other)
+    db.flush()
+    _published_catalog(db, user, other, name="禁止泄露的数据源")
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="catalog-search",
+        payload=CreateAnalysisRunRequest(message="inspection 表有哪些字段"),
+    ).id
+    run_analysis(
+        db,
+        run_id=run_id,
+        gateway=_fake(
+            {
+                "domain": "manufacturing_quality",
+                "task_type": "catalog_exploration",
+                "goal": "inspection 表有哪些字段",
+                "metrics": [],
+                "confidence": 0.98,
+            }
+        ),
+    )
+    stored = db.get(AnalysisRun, run_id)
+    assert stored is not None and stored.status is AnalysisRunStatus.COMPLETED
+    view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    result = view.artifacts[0].summary
+    assert view.steps[0].tool_name == "catalog.search"
+    assert view.artifacts[0].artifact_type == "catalog_result"
+    assert result["sources"][0]["id"] == str(source.id)
+    assert result["sources"][0]["relations"][0]["name"] == "inspection"
+    assert [item["name"] for item in result["sources"][0]["relations"][0]["columns"]] == [
+        "defect_quantity",
+        "inspected_quantity",
+    ]
+    serialized = json.dumps(result, ensure_ascii=False)
+    assert "禁止泄露的数据源" not in serialized
+    assert "never-return.example" not in serialized
+    assert "never_return" not in serialized
+    assert view.evidence[0].evidence_type == "catalog_snapshot"
+    assert {item.validation_type for item in view.validations} == {
+        "authorization_scope",
+        "sensitive_output",
+    }
+
+
+def test_catalog_search_fails_actionably_when_no_published_catalog_exists() -> None:
+    db, user, workspace = _database()
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="catalog-empty",
+        payload=CreateAnalysisRunRequest(message="表格中有什么数据"),
+    ).id
+    run_analysis(
+        db,
+        run_id=run_id,
+        gateway=_fake(
+            {
+                "domain": "manufacturing_quality",
+                "task_type": "catalog_exploration",
+                "goal": "表格中有什么数据",
+                "metrics": [],
+                "confidence": 0.95,
+            }
+        ),
+    )
+    stored = db.get(AnalysisRun, run_id)
+    assert stored is not None
+    assert stored.status is AnalysisRunStatus.FAILED
+    assert stored.error_code == "catalog.not_available"
+    assert get_run_view(db, workspace_id=workspace.id, run_id=run_id).artifacts == []
 
 
 def test_event_stream_sends_heartbeat_while_run_is_active(
