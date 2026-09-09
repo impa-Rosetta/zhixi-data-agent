@@ -157,6 +157,7 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     assert stored.status is AnalysisRunStatus.COMPLETED
     assert stored.context["result"]["rows"] == [[2.5]]
     assert stored.total_tokens == 30
+    assert stored.model_calls == 1
     view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
     assert view.plan is not None
     assert view.plan.goal == "分析不良率"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol, TypeVar
 
 import httpx
@@ -55,6 +55,7 @@ class GatewayUsage:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    model_calls: int = 1
 
 
 @dataclass(frozen=True)
@@ -153,32 +154,71 @@ class DeepSeekGateway:
     def generate_structured(
         self, request: GatewayRequest, schema: type[T]
     ) -> StructuredGatewayResponse:
-        messages = request.messages
-        if not any("JSON" in (message.content or "") for message in messages):
-            messages = (
-                GatewayMessage(
-                    role="system",
-                    content="Return one valid JSON object matching the requested schema.",
-                ),
-                *messages,
-            )
-        response = self.complete(
-            GatewayRequest(
-                messages=messages,
-                tools=request.tools,
-                thinking=request.thinking,
-                reasoning_effort=request.reasoning_effort,
-                max_tokens=request.max_tokens,
-                response_format="json_object",
-                user_id=request.user_id,
-            )
+        schema_json = json.dumps(
+            schema.model_json_schema(),
+            ensure_ascii=False,
+            separators=(",", ":"),
         )
+        messages = (
+            GatewayMessage(
+                role="system",
+                content=(
+                    "Return exactly one valid JSON object that conforms to this JSON Schema. "
+                    "Do not add keys that the schema does not allow. JSON Schema: "
+                    f"{schema_json}"
+                ),
+            ),
+            *request.messages,
+        )
+        structured_request = replace(
+            request,
+            messages=messages,
+            response_format="json_object",
+        )
+        response = self.complete(structured_request)
         if response.content is None:
             raise ModelGatewayError("model.missing_structured_output")
         try:
             output = schema.model_validate_json(response.content)
         except ValidationError as exc:
-            raise ModelGatewayError("model.schema_validation_failed") from exc
+            repair_prompt = json.dumps(
+                [
+                    {
+                        "location": list(error["loc"]),
+                        "type": error["type"],
+                        "message": error["msg"],
+                    }
+                    for error in exc.errors(include_url=False, include_input=False)
+                ],
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            repaired = self.complete(
+                replace(
+                    structured_request,
+                    messages=(
+                        *messages,
+                        GatewayMessage(role="assistant", content=response.content),
+                        GatewayMessage(
+                            role="user",
+                            content=(
+                                "The previous JSON did not validate. Return only one corrected "
+                                f"JSON object. Validation errors: {repair_prompt}"
+                            ),
+                        ),
+                    ),
+                )
+            )
+            if repaired.content is None:
+                raise ModelGatewayError("model.missing_structured_output") from exc
+            try:
+                output = schema.model_validate_json(repaired.content)
+            except ValidationError as repair_exc:
+                raise ModelGatewayError("model.schema_validation_failed") from repair_exc
+            response = replace(
+                repaired,
+                usage=_combine_usage(response.usage, repaired.usage),
+            )
         return StructuredGatewayResponse(output=output, response=response)
 
     def stream(self, request: GatewayRequest) -> Iterator[GatewayStreamEvent]:
@@ -345,6 +385,15 @@ class FakeGateway:
 
 def _integer(value: object) -> int:
     return value if isinstance(value, int) else 0
+
+
+def _combine_usage(first: GatewayUsage, second: GatewayUsage) -> GatewayUsage:
+    return GatewayUsage(
+        prompt_tokens=first.prompt_tokens + second.prompt_tokens,
+        completion_tokens=first.completion_tokens + second.completion_tokens,
+        total_tokens=first.total_tokens + second.total_tokens,
+        model_calls=first.model_calls + second.model_calls,
+    )
 
 
 __all__ = [

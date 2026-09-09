@@ -25,6 +25,8 @@ def test_deepseek_gateway_uses_official_protocol_and_validates_json() -> None:
         assert body["model"] == "deepseek-v4-pro"
         assert body["thinking"] == {"type": "disabled"}
         assert body["response_format"] == {"type": "json_object"}
+        assert "JSON Schema" in body["messages"][0]["content"]
+        assert "task_type" in body["messages"][0]["content"]
         return httpx.Response(
             200,
             json={
@@ -55,6 +57,44 @@ def test_deepseek_gateway_uses_official_protocol_and_validates_json() -> None:
     assert result.output.task_type == "metric_query"
     assert result.usage.total_tokens == 19
     assert result.reasoning_content is None
+
+
+def test_deepseek_gateway_repairs_one_invalid_structured_response() -> None:
+    calls: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        calls.append(body)
+        content = (
+            '{"task_type":"metric_query"}'
+            if len(calls) == 1
+            else '{"task_type":"metric_query","confidence":0.97}'
+        )
+        return httpx.Response(
+            200,
+            json={
+                "id": f"call-{len(calls)}",
+                "model": "deepseek-v4-pro",
+                "choices": [{"finish_reason": "stop", "message": {"content": content}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+            },
+        )
+
+    gateway = DeepSeekGateway(
+        api_key="secret",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        max_attempts=1,
+    )
+    result = gateway.generate_structured(
+        GatewayRequest(messages=(GatewayMessage(role="user", content="分析不良率"),)),
+        IntentPayload,
+    )
+
+    assert result.output.confidence == 0.97
+    assert len(calls) == 2
+    assert "did not validate" in calls[1]["messages"][-1]["content"]
+    assert result.usage.total_tokens == 30
+    assert result.usage.model_calls == 2
 
 
 def test_gateway_maps_auth_failure_without_leaking_secret() -> None:

@@ -148,7 +148,7 @@ def run_analysis(
             _check_budget(run, model=True)
             message = str(run.context.get("latest_user_message") or run.context["goal"])
             intent, usage = understand(gateway, message, context=run.context)
-            run.model_calls += 1
+            run.model_calls += usage.model_calls
             run.total_tokens += usage.total_tokens
             run.context = {**run.context, "intent": intent.model_dump(mode="json")}
             _checkpoint(db, run, "bind")
