@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-09
 - 规格：`docs/superpowers/specs/2026-09-09-m6-1-agent-routing-design.md`
-- 当前入口：M6.1-A 路由与澄清契约
+- 当前入口：M6.1-B 能力咨询闭环
 
 ## 执行规则
 
@@ -11,7 +11,7 @@
 
 ## M6.1-A：路由与澄清契约
 
-状态：执行中。
+状态：已完成并通过验收（2026-09-09）。验收记录见 docs/acceptance/M6.1-A-routing-clarification-contracts-acceptance.md。
 
 - 扩展 Intent 任务类型，增加严格 `RouteDecision`、`ClarificationRequest`、候选与默认值契约；
 - 实现确定性 RoutePolicy，区分能力咨询、目录探索、可信指标查询、高级分析待接入和越界问题；

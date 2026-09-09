@@ -88,6 +88,14 @@ def test_runtime_pauses_low_confidence_and_is_idempotent() -> None:
     stored = db.get(AnalysisRun, run_id)
     assert stored is not None
     assert stored.status is AnalysisRunStatus.WAITING_FOR_CLARIFICATION
+    assert stored.context["clarification"] == {
+        "reason_code": "metric_required",
+        "question": "你希望分析哪个指标？",
+        "missing_fields": ["metrics"],
+        "candidates": [],
+        "suggested_answers": ["分析不良率", "分析一次通过率", "分析返工率"],
+        "resume_node": "understand",
+    }
     assert len(gateway.calls) == 1
     append_message(
         db,

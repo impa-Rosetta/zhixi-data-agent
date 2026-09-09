@@ -6,12 +6,30 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+AnalysisRoute = Literal[
+    "capability_help",
+    "catalog_exploration",
+    "metric_query",
+    "comparison",
+    "ranking",
+    "trend",
+    "unsupported",
+]
+
 
 class Intent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     domain: str = "manufacturing_quality"
     task_type: Literal[
-        "metric_query", "comparison", "ranking", "trend", "exploration", "clarification"
+        "capability_help",
+        "catalog_exploration",
+        "metric_query",
+        "comparison",
+        "ranking",
+        "trend",
+        "exploration",
+        "clarification",
+        "unsupported",
     ]
     goal: str = Field(min_length=2, max_length=1000)
     metrics: tuple[str, ...] = ()
@@ -22,6 +40,31 @@ class Intent(BaseModel):
     output: tuple[str, ...] = ("table",)
     ambiguities: tuple[str, ...] = ()
     confidence: float = Field(ge=0, le=1)
+
+
+class ClarificationCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    key: str = Field(min_length=1, max_length=200)
+    label: str = Field(min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class ClarificationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason_code: str = Field(pattern=r"^[a-z][a-z0-9_.]{2,99}$")
+    question: str = Field(min_length=2, max_length=1000)
+    missing_fields: tuple[str, ...] = ()
+    candidates: tuple[ClarificationCandidate, ...] = Field(default=(), max_length=20)
+    suggested_answers: tuple[str, ...] = Field(default=(), max_length=3)
+    resume_node: Literal["understand", "route", "bind", "plan"] = "route"
+
+
+class RouteDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    route: AnalysisRoute
+    requires_binding: bool
+    defaults_applied: dict[str, str] = Field(default_factory=dict)
+    clarification: ClarificationRequest | None = None
 
 
 class ContextPatch(BaseModel):

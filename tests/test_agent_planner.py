@@ -7,6 +7,7 @@ from packages.agent_core.planner import (
     SemanticBindingError,
     bind_intent,
     create_plan,
+    route_intent,
     understand,
 )
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
@@ -74,5 +75,102 @@ def test_low_confidence_and_unknown_metric_require_clarification() -> None:
         ),
         "看看那个比例",
     )
-    with pytest.raises(SemanticBindingError, match="agent.clarification_required"):
+    with pytest.raises(SemanticBindingError, match="agent.clarification_required") as error:
         bind_intent(intent, ())
+    assert error.value.clarification.reason_code == "metric_required"
+    assert error.value.clarification.missing_fields == ("metrics",)
+
+
+@pytest.mark.parametrize(
+    ("task_type", "route", "requires_binding"),
+    [
+        ("capability_help", "capability_help", False),
+        ("catalog_exploration", "catalog_exploration", False),
+        ("unsupported", "unsupported", False),
+        ("metric_query", "metric_query", True),
+    ],
+)
+def test_route_policy_selects_only_allowed_processing_path(
+    task_type: str,
+    route: str,
+    requires_binding: bool,
+) -> None:
+    intent, _ = understand(
+        _gateway(
+            {
+                "domain": "manufacturing_quality",
+                "task_type": task_type,
+                "goal": "检查路由",
+                "metrics": ["不良率"] if requires_binding else [],
+                "confidence": 0.9,
+            }
+        ),
+        "检查路由",
+    )
+    decision = route_intent(intent)
+    assert decision.route == route
+    assert decision.requires_binding is requires_binding
+    assert decision.clarification is None
+
+
+def test_unique_metric_uses_safe_defaults_even_with_low_confidence_and_optional_ambiguity() -> None:
+    intent, _ = understand(
+        _gateway(
+            {
+                "domain": "manufacturing_quality",
+                "task_type": "metric_query",
+                "goal": "分析不良率",
+                "metrics": ["不良率"],
+                "ambiguities": ["未指定时间范围、产线或工序"],
+                "confidence": 0.7,
+            }
+        ),
+        "分析不良率",
+    )
+    decision = route_intent(intent)
+    assert decision.route == "metric_query"
+    assert decision.defaults_applied == {
+        "time_range": "all_available",
+        "dimensions": "aggregate",
+    }
+    binding = bind_intent(
+        intent,
+        (
+            PublishedSemantic(
+                model_id="model-1",
+                version_id="version-1",
+                document=manufacturing_quality_template(),
+            ),
+        ),
+    )
+    assert binding.metric_keys == ("defect_rate",)
+    assert binding.confidence == 0.7
+
+
+def test_ambiguous_semantic_binding_returns_actionable_candidates() -> None:
+    intent, _ = understand(
+        _gateway(
+            {
+                "domain": "manufacturing_quality",
+                "task_type": "metric_query",
+                "goal": "分析不良率",
+                "metrics": ["不良率"],
+                "confidence": 0.95,
+            }
+        ),
+        "分析不良率",
+    )
+    semantic = manufacturing_quality_template()
+    with pytest.raises(SemanticBindingError) as error:
+        bind_intent(
+            intent,
+            (
+                PublishedSemantic("model-1", "version-1", semantic),
+                PublishedSemantic("model-2", "version-2", semantic),
+            ),
+        )
+    clarification = error.value.clarification
+    assert clarification.reason_code == "semantic_binding_ambiguous"
+    assert clarification.question == "“不良率”对应多个已发布口径，请选择一个。"
+    assert [candidate.key for candidate in clarification.candidates] == ["model-1", "model-2"]
+    assert clarification.resume_node == "bind"

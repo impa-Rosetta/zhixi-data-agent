@@ -168,7 +168,14 @@ def run_analysis(
     except SemanticBindingError as exc:
         run.status = AnalysisRunStatus.WAITING_FOR_CLARIFICATION
         run.error_code = exc.code
-        add_event(db, run, "run.clarification_required", {"code": exc.code})
+        clarification = exc.clarification.model_dump(mode="json")
+        run.context = {**run.context, "clarification": clarification}
+        add_event(
+            db,
+            run,
+            "run.clarification_required",
+            {"code": exc.code, "clarification": clarification},
+        )
         db.commit()
         return
     except ModelGatewayError as exc:

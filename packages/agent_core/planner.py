@@ -5,16 +5,31 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from packages.agent_core.contracts import AnalysisPlan, AnalysisStep, Binding, Intent
+from packages.agent_core.contracts import (
+    AnalysisPlan,
+    AnalysisRoute,
+    AnalysisStep,
+    Binding,
+    ClarificationCandidate,
+    ClarificationRequest,
+    Intent,
+    RouteDecision,
+)
 from packages.model_gateway import GatewayMessage, GatewayRequest, GatewayUsage, ModelGateway
 from packages.shared_contracts.semantic_models import SemanticDocument
 
 
 class SemanticBindingError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        clarification: ClarificationRequest,
+    ) -> None:
         super().__init__(code)
         self.code = code
         self.message = message
+        self.clarification = clarification
 
 
 @dataclass(frozen=True)
@@ -32,6 +47,9 @@ def understand(
 ) -> tuple[Intent, GatewayUsage]:
     prompt = (
         "Extract a manufacturing quality analysis intent as JSON. "
+        "Classify capability questions as capability_help, questions about available data, "
+        "tables or fields as catalog_exploration, governed metric questions as metric_query, "
+        "and unrelated or prohibited requests as unsupported. "
         "Use metric and dimension terms from the user; never invent formulas, SQL, code, "
         "credentials or authorization. Include domain, task_type, goal, metrics, dimensions, "
         "filters, time_range, comparison, output, ambiguities and confidence. "
@@ -48,15 +66,74 @@ def understand(
     return Intent.model_validate(result.output), result.usage
 
 
+def route_intent(intent: Intent) -> RouteDecision:
+    if intent.task_type == "capability_help":
+        return RouteDecision(route="capability_help", requires_binding=False)
+    if intent.task_type in {"catalog_exploration", "exploration"}:
+        return RouteDecision(route="catalog_exploration", requires_binding=False)
+    if intent.task_type in {"unsupported", "clarification"}:
+        return RouteDecision(route="unsupported", requires_binding=False)
+
+    route: AnalysisRoute
+    if intent.task_type == "metric_query":
+        route = "metric_query"
+    elif intent.task_type == "comparison":
+        route = "comparison"
+    elif intent.task_type == "ranking":
+        route = "ranking"
+    elif intent.task_type == "trend":
+        route = "trend"
+    else:
+        return RouteDecision(route="unsupported", requires_binding=False)
+    if not intent.metrics:
+        return RouteDecision(
+            route=route,
+            requires_binding=True,
+            clarification=_metric_required(),
+        )
+    if route == "comparison" and (intent.time_range is None or intent.comparison is None):
+        return RouteDecision(
+            route=route,
+            requires_binding=True,
+            clarification=ClarificationRequest(
+                reason_code="comparison_period_required",
+                question="请说明要比较的当前周期和对比周期。",
+                missing_fields=tuple(
+                    field
+                    for field, value in (
+                        ("time_range", intent.time_range),
+                        ("comparison", intent.comparison),
+                    )
+                    if value is None
+                ),
+                suggested_answers=("本月与上月", "本季度与上季度", "今年与去年"),
+                resume_node="route",
+            ),
+        )
+    defaults: dict[str, str] = {}
+    if intent.time_range is None:
+        defaults["time_range"] = "all_available"
+    if not intent.dimensions:
+        defaults["dimensions"] = "aggregate"
+    return RouteDecision(
+        route=route,
+        requires_binding=True,
+        defaults_applied=defaults,
+    )
+
+
 def bind_intent(
     intent: Intent,
     semantics: tuple[PublishedSemantic, ...],
     *,
     confidence_threshold: float = 0.72,
 ) -> Binding:
-    if intent.confidence < confidence_threshold or intent.ambiguities or not intent.metrics:
+    del confidence_threshold  # Confidence is observable; deterministic resolution is authoritative.
+    if not intent.metrics:
         raise SemanticBindingError(
-            "agent.clarification_required", "The question needs a metric clarification"
+            "agent.clarification_required",
+            "The question needs a metric clarification",
+            _metric_required(),
         )
     candidates: list[tuple[PublishedSemantic, tuple[str, ...], tuple[str, ...]]] = []
     for semantic in semantics:
@@ -71,9 +148,33 @@ def bind_intent(
         if metrics is not None and dimensions is not None:
             candidates.append((semantic, metrics, dimensions))
     if len(candidates) != 1:
+        metric_label = "、".join(intent.metrics)
+        reason_code = (
+            "semantic_binding_ambiguous" if len(candidates) > 1 else "semantic_binding_not_found"
+        )
+        candidate_items = tuple(
+            ClarificationCandidate(
+                key=semantic.model_id,
+                label=f"{metric_label} · 语义模型 {semantic.model_id}",
+                description=f"已发布版本 {semantic.version_id}",
+            )
+            for semantic, _, _ in candidates[:20]
+        )
+        if candidate_items:
+            question = f"“{metric_label}”对应多个已发布口径，请选择一个。"
+        else:
+            question = f"找不到“{metric_label}”的唯一已发布口径，请更换指标或检查语义模型。"
         raise SemanticBindingError(
             "agent.clarification_required",
             "Metric or dimension does not resolve uniquely in one published semantic model",
+            ClarificationRequest(
+                reason_code=reason_code,
+                question=question,
+                missing_fields=() if candidate_items else ("metrics",),
+                candidates=candidate_items,
+                suggested_answers=tuple(item.label for item in candidate_items[:3]),
+                resume_node="bind",
+            ),
         )
     semantic, metrics, dimensions = candidates[0]
     snapshots = tuple(sorted({str(mapping.snapshot_id) for mapping in semantic.document.mappings}))
@@ -84,6 +185,16 @@ def bind_intent(
         metric_keys=metrics,
         dimension_keys=dimensions,
         confidence=intent.confidence,
+    )
+
+
+def _metric_required() -> ClarificationRequest:
+    return ClarificationRequest(
+        reason_code="metric_required",
+        question="你希望分析哪个指标？",
+        missing_fields=("metrics",),
+        suggested_answers=("分析不良率", "分析一次通过率", "分析返工率"),
+        resume_node="understand",
     )
 
 
