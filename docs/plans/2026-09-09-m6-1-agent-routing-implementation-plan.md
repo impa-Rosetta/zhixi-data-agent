@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-09
 - 规格：`docs/superpowers/specs/2026-09-09-m6-1-agent-routing-design.md`
-- 当前入口：M6.1-B 能力咨询闭环
+- 当前入口：M6.1-C 授权目录探索闭环
 
 ## 执行规则
 
@@ -23,7 +23,7 @@
 
 ## M6.1-B：能力咨询闭环
 
-状态：待实施。
+状态：已完成并通过验收（2026-09-09）。验收记录见 docs/acceptance/M6.1-B-capability-help-acceptance.md。
 
 - 建立版本化 `CapabilityManifest`，列出当前可用、受限和计划中能力；
 - 实现无数据访问的能力处理器与确定性中文回答；

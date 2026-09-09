@@ -182,6 +182,74 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     assert view.last_event_sequence >= 1
 
 
+def test_runtime_completes_capability_help_without_semantic_or_data_access() -> None:
+    db, user, workspace = _database()
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="capability-help",
+        payload=CreateAnalysisRunRequest(message="这是个什么 Agent"),
+    ).id
+    gateway = _fake(
+        {
+            "domain": "manufacturing_quality",
+            "task_type": "capability_help",
+            "goal": "介绍产品能力",
+            "metrics": [],
+            "confidence": 0.99,
+        }
+    )
+    run_analysis(db, run_id=run_id, gateway=gateway)
+    stored = db.get(AnalysisRun, run_id)
+    assert stored is not None
+    assert stored.status is AnalysisRunStatus.COMPLETED
+    assert stored.context["route"]["route"] == "capability_help"
+    assert stored.tool_calls == 1
+    view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    assert view.plan is not None
+    assert view.steps[0].tool_name == "system.capabilities"
+    assert view.tool_calls[0].tool_name == "system.capabilities"
+    assert view.artifacts[0].artifact_type == "assistant_message"
+    assert view.artifacts[0].summary["manifest_version"] == "1.0.0"
+    assert "可信指标查询" in str(view.artifacts[0].summary["message"])
+    assert view.evidence[0].evidence_type == "capability_manifest"
+    assert view.validations[0].validation_type == "capability_scope"
+    assert view.validations[0].outcome == "passed"
+
+
+def test_capability_help_respects_tool_budget_and_fails_inside_run_lifecycle() -> None:
+    db, user, workspace = _database()
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="capability-budget",
+        payload=CreateAnalysisRunRequest(message="你能做什么", max_tool_calls=1),
+    ).id
+    stored = db.get(AnalysisRun, run_id)
+    assert stored is not None
+    stored.tool_calls = 1
+    db.commit()
+    run_analysis(
+        db,
+        run_id=run_id,
+        gateway=_fake(
+            {
+                "domain": "manufacturing_quality",
+                "task_type": "capability_help",
+                "goal": "介绍能力",
+                "metrics": [],
+                "confidence": 0.99,
+            }
+        ),
+    )
+    assert stored.status is AnalysisRunStatus.FAILED
+    assert stored.error_code == "agent.tool_budget_exhausted"
+    view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    assert view.artifacts == []
+
+
 def test_event_stream_sends_heartbeat_while_run_is_active(
     monkeypatch,
 ) -> None:

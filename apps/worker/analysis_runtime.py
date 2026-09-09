@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from apps.api.services.analysis_runs import add_event
 from apps.api.services.queries import compile_query, execute_query
-from packages.agent_core.contracts import AnalysisPlan, Binding, Intent
+from packages.agent_core.capabilities import capability_response
+from packages.agent_core.contracts import AnalysisPlan, AnalysisStep, Binding, Intent, RouteDecision
 from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisCheckpoint,
@@ -32,6 +33,7 @@ from packages.agent_core.planner import (
     SemanticBindingError,
     bind_intent,
     create_plan,
+    route_intent,
     understand,
 )
 from packages.model_gateway import ModelGateway, ModelGatewayError
@@ -121,6 +123,128 @@ def _as_int(value: object, default: int) -> int:
     return value if isinstance(value, int) else default
 
 
+def _complete_capability_help(db: Session, run: AnalysisRun, intent: Intent) -> None:
+    plan = AnalysisPlan(
+        goal=intent.goal,
+        steps=(
+            AnalysisStep(
+                id="describe_capabilities",
+                tool="system.capabilities",
+                arguments={},
+                expected_evidence=("capability_manifest",),
+            ),
+        ),
+    )
+    plan_record = AnalysisPlanRecord(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        revision=run.replan_count + 1,
+        goal=plan.goal,
+        document=plan.model_dump(mode="json"),
+        requires_confirmation=False,
+    )
+    db.add(plan_record)
+    db.flush()
+    step = AnalysisStepRecord(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        plan_id=plan_record.id,
+        step_key=plan.steps[0].id,
+        tool_name=plan.steps[0].tool,
+        arguments={},
+        dependencies=[],
+        status=AnalysisStepStatus.PENDING,
+    )
+    db.add(step)
+    run.context = {**run.context, "plan": plan.model_dump(mode="json")}
+    _checkpoint(db, run, "policy_check")
+
+    _check_budget(run, tool=True)
+    step.status = AnalysisStepStatus.RUNNING
+    step.started_at = datetime.now(UTC)
+    _checkpoint(db, run, "execute")
+    result = capability_response()
+    normalized = json.dumps({}, separators=(",", ":"))
+    call_key = hashlib.sha256(
+        f"{run.id}:{run.replan_count}:{step.step_key}:{normalized}".encode()
+    ).hexdigest()
+    db.add(
+        AnalysisToolCall(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            step_id=step.id,
+            tool_name="system.capabilities",
+            tool_version="1.0.0",
+            idempotency_key=call_key,
+            argument_digest=hashlib.sha256(normalized.encode()).hexdigest(),
+            status=AnalysisStepStatus.SUCCEEDED,
+            result_summary=result,
+        )
+    )
+    run.tool_calls += 1
+    step.status = AnalysisStepStatus.SUCCEEDED
+    step.finished_at = datetime.now(UTC)
+
+    canonical = json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    artifact_digest = hashlib.sha256(canonical.encode()).hexdigest()
+    artifact = AnalysisArtifact(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        artifact_type="assistant_message",
+        summary=result,
+        content_digest=artifact_digest,
+    )
+    db.add(artifact)
+    db.flush()
+    manifest_digest = str(result["manifest_digest"])
+    db.add(
+        AnalysisEvidence(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            artifact_id=artifact.id,
+            evidence_type="capability_manifest",
+            reference={
+                "manifest_version": result["manifest_version"],
+                "manifest_digest": manifest_digest,
+            },
+            evidence_digest=manifest_digest,
+        )
+    )
+    db.add(
+        AnalysisValidation(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            validation_type="capability_scope",
+            outcome="passed",
+            findings=[],
+        )
+    )
+    run.context = {
+        **run.context,
+        "result": result,
+        "artifact_id": str(artifact.id),
+        "evidence_digest": manifest_digest,
+        "capability_manifest_version": result["manifest_version"],
+    }
+    _checkpoint(db, run, "verify")
+    run.status = AnalysisRunStatus.COMPLETED
+    run.current_node = "present"
+    run.finished_at = datetime.now(UTC)
+    run.error_code = None
+    run.version += 1
+    add_event(
+        db,
+        run,
+        "run.completed",
+        {
+            "artifact_id": str(artifact.id),
+            "evidence_digest": manifest_digest,
+            "trust": "system",
+        },
+    )
+    db.commit()
+
+
 def run_analysis(
     db: Session,
     *,
@@ -151,7 +275,40 @@ def run_analysis(
             run.model_calls += usage.model_calls
             run.total_tokens += usage.total_tokens
             run.context = {**run.context, "intent": intent.model_dump(mode="json")}
-            _checkpoint(db, run, "bind")
+            _checkpoint(db, run, "route")
+        raw_route = run.context.get("route")
+        if isinstance(raw_route, dict):
+            decision = RouteDecision.model_validate(raw_route)
+        else:
+            decision = route_intent(intent)
+            run.context = {
+                **run.context,
+                "route": decision.model_dump(mode="json"),
+                "defaults_applied": decision.defaults_applied,
+            }
+        if decision.clarification is not None:
+            raise SemanticBindingError(
+                "agent.clarification_required",
+                "The routed question needs clarification",
+                decision.clarification,
+            )
+        if decision.route == "capability_help":
+            try:
+                _complete_capability_help(db, run, intent)
+            except ModelGatewayError as exc:
+                _fail(db, run, exc.code, retryable=exc.retryable)
+            except Exception as exc:
+                code = (
+                    str(exc)
+                    if str(exc).startswith(("agent.", "query.", "tool."))
+                    else "agent.execution_failed"
+                )
+                _fail(db, run, code, retryable=False)
+            return
+        if not decision.requires_binding:
+            _fail(db, run, "agent.route_not_available", retryable=False)
+            return
+        _checkpoint(db, run, "bind")
         raw_binding = run.context.get("binding")
         if isinstance(raw_binding, dict):
             binding = Binding.model_validate(raw_binding)
