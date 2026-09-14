@@ -330,4 +330,5 @@
 - 修复结构化查询异常被统一吞成 `agent.execution_failed` 以及失败步骤残留运行态的问题；
 - 真实问题矩阵覆盖能力、目录、澄清、映射缺失、越界和指标查询，最终不良率回答为 2.4；
 - 完整门禁为 Ruff、严格 MyPy 83 个源文件、223 项 Pytest、49 项 Vitest、ESLint、TypeScript 与 Vite 生产构建全绿；
+- 桌面 Chrome 与 390px 移动端的能力回答、目录结构、Evidence、验证结论和无横向溢出共 4 项 Playwright 验收通过；
 - 详细证据见 `docs/acceptance/M6.2-conversational-agent-presentation-acceptance.md`。
