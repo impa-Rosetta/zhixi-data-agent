@@ -12,7 +12,8 @@ from apps.api.services.analysis_runs import (
     get_run_view,
     stream_events,
 )
-from apps.worker.analysis_runtime import run_analysis
+from apps.api.services.queries import QueryServiceError
+from apps.worker.analysis_runtime import _exception_code, run_analysis
 from packages.agent_core.persistence import AnalysisEvent, AnalysisRun, AnalysisRunStatus
 from packages.connectors.metadata import (
     MetadataColumn,
@@ -77,6 +78,12 @@ def _fake_sequence(*contents: dict[str, object]) -> FakeGateway:
             for index, content in enumerate(contents, start=1)
         ]
     )
+
+
+def test_runtime_preserves_structured_query_error_codes() -> None:
+    error = QueryServiceError("query.mapping_incomplete", "internal mapping detail")
+
+    assert _exception_code(error) == "query.mapping_incomplete"
 
 
 def _database() -> tuple[Session, User, Workspace]:
@@ -193,6 +200,11 @@ def test_runtime_pauses_low_confidence_and_is_idempotent() -> None:
         "suggested_answers": ["分析不良率", "分析一次通过率", "分析返工率"],
         "resume_node": "understand",
     }
+    waiting_view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    assert [message.role for message in waiting_view.messages] == ["user", "assistant"]
+    assert waiting_view.messages[-1].content == "你希望分析哪个指标？"
+    assert waiting_view.messages[-1].context_patch["interaction"]["kind"] == "clarification"
+    assert "agent.clarification_required" not in waiting_view.messages[-1].content
     assert len(gateway.calls) == 1
     append_message(
         db,
@@ -278,6 +290,8 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     assert len(view.validations) == 1
     assert view.validations[0].outcome == "passed"
     assert view.last_event_sequence >= 1
+    assert view.messages[-1].role == "assistant"
+    assert view.messages[-1].content == "不良率为 2.5。"
 
 
 def test_runtime_completes_capability_help_without_semantic_or_data_access() -> None:
@@ -347,6 +361,9 @@ def test_capability_help_respects_tool_budget_and_fails_inside_run_lifecycle() -
     assert stored.error_code == "agent.tool_budget_exhausted"
     view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
     assert view.artifacts == []
+    assert view.messages[-1].role == "assistant"
+    assert "工具调用次数" in view.messages[-1].content
+    assert "agent.tool_budget_exhausted" not in view.messages[-1].content
 
 
 def test_runtime_searches_only_published_catalogs_in_the_run_workspace() -> None:
@@ -425,7 +442,11 @@ def test_catalog_search_fails_actionably_when_no_published_catalog_exists() -> N
     assert stored is not None
     assert stored.status is AnalysisRunStatus.FAILED
     assert stored.error_code == "catalog.not_available"
-    assert get_run_view(db, workspace_id=workspace.id, run_id=run_id).artifacts == []
+    failed_view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    assert failed_view.artifacts == []
+    assert failed_view.messages[-1].role == "assistant"
+    assert "已发布的数据目录" in failed_view.messages[-1].content
+    assert "catalog.not_available" not in failed_view.messages[-1].content
 
 
 def test_runtime_merges_clarification_patch_and_replays_route_defaults() -> None:

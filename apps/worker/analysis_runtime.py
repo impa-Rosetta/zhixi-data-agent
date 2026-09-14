@@ -21,6 +21,7 @@ from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisCheckpoint,
     AnalysisEvidence,
+    AnalysisMessage,
     AnalysisPlanRecord,
     AnalysisRun,
     AnalysisRunStatus,
@@ -37,6 +38,14 @@ from packages.agent_core.planner import (
     revise_intent,
     route_intent,
     understand,
+)
+from packages.agent_core.presentation import (
+    AgentPresentation,
+    answer_presentation,
+    catalog_presentation,
+    clarification_presentation,
+    failure_presentation,
+    query_presentation,
 )
 from packages.model_gateway import ModelGateway, ModelGatewayError
 from packages.semantic_model.models import SemanticModel, SemanticModelVersion
@@ -93,6 +102,60 @@ def _published_semantics(db: Session, run: AnalysisRun) -> tuple[PublishedSemant
     )
 
 
+def _persist_agent_message(
+    db: Session,
+    run: AnalysisRun,
+    presentation: AgentPresentation,
+    *,
+    key: str,
+) -> None:
+    idempotency_key = f"agent:{run.version}:{key}"[:100]
+    existing = db.scalar(
+        select(AnalysisMessage.id).where(
+            AnalysisMessage.run_id == run.id,
+            AnalysisMessage.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        return
+    db.add(
+        AnalysisMessage(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            role="assistant",
+            content=presentation.content,
+            idempotency_key=idempotency_key,
+            context_patch=presentation.context_patch,
+            created_at=datetime.now(UTC),
+        )
+    )
+    add_event(db, run, "message.generated", {"role": "assistant", "kind": key})
+
+
+def _intent_metric_names(run: AnalysisRun) -> tuple[str, ...]:
+    raw_intent = run.context.get("intent")
+    if not isinstance(raw_intent, dict):
+        return ()
+    raw_metrics = raw_intent.get("metrics")
+    if not isinstance(raw_metrics, list):
+        return ()
+    return tuple(item for item in raw_metrics if isinstance(item, str))
+
+
+def _exception_code(exc: Exception) -> str:
+    structured = getattr(exc, "code", None)
+    if isinstance(structured, str) and structured.startswith(
+        ("agent.", "catalog.", "connector.", "model.", "policy.", "query.", "tool.")
+    ):
+        return structured
+    text = str(exc)
+    if text.startswith(
+        ("agent.", "catalog.", "connector.", "model.", "policy.", "query.", "tool.")
+    ):
+        return text
+    return "agent.execution_failed"
+
+
 def _fail(
     db: Session,
     run: AnalysisRun,
@@ -103,6 +166,26 @@ def _fail(
     run.status = AnalysisRunStatus.FAILED_RETRYABLE if retryable else AnalysisRunStatus.FAILED
     run.error_code = code
     run.finished_at = None if retryable else datetime.now(UTC)
+    _persist_agent_message(
+        db,
+        run,
+        failure_presentation(
+            code,
+            retryable=retryable,
+            metric_names=_intent_metric_names(run),
+        ),
+        key="failure",
+    )
+    running_steps = db.scalars(
+        select(AnalysisStepRecord).where(
+            AnalysisStepRecord.run_id == run.id,
+            AnalysisStepRecord.status == AnalysisStepStatus.RUNNING,
+        )
+    ).all()
+    for step in running_steps:
+        step.status = AnalysisStepStatus.FAILED
+        step.error_code = code
+        step.finished_at = datetime.now(UTC)
     add_event(
         db,
         run,
@@ -166,6 +249,12 @@ def _complete_capability_help(db: Session, run: AnalysisRun, intent: Intent) -> 
     step.started_at = datetime.now(UTC)
     _checkpoint(db, run, "execute")
     result = capability_response()
+    _persist_agent_message(
+        db,
+        run,
+        answer_presentation(str(result.get("message") or "")),
+        key="capability-answer",
+    )
     normalized = json.dumps({}, separators=(",", ":"))
     call_key = hashlib.sha256(
         f"{run.id}:{run.replan_count}:{step.step_key}:{normalized}".encode()
@@ -297,6 +386,7 @@ def _complete_catalog_search(db: Session, run: AnalysisRun, intent: Intent) -> N
         ),
     )
     result = registry.invoke("catalog.search", plan.steps[0].arguments)
+    _persist_agent_message(db, run, catalog_presentation(result), key="catalog-answer")
     normalized = json.dumps(
         plan.steps[0].arguments,
         ensure_ascii=False,
@@ -494,12 +584,7 @@ def run_analysis(
             except ModelGatewayError as exc:
                 _fail(db, run, exc.code, retryable=exc.retryable)
             except Exception as exc:
-                code = (
-                    str(exc)
-                    if str(exc).startswith(("agent.", "query.", "tool."))
-                    else "agent.execution_failed"
-                )
-                _fail(db, run, code, retryable=False)
+                _fail(db, run, _exception_code(exc), retryable=False)
             return
         if decision.route == "catalog_exploration":
             try:
@@ -507,12 +592,7 @@ def run_analysis(
             except ModelGatewayError as exc:
                 _fail(db, run, exc.code, retryable=exc.retryable)
             except Exception as exc:
-                code = (
-                    str(exc)
-                    if str(exc).startswith(("agent.", "catalog.", "query.", "tool."))
-                    else "agent.execution_failed"
-                )
-                _fail(db, run, code, retryable=False)
+                _fail(db, run, _exception_code(exc), retryable=False)
             return
         if not decision.requires_binding:
             _fail(db, run, "agent.route_not_available", retryable=False)
@@ -536,6 +616,12 @@ def run_analysis(
         run.error_code = exc.code
         clarification = exc.clarification.model_dump(mode="json")
         run.context = {**run.context, "clarification": clarification}
+        _persist_agent_message(
+            db,
+            run,
+            clarification_presentation(exc.clarification),
+            key="clarification",
+        )
         add_event(
             db,
             run,
@@ -689,6 +775,7 @@ def run_analysis(
             "artifact_id": str(artifact.id),
             "evidence_digest": evidence_digest,
         }
+        _persist_agent_message(db, run, query_presentation(intent, result), key="query-answer")
         _checkpoint(db, run, "verify")
         run.status = AnalysisRunStatus.COMPLETED
         run.current_node = "present"
@@ -709,12 +796,7 @@ def run_analysis(
     except ModelGatewayError as exc:
         _fail(db, run, exc.code, retryable=exc.retryable)
     except Exception as exc:
-        code = (
-            str(exc)
-            if str(exc).startswith(("agent.", "query.", "tool."))
-            else "agent.execution_failed"
-        )
-        _fail(db, run, code, retryable=False)
+        _fail(db, run, _exception_code(exc), retryable=False)
 
 
 def _execute_metric(db: Session, run: AnalysisRun, plan: AnalysisPlan) -> dict[str, object]:

@@ -108,7 +108,29 @@ function runView(status: AnalysisRunView['run']['status']): AnalysisRunView {
       content: '分析不良率',
       context_patch: {},
       created_at: '2026-09-09T00:00:00Z',
-    }],
+    }, ...(status === 'waiting_for_clarification' ? [{
+      id: 'message-2',
+      role: 'assistant',
+      content: '你希望分析哪个指标？',
+      context_patch: {
+        interaction: {
+          kind: 'clarification',
+          quick_replies: ['分析不良率', '分析一次通过率'],
+          retryable: false,
+        },
+        technical: { code: 'agent.clarification_required' },
+      },
+      created_at: '2026-09-09T00:00:01Z',
+    }] : status === 'failed_retryable' ? [{
+      id: 'message-2',
+      role: 'assistant',
+      content: '模型服务暂时不可用，我已经保留当前进度。配置完成后可以重新尝试。',
+      context_patch: {
+        interaction: { kind: 'error', quick_replies: [], retryable: true },
+        technical: { code: 'model.not_configured' },
+      },
+      created_at: '2026-09-09T00:00:01Z',
+    }] : [])],
     plan: {
       id: 'plan-1',
       revision: 1,
@@ -198,10 +220,10 @@ test('submits clarification and resumes the existing run', async () => {
   mocks.view = runView('waiting_for_clarification')
   renderPage('/app/analysis/run-1')
 
-  fireEvent.change(screen.getByLabelText('补充说明'), {
+  fireEvent.change(screen.getByLabelText('回复 Agent'), {
     target: { value: '统计 2026 年 8 月的所有产线' },
   })
-  fireEvent.click(screen.getByRole('button', { name: '提交并继续' }))
+  fireEvent.click(screen.getByRole('button', { name: '发送并继续' }))
   await waitFor(() =>
     expect(mocks.message).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -216,9 +238,19 @@ test('shows an actionable clarification and lets a suggestion fill the response'
   mocks.view = runView('waiting_for_clarification')
   renderPage('/app/analysis/run-1')
 
-  expect(screen.getByText('你希望分析哪个指标？')).toBeInTheDocument()
+  expect(screen.getByLabelText('分析对话')).toHaveTextContent('你希望分析哪个指标？')
+  expect(screen.queryByText('Agent 需要你补充信息')).not.toBeInTheDocument()
+  expect(screen.queryByText(/agent\.clarification_required/)).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: '分析不良率' }))
-  expect(screen.getByLabelText('补充说明')).toHaveValue('分析不良率')
+  expect(screen.getByLabelText('回复 Agent')).toHaveValue('分析不良率')
+})
+
+test('presents a retryable failure as an agent message without an internal code', () => {
+  mocks.view = runView('failed_retryable')
+  renderPage('/app/analysis/run-1')
+
+  expect(screen.getByText(/模型服务暂时不可用/)).toBeInTheDocument()
+  expect(screen.getByLabelText('分析对话')).not.toHaveTextContent('model.not_configured')
 })
 
 test('retries a recoverable failure from its checkpoint', async () => {

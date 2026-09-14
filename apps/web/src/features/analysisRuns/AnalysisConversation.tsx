@@ -73,8 +73,17 @@ export function AnalysisConversation(props: Props) {
   }
 
   const { run, messages, plan } = props.view
-  const failure = errorLabel(run.error_code)
   const clarificationRequest = readClarification(run.context.clarification)
+  const latestAssistant = [...messages].reverse().find((message) => message.role === 'assistant')
+  const quickReplies = readQuickReplies(latestAssistant?.context_patch)
+  const suggestions = quickReplies.length > 0
+    ? quickReplies
+    : clarificationRequest?.suggestions ?? []
+  const fallbackAgentMessage = messages.some((message) => message.role === 'assistant')
+    ? null
+    : run.status === 'waiting_for_clarification'
+      ? clarificationRequest?.question ?? '请告诉我还需要补充的分析条件，我会从当前进度继续。'
+      : errorLabel(run.error_code)
   return (
     <main className="analysis-conversation">
       <header className="analysis-run-header">
@@ -97,6 +106,12 @@ export function AnalysisConversation(props: Props) {
             </div>
           </article>
         ))}
+        {fallbackAgentMessage && (
+          <article className="analysis-message assistant analysis-message-fallback">
+            <span>Agent</span>
+            <div><p>{fallbackAgentMessage}</p></div>
+          </article>
+        )}
         {(run.status === 'queued' || run.status === 'running') && (
           <article className="analysis-progress-card">
             <span className="analysis-live-pulse" />
@@ -106,39 +121,35 @@ export function AnalysisConversation(props: Props) {
             </div>
           </article>
         )}
-        {failure && <div className="analysis-run-warning">{failure}</div>}
         <AnalysisResultPanel view={props.view} />
       </section>
 
       {run.status === 'waiting_for_clarification' && (
         <form className="analysis-response-box" onSubmit={submitClarification}>
-          <div>
-            <strong>Agent 需要你补充信息</strong>
-            <p>{clarificationRequest?.question ?? '请补充必要的分析信息，系统会从当前检查点继续。'}</p>
-          </div>
-          {clarificationRequest && clarificationRequest.suggestions.length > 0 && (
+          {suggestions.length > 0 && (
             <div className="analysis-clarification-suggestions" aria-label="建议回答">
-              {clarificationRequest.suggestions.map((suggestion) => (
+              {suggestions.map((suggestion) => (
                 <button type="button" key={suggestion} onClick={() => setClarification(suggestion)}>
                   {suggestion}
                 </button>
               ))}
             </div>
           )}
-          <label htmlFor="analysis-clarification">补充说明</label>
+          <label htmlFor="analysis-clarification">回复 Agent</label>
           <textarea
             id="analysis-clarification"
             value={clarification}
             onChange={(event) => setClarification(event.target.value)}
             rows={3}
             maxLength={10_000}
+            placeholder="直接输入你的回答，也可以选择上方建议"
           />
           <button
             type="submit"
             className="primary-button"
             disabled={props.busy || !clarification.trim()}
           >
-            提交并继续
+            发送并继续
           </button>
         </form>
       )}
@@ -229,4 +240,13 @@ function readClarification(value: unknown): { question: string; suggestions: str
     })
     : []
   return question ? { question, suggestions: [...new Set([...suggested, ...candidates])].slice(0, 6) } : null
+}
+
+function readQuickReplies(value: unknown): string[] {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return []
+  const interaction = (value as Record<string, unknown>).interaction
+  if (typeof interaction !== 'object' || interaction === null || Array.isArray(interaction)) return []
+  const replies = (interaction as Record<string, unknown>).quick_replies
+  if (!Array.isArray(replies)) return []
+  return [...new Set(replies.filter((item): item is string => typeof item === 'string'))].slice(0, 6)
 }
