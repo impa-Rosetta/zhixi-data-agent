@@ -174,5 +174,10 @@ def _format_value(value: object) -> str:
             return normalized.rstrip("0").rstrip(".") if "." in normalized else normalized
         return str(value)
     if isinstance(value, str):
-        return _safe_label(value) or "空字符串"
+        safe = _safe_label(value)
+        if "." in safe:
+            whole, fractional = safe.split(".", 1)
+            if whole.lstrip("-").isdigit() and fractional.isdigit():
+                return safe.rstrip("0").rstrip(".")
+        return safe or "空字符串"
     return "一个结构化结果"

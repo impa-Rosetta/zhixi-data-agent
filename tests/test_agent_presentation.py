@@ -90,3 +90,17 @@ def test_decimal_query_result_does_not_expose_database_scale() -> None:
     )
 
     assert response.content == "不良率为 2.4。"
+
+
+def test_serialized_decimal_query_result_does_not_expose_database_scale() -> None:
+    response = query_presentation(
+        Intent(
+            task_type="metric_query",
+            goal="不良率是多少",
+            metrics=("不良率",),
+            confidence=0.99,
+        ),
+        {"columns": ["defect_rate"], "rows": [["2.4000000000000000"]]},
+    )
+
+    assert response.content == "不良率为 2.4。"
