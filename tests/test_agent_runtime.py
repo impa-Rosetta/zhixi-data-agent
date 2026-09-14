@@ -292,8 +292,8 @@ def test_runtime_completes_capability_help_without_semantic_or_data_access() -> 
     gateway = _fake(
         {
             "domain": "manufacturing_quality",
-            "task_type": "capability_help",
-            "goal": "介绍产品能力",
+            "task_type": "unsupported",
+            "goal": "错误的模型分类",
             "metrics": [],
             "confidence": 0.99,
         }
@@ -303,6 +303,7 @@ def test_runtime_completes_capability_help_without_semantic_or_data_access() -> 
     assert stored is not None
     assert stored.status is AnalysisRunStatus.COMPLETED
     assert stored.context["route"]["route"] == "capability_help"
+    assert stored.model_calls == 0
     assert stored.tool_calls == 1
     view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
     assert view.plan is not None

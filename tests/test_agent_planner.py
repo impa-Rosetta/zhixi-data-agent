@@ -64,6 +64,30 @@ def test_understand_bind_and_plan_cannot_rewrite_metric_formula() -> None:
     assert "sql" not in plan.steps[0].arguments
 
 
+@pytest.mark.parametrize(
+    "question",
+    ["这是个什么 Agent", "你能做什么", "介绍一下你的功能", "What can you do?"],
+)
+def test_unambiguous_capability_questions_bypass_model_classification(question: str) -> None:
+    intent, usage = understand(
+        _gateway(
+            {
+                "domain": "manufacturing_quality",
+                "task_type": "unsupported",
+                "goal": "错误的模型分类",
+                "metrics": [],
+                "confidence": 0.9,
+            }
+        ),
+        question,
+    )
+
+    assert intent.task_type == "capability_help"
+    assert intent.goal == question
+    assert usage.model_calls == 0
+    assert usage.total_tokens == 0
+
+
 def test_low_confidence_and_unknown_metric_require_clarification() -> None:
     intent, _ = understand(
         _gateway(

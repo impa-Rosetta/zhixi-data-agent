@@ -40,12 +40,41 @@ class PublishedSemantic:
     document: SemanticDocument
 
 
+_CAPABILITY_QUESTION_MARKERS = (
+    "你是谁",
+    "你是什么",
+    "什么agent",
+    "能做什么",
+    "有什么功能",
+    "支持什么",
+    "功能介绍",
+    "介绍一下你",
+    "whatcanyoudo",
+    "howcanyouhelp",
+    "whatareyou",
+)
+
+
+def _direct_capability_intent(question: str) -> Intent | None:
+    normalized = "".join(question.casefold().split())
+    if not any(marker in normalized for marker in _CAPABILITY_QUESTION_MARKERS):
+        return None
+    return Intent(
+        task_type="capability_help",
+        goal=question.strip(),
+        confidence=1.0,
+    )
+
+
 def understand(
     gateway: ModelGateway,
     question: str,
     *,
     context: dict[str, object] | None = None,
 ) -> tuple[Intent, GatewayUsage]:
+    direct_intent = _direct_capability_intent(question)
+    if direct_intent is not None:
+        return direct_intent, GatewayUsage(model_calls=0)
     prompt = (
         "Extract a manufacturing quality analysis intent as JSON. "
         "Classify capability questions as capability_help, questions about available data, "
