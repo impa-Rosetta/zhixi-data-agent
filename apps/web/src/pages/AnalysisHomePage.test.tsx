@@ -75,7 +75,19 @@ function runView(status: AnalysisRunView['run']['status']): AnalysisRunView {
       workspace_id: 'workspace-1',
       status,
       current_node: 'execute',
-      context: { goal: '分析不良率' },
+      context: {
+        goal: '分析不良率',
+        ...(status === 'waiting_for_clarification' ? {
+          clarification: {
+            reason_code: 'metric_required',
+            question: '你希望分析哪个指标？',
+            missing_fields: ['metrics'],
+            candidates: [],
+            suggested_answers: ['分析不良率', '分析一次通过率'],
+            resume_node: 'understand',
+          },
+        } : {}),
+      },
       frozen_versions: { semantic_version_id: 'semantic-v1' },
       budget: { max_model_calls: 6, max_tool_calls: 12 },
       model_calls: 1,
@@ -198,6 +210,15 @@ test('submits clarification and resumes the existing run', async () => {
       }),
     ),
   )
+})
+
+test('shows an actionable clarification and lets a suggestion fill the response', () => {
+  mocks.view = runView('waiting_for_clarification')
+  renderPage('/app/analysis/run-1')
+
+  expect(screen.getByText('你希望分析哪个指标？')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: '分析不良率' }))
+  expect(screen.getByLabelText('补充说明')).toHaveValue('分析不良率')
 })
 
 test('retries a recoverable failure from its checkpoint', async () => {

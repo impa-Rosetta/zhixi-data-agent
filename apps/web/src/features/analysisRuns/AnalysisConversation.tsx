@@ -74,6 +74,7 @@ export function AnalysisConversation(props: Props) {
 
   const { run, messages, plan } = props.view
   const failure = errorLabel(run.error_code)
+  const clarificationRequest = readClarification(run.context.clarification)
   return (
     <main className="analysis-conversation">
       <header className="analysis-run-header">
@@ -113,8 +114,17 @@ export function AnalysisConversation(props: Props) {
         <form className="analysis-response-box" onSubmit={submitClarification}>
           <div>
             <strong>Agent 需要你补充信息</strong>
-            <p>请明确指标、时间范围或分析对象，系统会从当前检查点继续。</p>
+            <p>{clarificationRequest?.question ?? '请补充必要的分析信息，系统会从当前检查点继续。'}</p>
           </div>
+          {clarificationRequest && clarificationRequest.suggestions.length > 0 && (
+            <div className="analysis-clarification-suggestions" aria-label="建议回答">
+              {clarificationRequest.suggestions.map((suggestion) => (
+                <button type="button" key={suggestion} onClick={() => setClarification(suggestion)}>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
           <label htmlFor="analysis-clarification">补充说明</label>
           <textarea
             id="analysis-clarification"
@@ -202,4 +212,21 @@ function formatMessageTime(value: string): string {
 
 function displayValue(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function readClarification(value: unknown): { question: string; suggestions: string[] } | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const question = typeof record.question === 'string' ? record.question : ''
+  const suggested = Array.isArray(record.suggested_answers)
+    ? record.suggested_answers.filter((item): item is string => typeof item === 'string')
+    : []
+  const candidates = Array.isArray(record.candidates)
+    ? record.candidates.flatMap((item) => {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) return []
+      const label = (item as Record<string, unknown>).label
+      return typeof label === 'string' ? [label] : []
+    })
+    : []
+  return question ? { question, suggestions: [...new Set([...suggested, ...candidates])].slice(0, 6) } : null
 }

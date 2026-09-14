@@ -103,6 +103,10 @@ export function AnalysisInspector({ view, events, connection, streamError }: Pro
                   <EvidenceField label="执行" value={item.reference.execution_id} />
                   <EvidenceField label="语义版本" value={item.reference.semantic_version_id} />
                   <EvidenceField label="目录快照" value={item.reference.snapshot_ids} />
+                  <EvidenceField label="能力清单版本" value={item.reference.manifest_version} />
+                  <EvidenceField label="快照 ID" value={item.reference.snapshot_id} />
+                  <EvidenceField label="快照版本" value={item.reference.snapshot_version} />
+                  <EvidenceField label="数据源 ID" value={item.reference.data_source_id} />
                 </dl>
               </article>
             ))}
@@ -136,6 +140,9 @@ export function AnalysisInspector({ view, events, connection, streamError }: Pro
         <dl>
           <div><dt>运行 ID</dt><dd>{view.run.id}</dd></div>
           <div><dt>当前节点</dt><dd>{view.run.current_node}</dd></div>
+          <div><dt>任务路由</dt><dd>{displayRoute(view.run.context.route)}</dd></div>
+          <div><dt>Intent 修订</dt><dd>{displayIdentifier(view.run.context.intent_revision)}</dd></div>
+          <div><dt>默认范围</dt><dd>{displayDefaults(view.run.context.defaults_applied)}</dd></div>
           <div>
             <dt>语义版本</dt>
             <dd>{displayIdentifier(view.run.frozen_versions.semantic_version_id)}</dd>
@@ -170,6 +177,9 @@ function stepStatusLabel(status: string): string {
 function eventLabel(eventType: string): string {
   return {
     'run.created': '任务已创建',
+    'run.route_selected': '路由已选择',
+    'run.defaults_applied': '已应用默认范围',
+    'run.intent_revised': '意图已修订',
     'run.node': '执行节点变化',
     'run.clarification_required': '需要补充',
     'run.confirmation_required': '需要确认',
@@ -203,11 +213,20 @@ function shortDigest(value: string): string {
 }
 
 function evidenceLabel(value: string): string {
-  return value === 'query_execution' ? '查询执行证据' : value
+  return ({
+    query_execution: '查询执行证据',
+    capability_manifest: '产品能力清单',
+    catalog_snapshot: '目录快照证据',
+  } as Record<string, string>)[value] ?? value
 }
 
 function validationLabel(value: string): string {
-  return value === 'evidence' ? '证据完整性' : value
+  return ({
+    evidence: '证据完整性',
+    capability_scope: '能力范围',
+    authorization_scope: '授权范围',
+    sensitive_output: '敏感输出',
+  } as Record<string, string>)[value] ?? value
 }
 
 function validationOutcome(value: string): string {
@@ -218,4 +237,19 @@ function displayIdentifier(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number'
     ? String(value)
     : '未冻结'
+}
+
+function displayRoute(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '未选择'
+  return displayIdentifier((value as Record<string, unknown>).task_type)
+}
+
+function displayDefaults(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '无'
+  const rendered = Object.values(value as Record<string, unknown>)
+    .filter((item): item is string | number =>
+      typeof item === 'string' || typeof item === 'number',
+    )
+    .map(String)
+  return rendered.length > 0 ? rendered.join('、') : '无'
 }
