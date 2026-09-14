@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-09
 - 规格：`docs/superpowers/specs/2026-09-09-m6-1-agent-routing-design.md`
-- 当前入口：M6.1-D 指标默认策略与多轮修订
+- 当前入口：M6.1-E 前端呈现与整体验收
 
 ## 执行规则
 
@@ -47,7 +47,7 @@
 
 ## M6.1-D：指标默认策略与多轮修订
 
-状态：待实施。
+状态：已完成并通过验收（2026-09-14）。验收记录见 docs/acceptance/M6.1-D-intent-revision-defaults-acceptance.md。
 
 - 实现 `defaults_applied`，对普通指标查询默认全量时间范围、整体粒度和表格输出；
 - 将用户补充解析为严格 ContextPatch，与已有 Intent 合并；

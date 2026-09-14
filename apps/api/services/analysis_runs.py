@@ -533,9 +533,22 @@ def append_message(
         )
     )
     was_confirmation = run.status is AnalysisRunStatus.WAITING_FOR_CONFIRMATION
-    context = {**run.context, "latest_user_message": payload.message}
+    context = {
+        **run.context,
+        "latest_user_message": payload.message,
+        "intent_revision_pending": not was_confirmation,
+    }
     if not was_confirmation:
-        for key in ("intent", "binding", "plan"):
+        for key in (
+            "binding",
+            "plan",
+            "result",
+            "artifact_id",
+            "evidence_digest",
+            "route",
+            "defaults_applied",
+            "clarification",
+        ):
             context.pop(key, None)
     run.context = context
     run.status = AnalysisRunStatus.QUEUED

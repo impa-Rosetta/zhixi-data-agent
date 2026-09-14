@@ -13,6 +13,7 @@ from packages.agent_core.contracts import (
     ClarificationCandidate,
     ClarificationRequest,
     Intent,
+    IntentRevision,
     RouteDecision,
 )
 from packages.model_gateway import GatewayMessage, GatewayRequest, GatewayUsage, ModelGateway
@@ -64,6 +65,31 @@ def understand(
         Intent,
     )
     return Intent.model_validate(result.output), result.usage
+
+
+def revise_intent(
+    gateway: ModelGateway,
+    previous: Intent,
+    message: str,
+) -> tuple[Intent, IntentRevision, GatewayUsage]:
+    prompt = (
+        "Revise the prior manufacturing analysis intent using the new user message. "
+        "Return mode=patch with only structured ContextPatch fields when the user is adding "
+        "metrics, dimensions, filters, time_range, comparison or output. Return mode=replace "
+        "with a complete Intent only when the user explicitly changes the task goal. "
+        "Never add formulas, SQL, code, credentials or authorization. "
+        f"Prior intent: {previous.model_dump(mode='json')}. New user message: {message}"
+    )
+    result = gateway.generate_structured(
+        GatewayRequest(
+            messages=(GatewayMessage(role="user", content=prompt),),
+            thinking=False,
+            max_tokens=1200,
+        ),
+        IntentRevision,
+    )
+    revision = IntentRevision.model_validate(result.output)
+    return revision.apply(previous), revision, result.usage
 
 
 def route_intent(intent: Intent) -> RouteDecision:

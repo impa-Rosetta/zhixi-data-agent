@@ -83,6 +83,30 @@ class ContextPatch(BaseModel):
         return intent.model_copy(update=updates)
 
 
+class IntentRevision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["patch", "replace"]
+    patch: ContextPatch | None = None
+    replacement: Intent | None = None
+
+    @model_validator(mode="after")
+    def require_exact_revision_payload(self) -> Self:
+        valid_patch = self.mode == "patch" and self.patch is not None and self.replacement is None
+        valid_replace = (
+            self.mode == "replace" and self.replacement is not None and self.patch is None
+        )
+        if not (valid_patch or valid_replace):
+            raise ValueError("intent revision must contain exactly the selected payload")
+        return self
+
+    def apply(self, intent: Intent) -> Intent:
+        if self.mode == "replace":
+            assert self.replacement is not None
+            return self.replacement
+        assert self.patch is not None
+        return self.patch.apply(intent)
+
+
 class AnalysisStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")

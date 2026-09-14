@@ -308,3 +308,14 @@
 - 每个来源生成 catalog_snapshot Evidence，并生成 authorization_scope 与 sensitive_output Validation；
 - 无发布目录时以 catalog.not_available 受控失败，不伪造空数据成功；
 - 完整门禁为 Ruff、严格 MyPy 82 个源文件和 207 项 Pytest 全绿。
+
+## 2026-09-14：M6.1-D 指标默认策略与多轮修订
+
+- 新增严格 IntentRevision，要求每次补充只能二选一：受限 ContextPatch 或完整 Intent 替换；
+- 补充指标、维度、过滤、时间、比较和输出时合并旧 Intent，不再丢失已有目标和口径；
+- 用户明确更换任务时采用 replace，并使旧路由、绑定、计划、结果与澄清全部失效；
+- 新增 intent_revision 与 intent_revision_pending，节点提交后可从持久化状态恢复；
+- 路由选择、默认值应用和 Intent 修订分别产生 run.route_selected、run.defaults_applied、run.intent_revised 可重放事件；
+- “分析质量指标”首轮暂停后补充“我指的是不良率”，同一运行成功完成查询并保留原目标；
+- 审计事件直接记录通过 Schema 验证的 patch/replace 模式，不通过结果差异反推；
+- 完整门禁为 Ruff、严格 MyPy 82 个源文件和 211 项 Pytest 全绿。

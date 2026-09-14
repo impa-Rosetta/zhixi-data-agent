@@ -34,6 +34,7 @@ from packages.agent_core.planner import (
     SemanticBindingError,
     bind_intent,
     create_plan,
+    revise_intent,
     route_intent,
     understand,
 )
@@ -418,7 +419,29 @@ def run_analysis(
 
     try:
         raw_intent = run.context.get("intent")
-        if isinstance(raw_intent, dict):
+        revision_pending = run.context.get("intent_revision_pending") is True
+        if isinstance(raw_intent, dict) and revision_pending:
+            previous = Intent.model_validate(raw_intent)
+            _check_budget(run, model=True)
+            message = str(run.context.get("latest_user_message") or "")
+            intent, revision, usage = revise_intent(gateway, previous, message)
+            run.model_calls += usage.model_calls
+            run.total_tokens += usage.total_tokens
+            revision_number = _as_int(run.context.get("intent_revision"), 1) + 1
+            run.context = {
+                **run.context,
+                "intent": intent.model_dump(mode="json"),
+                "intent_revision": revision_number,
+                "intent_revision_pending": False,
+            }
+            add_event(
+                db,
+                run,
+                "run.intent_revised",
+                {"revision": revision_number, "mode": revision.mode},
+            )
+            _checkpoint(db, run, "route")
+        elif isinstance(raw_intent, dict):
             intent = Intent.model_validate(raw_intent)
         else:
             _check_budget(run, model=True)
@@ -426,7 +449,12 @@ def run_analysis(
             intent, usage = understand(gateway, message, context=run.context)
             run.model_calls += usage.model_calls
             run.total_tokens += usage.total_tokens
-            run.context = {**run.context, "intent": intent.model_dump(mode="json")}
+            run.context = {
+                **run.context,
+                "intent": intent.model_dump(mode="json"),
+                "intent_revision": 1,
+                "intent_revision_pending": False,
+            }
             _checkpoint(db, run, "route")
         raw_route = run.context.get("route")
         if isinstance(raw_route, dict):
@@ -438,6 +466,22 @@ def run_analysis(
                 "route": decision.model_dump(mode="json"),
                 "defaults_applied": decision.defaults_applied,
             }
+            add_event(
+                db,
+                run,
+                "run.route_selected",
+                {
+                    "route": decision.route,
+                    "requires_binding": decision.requires_binding,
+                },
+            )
+            if decision.defaults_applied:
+                add_event(
+                    db,
+                    run,
+                    "run.defaults_applied",
+                    {"defaults": decision.defaults_applied},
+                )
         if decision.clarification is not None:
             raise SemanticBindingError(
                 "agent.clarification_required",

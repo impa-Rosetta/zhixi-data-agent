@@ -2,11 +2,13 @@ import json
 
 import pytest
 
+from packages.agent_core.contracts import Intent
 from packages.agent_core.planner import (
     PublishedSemantic,
     SemanticBindingError,
     bind_intent,
     create_plan,
+    revise_intent,
     route_intent,
     understand,
 )
@@ -174,3 +176,51 @@ def test_ambiguous_semantic_binding_returns_actionable_candidates() -> None:
     assert clarification.question == "“不良率”对应多个已发布口径，请选择一个。"
     assert [candidate.key for candidate in clarification.candidates] == ["model-1", "model-2"]
     assert clarification.resume_node == "bind"
+
+
+def test_intent_revision_applies_a_strict_patch_without_losing_the_goal() -> None:
+    previous = Intent(
+        task_type="metric_query",
+        goal="分析质量指标",
+        metrics=(),
+        confidence=0.45,
+    )
+    gateway = _gateway(
+        {
+            "mode": "patch",
+            "patch": {"metrics": ["不良率"]},
+            "replacement": None,
+        }
+    )
+    revised, revision, usage = revise_intent(gateway, previous, "我指的是不良率")
+    assert revised.goal == previous.goal
+    assert revised.metrics == ("不良率",)
+    assert revised.confidence == previous.confidence
+    assert revision.mode == "patch"
+    assert usage.total_tokens == 30
+
+
+def test_intent_revision_can_explicitly_replace_the_user_goal() -> None:
+    previous = Intent(
+        task_type="metric_query",
+        goal="分析不良率",
+        metrics=("不良率",),
+        confidence=0.95,
+    )
+    gateway = _gateway(
+        {
+            "mode": "replace",
+            "patch": None,
+            "replacement": {
+                "domain": "manufacturing_quality",
+                "task_type": "catalog_exploration",
+                "goal": "inspection 表有哪些字段",
+                "metrics": [],
+                "confidence": 0.98,
+            },
+        }
+    )
+    revised, revision, _ = revise_intent(gateway, previous, "改成查看 inspection 表字段")
+    assert revised.task_type == "catalog_exploration"
+    assert revised.goal == "inspection 表有哪些字段"
+    assert revision.mode == "replace"

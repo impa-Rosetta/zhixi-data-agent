@@ -1,6 +1,12 @@
 import pytest
 
-from packages.agent_core.contracts import AnalysisPlan, AnalysisStep, ContextPatch, Intent
+from packages.agent_core.contracts import (
+    AnalysisPlan,
+    AnalysisStep,
+    ContextPatch,
+    Intent,
+    IntentRevision,
+)
 from packages.agent_core.graph import build_agent_graph
 from packages.toolkit import build_default_registry
 
@@ -39,6 +45,20 @@ def test_context_patch_preserves_goal_and_updates_filters() -> None:
     assert updated.goal == original.goal
     assert updated.metrics == original.metrics
     assert updated.filters == {"production_line": "A线"}
+
+
+def test_intent_revision_rejects_patch_and_replacement_together() -> None:
+    with pytest.raises(ValueError):
+        IntentRevision(
+            mode="patch",
+            patch=ContextPatch(metrics=("不良率",)),
+            replacement=Intent(
+                task_type="metric_query",
+                goal="替换目标",
+                metrics=("一次通过率",),
+                confidence=0.9,
+            ),
+        )
 
 
 def test_graph_has_bounded_product_nodes() -> None:

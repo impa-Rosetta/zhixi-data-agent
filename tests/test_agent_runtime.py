@@ -2,7 +2,7 @@ import asyncio
 import json
 import uuid
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -13,7 +13,7 @@ from apps.api.services.analysis_runs import (
     stream_events,
 )
 from apps.worker.analysis_runtime import run_analysis
-from packages.agent_core.persistence import AnalysisRun, AnalysisRunStatus
+from packages.agent_core.persistence import AnalysisEvent, AnalysisRun, AnalysisRunStatus
 from packages.connectors.metadata import (
     MetadataColumn,
     MetadataDocument,
@@ -58,6 +58,23 @@ def _fake(content: dict[str, object]) -> FakeGateway:
                 "stop",
                 GatewayUsage(20, 10, 30),
             )
+        ]
+    )
+
+
+def _fake_sequence(*contents: dict[str, object]) -> FakeGateway:
+    return FakeGateway(
+        [
+            GatewayResponse(
+                f"fake-{index}",
+                "fake",
+                json.dumps(content, ensure_ascii=False),
+                None,
+                (),
+                "stop",
+                GatewayUsage(20, 10, 30),
+            )
+            for index, content in enumerate(contents, start=1)
         ]
     )
 
@@ -186,7 +203,8 @@ def test_runtime_pauses_low_confidence_and_is_idempotent() -> None:
         payload=AppendAnalysisMessageRequest(message="我指的是不良率"),
     )
     assert stored.status is AnalysisRunStatus.QUEUED
-    assert "intent" not in stored.context
+    assert stored.context["intent"]["goal"] == "看看那个比例"
+    assert stored.context["intent_revision_pending"] is True
 
 
 def test_runtime_persists_plan_result_and_evidence() -> None:
@@ -407,6 +425,93 @@ def test_catalog_search_fails_actionably_when_no_published_catalog_exists() -> N
     assert stored.status is AnalysisRunStatus.FAILED
     assert stored.error_code == "catalog.not_available"
     assert get_run_view(db, workspace_id=workspace.id, run_id=run_id).artifacts == []
+
+
+def test_runtime_merges_clarification_patch_and_replays_route_defaults() -> None:
+    db, user, workspace = _database()
+    document = manufacturing_quality_template()
+    model = SemanticModel(
+        workspace_id=workspace.id,
+        name="Quality",
+        status=SemanticModelStatus.PUBLISHED,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(model)
+    db.flush()
+    version = SemanticModelVersion(
+        workspace_id=workspace.id,
+        semantic_model_id=model.id,
+        revision=1,
+        status=SemanticVersionStatus.PUBLISHED,
+        document=document.model_dump(mode="json"),
+        counts={},
+        content_digest="d" * 64,
+        created_by_user_id=user.id,
+        published_by_user_id=user.id,
+    )
+    db.add(version)
+    db.flush()
+    model.active_version_id = version.id
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="clarification-patch",
+        payload=CreateAnalysisRunRequest(message="分析质量指标"),
+    ).id
+    gateway = _fake_sequence(
+        {
+            "domain": "manufacturing_quality",
+            "task_type": "metric_query",
+            "goal": "分析质量指标",
+            "metrics": [],
+            "confidence": 0.45,
+        },
+        {
+            "mode": "patch",
+            "patch": {"metrics": ["不良率"]},
+            "replacement": None,
+        },
+    )
+    run_analysis(db, run_id=run_id, gateway=gateway)
+    append_message(
+        db,
+        workspace_id=workspace.id,
+        run_id=run_id,
+        actor_user_id=user.id,
+        idempotency_key="clarification-patch-answer",
+        payload=AppendAnalysisMessageRequest(message="我指的是不良率"),
+    )
+    result = {
+        "validated_query_id": str(uuid.uuid4()),
+        "execution_id": str(uuid.uuid4()),
+        "columns": ["defect_rate"],
+        "rows": [[1.5]],
+        "evidence_digest": "e" * 64,
+        "trust": "trusted",
+    }
+    run_analysis(db, run_id=run_id, gateway=gateway, metric_executor=lambda *_: result)
+    stored = db.get(AnalysisRun, run_id)
+    assert stored is not None and stored.status is AnalysisRunStatus.COMPLETED
+    assert stored.context["intent"]["goal"] == "分析质量指标"
+    assert stored.context["intent"]["metrics"] == ["不良率"]
+    assert stored.context["intent_revision"] == 2
+    assert stored.context["defaults_applied"] == {
+        "time_range": "all_available",
+        "dimensions": "aggregate",
+    }
+    assert stored.model_calls == 2
+    event_types = list(
+        db.scalars(
+            select(AnalysisEvent.event_type)
+            .where(AnalysisEvent.run_id == run_id)
+            .order_by(AnalysisEvent.sequence)
+        )
+    )
+    assert "run.intent_revised" in event_types
+    assert "run.route_selected" in event_types
+    assert "run.defaults_applied" in event_types
 
 
 def test_event_stream_sends_heartbeat_while_run_is_active(
