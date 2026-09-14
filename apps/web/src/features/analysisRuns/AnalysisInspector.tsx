@@ -241,7 +241,8 @@ function displayIdentifier(value: unknown): string {
 
 function displayRoute(value: unknown): string {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return '未选择'
-  return displayIdentifier((value as Record<string, unknown>).task_type)
+  const route = value as Record<string, unknown>
+  return displayIdentifier(route.task_type ?? route.route)
 }
 
 function displayDefaults(value: unknown): string {

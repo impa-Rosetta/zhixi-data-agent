@@ -129,7 +129,7 @@ test('renders catalog sources, relations and fields from a safe catalog artifact
 test('shows governed route, snapshot evidence and safety validation details', () => {
   const view = resultView({}, 'catalog_result')
   view.run.context = {
-    route: { task_type: 'catalog_search' },
+    route: { route: 'catalog_search' },
     intent_revision: 'append',
     defaults_applied: { time_range: '最近 30 天' },
   }
