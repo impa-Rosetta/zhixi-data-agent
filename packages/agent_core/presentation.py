@@ -167,7 +167,12 @@ def _format_value(value: object) -> str:
     if isinstance(value, bool):
         return "是" if value else "否"
     if isinstance(value, (int, float, Decimal)):
-        return f"{value:g}" if isinstance(value, float) else str(value)
+        if isinstance(value, float):
+            return f"{value:g}"
+        if isinstance(value, Decimal):
+            normalized = format(value.normalize(), "f")
+            return normalized.rstrip("0").rstrip(".") if "." in normalized else normalized
+        return str(value)
     if isinstance(value, str):
         return _safe_label(value) or "空字符串"
     return "一个结构化结果"

@@ -44,7 +44,19 @@ def search_published_catalogs(
     normalized = query.strip().casefold()
     broad = not normalized or any(
         phrase in normalized
-        for phrase in ("有哪些数据", "什么数据", "数据源", "所有表", "全部表", "表格")
+        for phrase in (
+            "有哪些数据",
+            "什么数据",
+            "有什么数据",
+            "数据源",
+            "数据库",
+            "有哪些表",
+            "有什么表",
+            "所有表",
+            "全部表",
+            "表里有啥",
+            "表格",
+        )
     )
     sources: list[dict[str, object]] = []
     total_matches = 0

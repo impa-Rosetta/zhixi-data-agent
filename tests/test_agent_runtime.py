@@ -378,7 +378,7 @@ def test_runtime_searches_only_published_catalogs_in_the_run_workspace() -> None
         workspace_id=workspace.id,
         actor_user_id=user.id,
         idempotency_key="catalog-search",
-        payload=CreateAnalysisRunRequest(message="inspection 表有哪些字段"),
+        payload=CreateAnalysisRunRequest(message="数据库里有哪些表？"),
     ).id
     run_analysis(
         db,
@@ -387,7 +387,7 @@ def test_runtime_searches_only_published_catalogs_in_the_run_workspace() -> None
             {
                 "domain": "manufacturing_quality",
                 "task_type": "catalog_exploration",
-                "goal": "inspection 表有哪些字段",
+                "goal": "数据库里有哪些表？",
                 "metrics": [],
                 "confidence": 0.98,
             }
