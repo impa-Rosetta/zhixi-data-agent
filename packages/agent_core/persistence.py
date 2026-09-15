@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -47,10 +48,144 @@ class AnalysisStepStatus(enum.StrEnum):
     SKIPPED = "skipped"
 
 
+class AnalysisConversationStatus(enum.StrEnum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class AnalysisTurnRelation(enum.StrEnum):
+    INITIAL = "initial"
+    CONTINUE = "continue"
+    REFINE = "refine"
+    EXPLAIN = "explain"
+    COMPARE = "compare"
+    SWITCH_TOPIC = "switch_topic"
+
+
+class AnalysisTurnStatus(enum.StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    WAITING_FOR_USER = "waiting_for_user"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class AnalysisConversation(Base):
+    __tablename__ = "analysis_conversations"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "idempotency_key",
+            name="uq_analysis_conversation_idempotency",
+        ),
+        UniqueConstraint("workspace_id", "id", name="uq_analysis_conversation_workspace_id"),
+        Index(
+            "ix_analysis_conversation_workspace_updated",
+            "workspace_id",
+            "updated_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(300))
+    status: Mapped[AnalysisConversationStatus] = mapped_column(
+        Enum(AnalysisConversationStatus, native_enum=False, values_callable=_values), index=True
+    )
+    context: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    active_turn_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "analysis_turns.id",
+            name="fk_analysis_conversation_active_turn",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
+        index=True,
+    )
+    last_turn_sequence: Mapped[int] = mapped_column(Integer, default=0)
+    next_event_sequence: Mapped[int] = mapped_column(Integer, default=1)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AnalysisTurn(Base):
+    __tablename__ = "analysis_turns"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "sequence", name="uq_analysis_turn_sequence"),
+        UniqueConstraint("analysis_run_id", name="uq_analysis_turn_run"),
+        UniqueConstraint("workspace_id", "id", name="uq_analysis_turn_workspace_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "conversation_id"],
+            ["analysis_conversations.workspace_id", "analysis_conversations.id"],
+            name="fk_analysis_turn_conversation_workspace",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "analysis_run_id"],
+            ["analysis_runs.workspace_id", "analysis_runs.id"],
+            name="fk_analysis_turn_run_workspace",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
+        Index("ix_analysis_turn_conversation_status", "conversation_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    sequence: Mapped[int] = mapped_column(Integer)
+    parent_turn_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_turns.id", ondelete="SET NULL"), index=True
+    )
+    analysis_run_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    relation: Mapped[AnalysisTurnRelation] = mapped_column(
+        Enum(AnalysisTurnRelation, native_enum=False, values_callable=_values)
+    )
+    status: Mapped[AnalysisTurnStatus] = mapped_column(
+        Enum(AnalysisTurnStatus, native_enum=False, values_callable=_values), index=True
+    )
+    context_before: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    context_after: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class AnalysisRun(Base):
     __tablename__ = "analysis_runs"
     __table_args__ = (
         UniqueConstraint("workspace_id", "idempotency_key", name="uq_analysis_run_idempotency"),
+        UniqueConstraint("workspace_id", "id", name="uq_analysis_run_workspace_id"),
+        UniqueConstraint("turn_id", name="uq_analysis_run_turn"),
+        ForeignKeyConstraint(
+            ["workspace_id", "conversation_id"],
+            ["analysis_conversations.workspace_id", "analysis_conversations.id"],
+            name="fk_analysis_run_conversation_workspace",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "turn_id"],
+            ["analysis_turns.workspace_id", "analysis_turns.id"],
+            name="fk_analysis_run_turn_workspace",
+            ondelete="RESTRICT",
+        ),
         Index("ix_analysis_run_workspace_created", "workspace_id", "created_at"),
     )
 
@@ -61,6 +196,8 @@ class AnalysisRun(Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    turn_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     idempotency_key: Mapped[str] = mapped_column(String(100))
     status: Mapped[AnalysisRunStatus] = mapped_column(
         Enum(AnalysisRunStatus, native_enum=False, values_callable=_values), index=True

@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-15
 - 规格：`docs/superpowers/specs/2026-09-15-m7-multi-turn-conversation-design.md`
-- 当前入口：M7.1-A 会话领域与数据库迁移
+- 当前入口：M7.1-B 严格共享契约
 
 ## 执行规则
 
@@ -12,6 +12,8 @@
 ## M7.1 会话领域与兼容投影
 
 ### M7.1-A：领域模型与迁移
+
+状态：已完成（验收记录：`docs/acceptance/M7.1-A-conversation-persistence-acceptance.md`）
 
 - 在 Agent persistence 中增加 `AnalysisConversation`、`AnalysisTurn`、状态和关系枚举；
 - 为 `AnalysisRun` 增加可空 `conversation_id`、`turn_id`，并建立工作空间一致的索引与外键；
@@ -22,6 +24,8 @@
 完成标准：历史 AnalysisRun 不需改写即可正常读取；新 Conversation/Turn/Run 可以事务性建立且无法跨空间拼接。
 
 ### M7.1-B：严格共享契约
+
+状态：进行中
 
 - 定义创建会话、发送消息、会话摘要、Turn 摘要和 Conversation View；
 - Conversation context 使用严格版本化 Pydantic 模型，不接受 SQL、凭据、代码或任意扩展字段；
