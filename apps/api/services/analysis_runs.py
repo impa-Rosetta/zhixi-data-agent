@@ -316,6 +316,8 @@ def create_run(
     actor_user_id: uuid.UUID,
     idempotency_key: str,
     payload: CreateAnalysisRunRequest,
+    conversation_id: uuid.UUID | None = None,
+    turn_id: uuid.UUID | None = None,
 ) -> AnalysisRunResponse:
     existing = db.scalar(
         select(AnalysisRun).where(
@@ -335,6 +337,8 @@ def create_run(
     run = AnalysisRun(
         workspace_id=workspace_id,
         created_by_user_id=actor_user_id,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
         idempotency_key=idempotency_key,
         status=AnalysisRunStatus.QUEUED,
         current_node="understand",

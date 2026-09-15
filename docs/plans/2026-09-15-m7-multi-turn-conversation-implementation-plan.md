@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-15
 - 规格：`docs/superpowers/specs/2026-09-15-m7-multi-turn-conversation-design.md`
-- 当前入口：M7.1-C 会话领域服务与首轮创建
+- 当前入口：M7.1-D 会话投影与历史兼容
 
 ## 执行规则
 
@@ -36,7 +36,7 @@
 
 ### M7.1-C：会话领域服务与首轮创建
 
-状态：进行中
+状态：已完成（验收记录：`docs/acceptance/M7.1-C-conversation-service-acceptance.md`）
 
 - 原子创建 Conversation、Turn、AnalysisRun、用户消息、事件和 Outbox；
 - 首次问题生成确定性会话标题；
@@ -47,6 +47,8 @@
 完成标准：首轮通过现有 Worker 正常执行，Run 级证据链不变。
 
 ### M7.1-D：会话投影与历史兼容
+
+状态：进行中
 
 - 聚合 Conversation、Turn、Run View、消息、产物和运行状态；
 - 历史 `/app/analysis/{run_id}` 继续使用原投影；
