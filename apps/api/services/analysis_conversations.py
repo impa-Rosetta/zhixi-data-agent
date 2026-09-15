@@ -206,18 +206,21 @@ def get_conversation_view(
             AnalysisTurn.conversation_id == conversation.id,
         )
     )
-    rows = db.execute(
-        select(AnalysisTurn, AnalysisRun)
-        .join(AnalysisRun, AnalysisRun.id == AnalysisTurn.analysis_run_id)
-        .where(
-            AnalysisTurn.workspace_id == workspace_id,
-            AnalysisTurn.conversation_id == conversation.id,
-            AnalysisRun.workspace_id == workspace_id,
-        )
-        .order_by(AnalysisTurn.sequence)
-        .offset(bounded_offset)
-        .limit(bounded_limit)
-    ).all()
+    rows = list(
+        db.execute(
+            select(AnalysisTurn, AnalysisRun)
+            .join(AnalysisRun, AnalysisRun.id == AnalysisTurn.analysis_run_id)
+            .where(
+                AnalysisTurn.workspace_id == workspace_id,
+                AnalysisTurn.conversation_id == conversation.id,
+                AnalysisRun.workspace_id == workspace_id,
+            )
+            .order_by(AnalysisTurn.sequence.desc())
+            .offset(bounded_offset)
+            .limit(bounded_limit)
+        ).all()
+    )
+    rows.reverse()
     return AnalysisConversationViewResponse(
         conversation=_response(conversation),
         turns=[

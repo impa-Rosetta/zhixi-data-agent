@@ -214,6 +214,13 @@ def test_completed_run_can_continue_in_same_conversation() -> None:
     assert view.turns[1].analysis.messages[0].content == "按月份展开"
     assert view.conversation.active_turn_id == view.turns[1].turn.id
     assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+    latest_window = get_conversation_view(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=conversation.id,
+        limit=1,
+    )
+    assert [item.turn.sequence for item in latest_window.turns] == [2]
 
 
 def test_messages_sent_while_running_queue_and_activate_strictly_in_order() -> None:
