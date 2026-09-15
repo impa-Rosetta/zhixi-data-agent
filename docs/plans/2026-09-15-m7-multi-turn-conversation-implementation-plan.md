@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-15
 - 规格：`docs/superpowers/specs/2026-09-15-m7-multi-turn-conversation-design.md`
-- 当前入口：M7.1-D 会话投影与历史兼容
+- 当前入口：M7.2-A Follow-up 契约与确定性分类
 
 ## 执行规则
 
@@ -48,7 +48,7 @@
 
 ### M7.1-D：会话投影与历史兼容
 
-状态：进行中
+状态：已完成（验收记录：`docs/acceptance/M7-continuous-conversation-vertical-slice-acceptance.md`）
 
 - 聚合 Conversation、Turn、Run View、消息、产物和运行状态；
 - 历史 `/app/analysis/{run_id}` 继续使用原投影；
@@ -58,6 +58,8 @@
 完成标准：新旧链接同时可用；每个轮次能定位原 AnalysisRun、Evidence 和 Validation。
 
 ### M7.1-E：API、权限与基础前端接线
+
+状态：已完成（验收记录：`docs/acceptance/M7-continuous-conversation-vertical-slice-acceptance.md`）
 
 - 增加 Conversation 创建、列表、详情和 View API；
 - 所有端点复用 `Action.ANALYSIS_RUN` 并校验 workspace；
@@ -85,6 +87,8 @@
 
 ### M7.2-C：完成态后的继续发送
 
+状态：基础链路已完成；上下文继承待 M7.2-A/B 完成
+
 - Conversation 消息接口在任何非归档状态可写；
 - 当前 Turn 澄清回复继续原 Run，其他稳定状态创建下一 Turn 和 Run；
 - 失败轮不更新有效 Artifact 引用，但保留安全意图供修正；
@@ -93,6 +97,8 @@
 ## M7.3 串行排队与恢复
 
 ### M7.3-A：活动轮和排队事务
+
+状态：基础串行队列已完成；并发版本冲突强化仍待后续切片
 
 - 同一 Conversation 只允许一个活动 Turn；
 - 运行中收到的新消息写入 queued Turn；
@@ -114,6 +120,8 @@
 - 不在事件中发送内部推理或敏感上下文。
 
 ## M7.4 连续会话前端
+
+状态：核心纵向切片已完成；主题切换提示、完整无障碍和真实移动端验收待 M7.2 与 M7.4 收尾
 
 - 左栏从运行列表升级为会话列表；
 - 按 Turn 内联用户消息、Agent 回复、结果附件和证据入口；
