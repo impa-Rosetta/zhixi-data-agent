@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-15
 - 规格：`docs/superpowers/specs/2026-09-15-m7-multi-turn-conversation-design.md`
-- 当前入口：M7.1-B 严格共享契约
+- 当前入口：M7.1-C 会话领域服务与首轮创建
 
 ## 执行规则
 
@@ -25,7 +25,7 @@
 
 ### M7.1-B：严格共享契约
 
-状态：进行中
+状态：已完成（验收记录：`docs/acceptance/M7.1-B-conversation-contracts-acceptance.md`）
 
 - 定义创建会话、发送消息、会话摘要、Turn 摘要和 Conversation View；
 - Conversation context 使用严格版本化 Pydantic 模型，不接受 SQL、凭据、代码或任意扩展字段；
@@ -35,6 +35,8 @@
 完成标准：OpenAPI 和 TypeScript 可稳定消费，敏感内部字段不会进入响应。
 
 ### M7.1-C：会话领域服务与首轮创建
+
+状态：进行中
 
 - 原子创建 Conversation、Turn、AnalysisRun、用户消息、事件和 Outbox；
 - 首次问题生成确定性会话标题；
