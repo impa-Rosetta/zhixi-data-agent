@@ -4,6 +4,7 @@ import { LoadingScreen } from './components/feedback/LoadingScreen'
 import { AppShell } from './components/layout/AppShell'
 import { useAuth } from './features/auth/context'
 import { AnalysisHomePage } from './pages/AnalysisHomePage'
+import { ConversationWorkspacePage } from './pages/ConversationWorkspacePage'
 import { DataSourceDetailPage } from './pages/DataSourceDetailPage'
 import { DataSourcesPage } from './pages/DataSourcesPage'
 import { InvitePage } from './pages/InvitePage'
@@ -28,7 +29,8 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/invite" element={<InvitePage />} />
       <Route path="/app" element={<ProtectedRoute />}>
-        <Route index element={<AnalysisHomePage />} />
+        <Route index element={<ConversationWorkspacePage />} />
+        <Route path="conversations/:conversationId" element={<ConversationWorkspacePage />} />
         <Route path="analysis/:runId" element={<AnalysisHomePage />} />
         <Route path="data" element={<DataSourcesPage />} />
         <Route path="data/:dataSourceId" element={<DataSourceDetailPage />} />

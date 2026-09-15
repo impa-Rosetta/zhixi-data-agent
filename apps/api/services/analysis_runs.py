@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.audit import add_audit_event
+from packages.agent_core.conversation_runtime import synchronize_conversation_after_run
 from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisEvent,
@@ -318,6 +319,8 @@ def create_run(
     payload: CreateAnalysisRunRequest,
     conversation_id: uuid.UUID | None = None,
     turn_id: uuid.UUID | None = None,
+    initial_message_idempotency_key: str | None = None,
+    enqueue: bool = True,
 ) -> AnalysisRunResponse:
     existing = db.scalar(
         select(AnalysisRun).where(
@@ -354,18 +357,19 @@ def create_run(
             run_id=run.id,
             role="user",
             content=payload.message,
-            idempotency_key=f"{idempotency_key}:initial",
+            idempotency_key=initial_message_idempotency_key or f"{idempotency_key}:initial",
         )
     )
     add_event(db, run, "run.created", {"status": run.status.value})
-    db.add(
-        OutboxEvent(
-            aggregate_type="analysis_run",
-            aggregate_id=run.id,
-            event_type="analysis.run.requested",
-            payload={"run_id": str(run.id)},
+    if enqueue:
+        db.add(
+            OutboxEvent(
+                aggregate_type="analysis_run",
+                aggregate_id=run.id,
+                event_type="analysis.run.requested",
+                payload={"run_id": str(run.id)},
+            )
         )
-    )
     add_audit_event(
         db,
         action="analysis_run.created",
@@ -497,6 +501,7 @@ def cancel_run(
         actor_user_id=actor_user_id,
         workspace_id=workspace_id,
     )
+    synchronize_conversation_after_run(db, run_id=run.id)
     db.flush()
     return _response(run)
 

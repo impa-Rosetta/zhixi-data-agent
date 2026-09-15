@@ -7,12 +7,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.audit import add_audit_event
-from apps.api.services.analysis_runs import create_run
+from apps.api.services.analysis_runs import append_message, create_run, get_run_view
 from packages.agent_core.persistence import (
     AnalysisConversation,
     AnalysisConversationStatus,
     AnalysisMessage,
     AnalysisRun,
+    AnalysisRunStatus,
     AnalysisTurn,
     AnalysisTurnRelation,
     AnalysisTurnStatus,
@@ -22,7 +23,11 @@ from packages.shared_contracts.agents import (
     AnalysisConversationPage,
     AnalysisConversationResponse,
     AnalysisConversationSummaryResponse,
+    AnalysisConversationTurnViewResponse,
+    AnalysisConversationViewResponse,
+    AnalysisTurnResponse,
     CreateAnalysisConversationRequest,
+    SendAnalysisConversationMessageRequest,
 )
 
 
@@ -148,6 +153,200 @@ def get_conversation(
     conversation_id: uuid.UUID,
 ) -> AnalysisConversationResponse:
     return _response(_get_conversation(db, workspace_id, conversation_id))
+
+
+def _turn_status(run_status: AnalysisRunStatus) -> AnalysisTurnStatus:
+    if run_status is AnalysisRunStatus.QUEUED:
+        return AnalysisTurnStatus.QUEUED
+    if run_status is AnalysisRunStatus.RUNNING:
+        return AnalysisTurnStatus.RUNNING
+    if run_status in {
+        AnalysisRunStatus.WAITING_FOR_CLARIFICATION,
+        AnalysisRunStatus.WAITING_FOR_CONFIRMATION,
+        AnalysisRunStatus.FAILED_RETRYABLE,
+    }:
+        return AnalysisTurnStatus.WAITING_FOR_USER
+    if run_status is AnalysisRunStatus.COMPLETED:
+        return AnalysisTurnStatus.COMPLETED
+    if run_status is AnalysisRunStatus.CANCELLED:
+        return AnalysisTurnStatus.CANCELLED
+    return AnalysisTurnStatus.FAILED
+
+
+def _turn_response(turn: AnalysisTurn, run: AnalysisRun) -> AnalysisTurnResponse:
+    return AnalysisTurnResponse(
+        id=turn.id,
+        sequence=turn.sequence,
+        parent_turn_id=turn.parent_turn_id,
+        analysis_run_id=run.id,
+        relation=turn.relation.value,
+        status=_turn_status(run.status).value,
+        queued_at=turn.queued_at,
+        started_at=run.started_at or turn.started_at,
+        finished_at=run.finished_at or turn.finished_at,
+        created_at=turn.created_at,
+        updated_at=max(turn.updated_at, run.updated_at),
+    )
+
+
+def get_conversation_view(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    limit: int = 20,
+    offset: int = 0,
+) -> AnalysisConversationViewResponse:
+    conversation = _get_conversation(db, workspace_id, conversation_id)
+    bounded_limit = max(1, min(limit, 100))
+    bounded_offset = max(0, offset)
+    total = db.scalar(
+        select(func.count()).select_from(AnalysisTurn).where(
+            AnalysisTurn.workspace_id == workspace_id,
+            AnalysisTurn.conversation_id == conversation.id,
+        )
+    )
+    rows = db.execute(
+        select(AnalysisTurn, AnalysisRun)
+        .join(AnalysisRun, AnalysisRun.id == AnalysisTurn.analysis_run_id)
+        .where(
+            AnalysisTurn.workspace_id == workspace_id,
+            AnalysisTurn.conversation_id == conversation.id,
+            AnalysisRun.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisTurn.sequence)
+        .offset(bounded_offset)
+        .limit(bounded_limit)
+    ).all()
+    return AnalysisConversationViewResponse(
+        conversation=_response(conversation),
+        turns=[
+            AnalysisConversationTurnViewResponse(
+                turn=_turn_response(turn, run),
+                analysis=get_run_view(db, workspace_id=workspace_id, run_id=run.id),
+            )
+            for turn, run in rows
+        ],
+        total_turns=int(total or 0),
+        limit=bounded_limit,
+        offset=bounded_offset,
+    )
+
+
+def send_conversation_message(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    idempotency_key: str,
+    payload: SendAnalysisConversationMessageRequest,
+) -> AnalysisConversationResponse:
+    conversation = _get_conversation(db, workspace_id, conversation_id)
+    if conversation.status is AnalysisConversationStatus.ARCHIVED:
+        raise AnalysisConversationServiceError(
+            "analysis_conversation.archived", "Archived conversation is read-only"
+        )
+    existing_message = db.scalar(
+        select(AnalysisMessage.id)
+        .join(AnalysisRun, AnalysisRun.id == AnalysisMessage.run_id)
+        .where(
+            AnalysisRun.conversation_id == conversation.id,
+            AnalysisMessage.idempotency_key == idempotency_key,
+            AnalysisMessage.workspace_id == workspace_id,
+        )
+    )
+    if existing_message is not None:
+        return _response(conversation)
+
+    active_turn = (
+        db.get(AnalysisTurn, conversation.active_turn_id)
+        if conversation.active_turn_id is not None
+        else None
+    )
+    active_run = (
+        db.get(AnalysisRun, active_turn.analysis_run_id)
+        if active_turn is not None and active_turn.analysis_run_id is not None
+        else None
+    )
+    if active_run is not None and active_run.status in {
+        AnalysisRunStatus.WAITING_FOR_CLARIFICATION,
+        AnalysisRunStatus.WAITING_FOR_CONFIRMATION,
+        AnalysisRunStatus.FAILED_RETRYABLE,
+    }:
+        if active_turn is None:
+            raise AnalysisConversationServiceError(
+                "analysis_conversation.state_invalid", "Active run has no turn"
+            )
+        append_message(
+            db,
+            workspace_id=workspace_id,
+            run_id=active_run.id,
+            actor_user_id=actor_user_id,
+            idempotency_key=idempotency_key,
+            payload=payload,
+        )
+        active_turn.status = AnalysisTurnStatus.RUNNING
+        conversation.version += 1
+        db.flush()
+        return _response(conversation)
+
+    sequence = conversation.last_turn_sequence + 1
+    parent_turn = db.scalar(
+        select(AnalysisTurn)
+        .where(
+            AnalysisTurn.conversation_id == conversation.id,
+            AnalysisTurn.workspace_id == workspace_id,
+        )
+        .order_by(AnalysisTurn.sequence.desc())
+        .limit(1)
+    )
+    context_before = _context(dict(conversation.context))
+    context_after = context_before.model_copy(update={"last_relation": "continue"})
+    turn = AnalysisTurn(
+        workspace_id=workspace_id,
+        conversation_id=conversation.id,
+        sequence=sequence,
+        parent_turn_id=parent_turn.id if parent_turn is not None else None,
+        relation=AnalysisTurnRelation.CONTINUE,
+        status=AnalysisTurnStatus.QUEUED,
+        context_before=context_before.model_dump(mode="json"),
+        context_after=context_after.model_dump(mode="json"),
+    )
+    db.add(turn)
+    db.flush()
+    has_active_run = active_run is not None and active_run.status in {
+        AnalysisRunStatus.QUEUED,
+        AnalysisRunStatus.RUNNING,
+    }
+    run_response = create_run(
+        db,
+        workspace_id=workspace_id,
+        actor_user_id=actor_user_id,
+        idempotency_key=f"conversation:{conversation.id}:turn:{sequence}",
+        payload=CreateAnalysisConversationRequest(message=payload.message),
+        conversation_id=conversation.id,
+        turn_id=turn.id,
+        initial_message_idempotency_key=idempotency_key,
+        enqueue=not has_active_run,
+    )
+    turn.analysis_run_id = run_response.id
+    conversation.context = context_after.model_dump(mode="json")
+    conversation.last_turn_sequence = sequence
+    conversation.version += 1
+    if not has_active_run:
+        conversation.active_turn_id = turn.id
+    add_audit_event(
+        db,
+        action="analysis_conversation.message_added",
+        outcome="success",
+        resource_type="analysis_conversation",
+        resource_id=str(conversation.id),
+        actor_user_id=actor_user_id,
+        workspace_id=workspace_id,
+    )
+    db.flush()
+    return _response(conversation)
 
 
 def _summary(

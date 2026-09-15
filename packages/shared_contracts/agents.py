@@ -184,14 +184,6 @@ class AnalysisConversationPage(StrictContract):
     offset: int = Field(ge=0)
 
 
-class AnalysisConversationViewResponse(StrictContract):
-    conversation: AnalysisConversationResponse
-    turns: list[AnalysisTurnResponse] = Field(max_length=100)
-    total_turns: int = Field(ge=0)
-    limit: int = Field(ge=1, le=100)
-    offset: int = Field(ge=0)
-
-
 class ConfirmAnalysisRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     approved: bool
@@ -324,3 +316,18 @@ class AnalysisRunViewResponse(BaseModel):
     evidence: list[AnalysisEvidenceResponse]
     validations: list[AnalysisValidationResponse]
     last_event_sequence: int
+
+
+class AnalysisConversationTurnViewResponse(StrictContract):
+    turn: AnalysisTurnResponse
+    analysis: AnalysisRunViewResponse
+
+
+class AnalysisConversationViewResponse(StrictContract):
+    conversation: AnalysisConversationResponse
+    turns: list[AnalysisConversationTurnViewResponse] = Field(max_length=100)
+    total_turns: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+    offset: int = Field(ge=0)
+    read_only: bool = False
+    legacy_run_id: uuid.UUID | None = None

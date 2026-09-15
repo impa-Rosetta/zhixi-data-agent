@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from apps.worker.analysis_runtime import run_analysis
 from apps.worker.celery_app import celery_app
+from packages.agent_core.conversation_runtime import synchronize_conversation_after_run
 from packages.model_gateway import DeepSeekGateway
 from packages.platform_core.database import get_engine
 from packages.platform_core.settings import get_settings
@@ -23,4 +24,7 @@ def execute_analysis_run(run_id: str) -> None:
         max_attempts=settings.deepseek_max_attempts,
     )
     with Session(get_engine()) as db:
-        run_analysis(db, run_id=uuid.UUID(run_id), gateway=gateway)
+        parsed_run_id = uuid.UUID(run_id)
+        run_analysis(db, run_id=parsed_run_id, gateway=gateway)
+        synchronize_conversation_after_run(db, run_id=parsed_run_id)
+        db.commit()

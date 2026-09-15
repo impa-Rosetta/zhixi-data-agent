@@ -136,3 +136,74 @@ export type AnalysisEvent = {
   payload: Record<string, unknown>
   created_at: string
 }
+
+export type AnalysisConversationStatus = 'active' | 'archived'
+export type AnalysisTurnStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting_for_user'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export type AnalysisConversation = {
+  id: string
+  workspace_id: string
+  title: string
+  status: AnalysisConversationStatus
+  context: Record<string, unknown>
+  active_turn_id: string | null
+  last_turn_sequence: number
+  version: number
+  created_at: string
+  updated_at: string
+  archived_at: string | null
+}
+
+export type AnalysisConversationSummary = {
+  id: string
+  title: string
+  status: AnalysisConversationStatus
+  active_turn_id: string | null
+  active_turn_status: AnalysisTurnStatus | null
+  last_turn_sequence: number
+  last_message_preview: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AnalysisConversationPage = {
+  items: AnalysisConversationSummary[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export type AnalysisTurn = {
+  id: string
+  sequence: number
+  parent_turn_id: string | null
+  analysis_run_id: string | null
+  relation: 'initial' | 'continue' | 'refine' | 'explain' | 'compare' | 'switch_topic'
+  status: AnalysisTurnStatus
+  queued_at: string
+  started_at: string | null
+  finished_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AnalysisConversationTurnView = {
+  turn: AnalysisTurn
+  analysis: AnalysisRunView
+}
+
+export type AnalysisConversationView = {
+  conversation: AnalysisConversation
+  turns: AnalysisConversationTurnView[]
+  total_turns: number
+  limit: number
+  offset: number
+  read_only: boolean
+  legacy_run_id: string | null
+}
