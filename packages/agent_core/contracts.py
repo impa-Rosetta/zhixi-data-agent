@@ -15,6 +15,7 @@ AnalysisRoute = Literal[
     "trend",
     "unsupported",
 ]
+FollowUpRelation = Literal["continue", "refine", "explain", "compare", "switch_topic"]
 
 
 class Intent(BaseModel):
@@ -105,6 +106,25 @@ class IntentRevision(BaseModel):
             return self.replacement
         assert self.patch is not None
         return self.patch.apply(intent)
+
+
+class FollowUpDecision(BaseModel):
+    """A model-safe classification; it cannot select tools or carry executable content."""
+
+    model_config = ConfigDict(extra="forbid")
+    relation: FollowUpRelation
+    patch: ContextPatch | None = None
+    needs_clarification: bool = False
+    clarification_question: str | None = Field(default=None, min_length=2, max_length=500)
+    confidence: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_clarification(self) -> Self:
+        if self.needs_clarification != (self.clarification_question is not None):
+            raise ValueError("clarification flag and question must be provided together")
+        if self.relation == "switch_topic" and self.patch is not None:
+            raise ValueError("topic switches cannot inherit a context patch")
+        return self
 
 
 class AnalysisStep(BaseModel):
