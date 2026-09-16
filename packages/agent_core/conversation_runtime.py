@@ -6,8 +6,12 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from packages.agent_core.contracts import Binding, Intent
+from packages.agent_core.contracts import Binding, FollowUpDecision, Intent
 from packages.agent_core.conversation_context import project_completed_run_context
+from packages.agent_core.followups import (
+    classify_follow_up,
+    classify_follow_up_deterministically,
+)
 from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisConversation,
@@ -18,6 +22,7 @@ from packages.agent_core.persistence import (
     AnalysisTurnStatus,
     AnalysisValidation,
 )
+from packages.model_gateway import GatewayUsage, ModelGateway, ModelGatewayError
 from packages.platform_core.models import OutboxEvent
 from packages.shared_contracts.agents import AnalysisConversationContext
 
@@ -46,6 +51,10 @@ def _project_completed_context(
     run: AnalysisRun,
     turn: AnalysisTurn,
 ) -> AnalysisConversationContext | None:
+    if turn.relation.value == "explain":
+        return AnalysisConversationContext.model_validate(turn.context_before).model_copy(
+            update={"last_relation": "explain"}
+        )
     raw_intent = run.context.get("intent")
     if not isinstance(raw_intent, dict):
         return None
@@ -94,6 +103,101 @@ def _project_completed_context(
         result=result,
         result_is_validated=validated is not None,
     )
+
+
+def _previous_intent_run(
+    db: Session,
+    *,
+    run: AnalysisRun,
+    turn: AnalysisTurn,
+) -> tuple[AnalysisRun | None, Intent | None]:
+    rows = db.scalars(
+        select(AnalysisRun)
+        .join(AnalysisTurn, AnalysisTurn.id == AnalysisRun.turn_id)
+        .where(
+            AnalysisTurn.workspace_id == run.workspace_id,
+            AnalysisTurn.conversation_id == run.conversation_id,
+            AnalysisTurn.sequence < turn.sequence,
+        )
+        .order_by(AnalysisTurn.sequence.desc())
+        .limit(20)
+    )
+    for previous_run in rows:
+        raw_intent = previous_run.context.get("intent")
+        if isinstance(raw_intent, dict):
+            return previous_run, Intent.model_validate(raw_intent)
+    return None, None
+
+
+def prepare_conversation_run(
+    db: Session,
+    *,
+    run: AnalysisRun,
+    gateway: ModelGateway,
+) -> tuple[FollowUpDecision | None, GatewayUsage]:
+    """Classify a new turn at execution time against the latest durable context."""
+    if run.conversation_id is None or run.turn_id is None:
+        return None, GatewayUsage(model_calls=0)
+    turn = db.scalar(
+        select(AnalysisTurn).where(
+            AnalysisTurn.id == run.turn_id,
+            AnalysisTurn.workspace_id == run.workspace_id,
+            AnalysisTurn.conversation_id == run.conversation_id,
+        )
+    )
+    conversation = db.scalar(
+        select(AnalysisConversation).where(
+            AnalysisConversation.id == run.conversation_id,
+            AnalysisConversation.workspace_id == run.workspace_id,
+        )
+    )
+    if turn is None or conversation is None or turn.sequence == 1:
+        return None, GatewayUsage(model_calls=0)
+    previous_run, previous_intent = _previous_intent_run(db, run=run, turn=turn)
+    message = str(run.context.get("latest_user_message") or run.context.get("goal") or "")
+    deterministic = classify_follow_up_deterministically(
+        message,
+        has_prior_intent=previous_intent is not None,
+    )
+    if deterministic is None:
+        max_model_calls = run.budget.get("max_model_calls", 6)
+        max_total_tokens = run.budget.get("max_total_tokens", 32_000)
+        if isinstance(max_model_calls, int) and run.model_calls >= max_model_calls:
+            raise ModelGatewayError("agent.model_budget_exhausted")
+        if isinstance(max_total_tokens, int) and run.total_tokens >= max_total_tokens:
+            raise ModelGatewayError("agent.token_budget_exhausted")
+    decision, usage = classify_follow_up(gateway, previous_intent, message)
+    turn.relation = type(turn.relation)(decision.relation)
+    current_context = AnalysisConversationContext.model_validate(conversation.context)
+    turn.context_before = current_context.model_dump(mode="json")
+    if decision.relation == "switch_topic":
+        context_after = AnalysisConversationContext(
+            topic_summary=message[:500],
+            last_relation="switch_topic",
+        )
+    else:
+        context_after = current_context.model_copy(
+            update={"last_relation": decision.relation}
+        )
+    turn.context_after = context_after.model_dump(mode="json")
+    context = {
+        **run.context,
+        "latest_user_message": message,
+        "conversation_context": current_context.model_dump(mode="json"),
+        "follow_up_decision": decision.model_dump(mode="json"),
+        "follow_up_relation": decision.relation,
+    }
+    if previous_run is not None:
+        context["previous_run_id"] = str(previous_run.id)
+    if decision.relation == "switch_topic":
+        context.pop("intent", None)
+        context.pop("intent_revision_pending", None)
+    elif previous_intent is not None:
+        context["intent"] = previous_intent.model_dump(mode="json")
+        context["intent_revision_pending"] = decision.relation != "explain"
+    run.context = context
+    db.flush()
+    return decision, usage
 
 
 def synchronize_conversation_after_run(db: Session, *, run_id: uuid.UUID) -> bool:

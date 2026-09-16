@@ -557,6 +557,8 @@ def append_message(
             "route",
             "defaults_applied",
             "clarification",
+            "follow_up_decision",
+            "follow_up_relation",
         ):
             context.pop(key, None)
     run.context = context

@@ -16,7 +16,16 @@ from apps.api.services.analysis_runs import add_event
 from apps.api.services.queries import compile_query, execute_query
 from packages.agent_core.capabilities import capability_response
 from packages.agent_core.catalog_search import search_published_catalogs
-from packages.agent_core.contracts import AnalysisPlan, AnalysisStep, Binding, Intent, RouteDecision
+from packages.agent_core.contracts import (
+    AnalysisPlan,
+    AnalysisStep,
+    Binding,
+    ClarificationRequest,
+    FollowUpDecision,
+    Intent,
+    RouteDecision,
+)
+from packages.agent_core.conversation_runtime import prepare_conversation_run
 from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisCheckpoint,
@@ -488,6 +497,155 @@ def _complete_catalog_search(db: Session, run: AnalysisRun, intent: Intent) -> N
     db.commit()
 
 
+def _complete_verified_result_explanation(db: Session, run: AnalysisRun, intent: Intent) -> None:
+    raw_context = run.context.get("conversation_context")
+    context = raw_context if isinstance(raw_context, dict) else {}
+    raw_result = context.get("last_result")
+    if not isinstance(raw_result, dict):
+        raise ModelGatewayError("agent.previous_result_not_available")
+    artifact_id = uuid.UUID(str(raw_result["artifact_id"]))
+    source_artifact = db.scalar(
+        select(AnalysisArtifact).where(
+            AnalysisArtifact.id == artifact_id,
+            AnalysisArtifact.workspace_id == run.workspace_id,
+        )
+    )
+    if source_artifact is None:
+        raise ModelGatewayError("agent.previous_result_not_available")
+    primary_value = raw_result.get("primary_value")
+    row_count = raw_result.get("row_count")
+    result_description = (
+        f"上一轮已验证的结果值是 {primary_value}。"
+        if isinstance(primary_value, str) and primary_value
+        else f"上一轮已验证结果包含 {row_count if isinstance(row_count, int) else 0} 行数据。"
+    )
+    content = (
+        f"{result_description}这个结果能够说明当前指标在已选时间和筛选范围内的表现，"
+        "但仅凭汇总结果不能可靠判断原因。要定位原因，我可以继续按时间、产线、工序或设备拆分，"
+        "再比较哪些分组贡献了主要变化。"
+    )
+    plan = AnalysisPlan(
+        goal=intent.goal,
+        steps=(
+            AnalysisStep(
+                id="describe_verified_result",
+                tool="analysis.describe",
+                arguments={"artifact_id": str(source_artifact.id)},
+                expected_evidence=("verified_result_reference",),
+            ),
+        ),
+        requires_confirmation=False,
+    )
+    plan_record = AnalysisPlanRecord(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        revision=1,
+        goal=plan.goal,
+        document=plan.model_dump(mode="json"),
+        requires_confirmation=False,
+    )
+    db.add(plan_record)
+    db.flush()
+    step = AnalysisStepRecord(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        plan_id=plan_record.id,
+        step_key="describe_verified_result",
+        tool_name="analysis.describe",
+        arguments={"artifact_id": str(source_artifact.id)},
+        dependencies=[],
+        status=AnalysisStepStatus.SUCCEEDED,
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+    )
+    db.add(step)
+    db.flush()
+    registry = build_default_registry()
+    registry.bind(
+        "analysis.describe",
+        lambda _: {
+            "message": content,
+            "source_artifact_id": str(source_artifact.id),
+            "row_count": row_count if isinstance(row_count, int) else 0,
+        },
+    )
+    result = registry.invoke("analysis.describe", plan.steps[0].arguments)
+    normalized = json.dumps(plan.steps[0].arguments, sort_keys=True, separators=(",", ":"))
+    db.add(
+        AnalysisToolCall(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            step_id=step.id,
+            tool_name="analysis.describe",
+            tool_version="1.0.0",
+            idempotency_key=hashlib.sha256(
+                f"{run.id}:analysis.describe:{normalized}".encode()
+            ).hexdigest(),
+            argument_digest=hashlib.sha256(normalized.encode()).hexdigest(),
+            status=AnalysisStepStatus.SUCCEEDED,
+            result_summary=result,
+        )
+    )
+    run.tool_calls += 1
+    artifact_digest = hashlib.sha256(content.encode()).hexdigest()
+    artifact = AnalysisArtifact(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        artifact_type="assistant_message",
+        summary=result,
+        content_digest=artifact_digest,
+    )
+    db.add(artifact)
+    db.flush()
+    source_evidence_id = raw_result.get("evidence_id")
+    evidence = AnalysisEvidence(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        artifact_id=artifact.id,
+        evidence_type="verified_result_reference",
+        reference={
+            "source_run_id": run.context.get("previous_run_id"),
+            "source_artifact_id": str(source_artifact.id),
+            "source_evidence_id": source_evidence_id,
+        },
+        evidence_digest=artifact_digest,
+    )
+    db.add(evidence)
+    db.add(
+        AnalysisValidation(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            validation_type="verified_result_reference",
+            outcome="passed",
+            findings=[],
+        )
+    )
+    _persist_agent_message(db, run, answer_presentation(content), key="result-explanation")
+    run.context = {
+        **run.context,
+        "plan": plan.model_dump(mode="json"),
+        "result": result,
+        "artifact_id": str(artifact.id),
+        "evidence_digest": artifact_digest,
+    }
+    run.status = AnalysisRunStatus.COMPLETED
+    run.current_node = "present"
+    run.finished_at = datetime.now(UTC)
+    run.error_code = None
+    run.version += 1
+    add_event(
+        db,
+        run,
+        "run.completed",
+        {
+            "artifact_id": str(artifact.id),
+            "source_artifact_id": str(source_artifact.id),
+            "trust": "derived_from_verified_result",
+        },
+    )
+    db.commit()
+
+
 def run_analysis(
     db: Session,
     *,
@@ -505,16 +663,78 @@ def run_analysis(
         return
     run.status = AnalysisRunStatus.RUNNING
     run.started_at = run.started_at or datetime.now(UTC)
+    try:
+        follow_up, follow_up_usage = prepare_conversation_run(db, run=run, gateway=gateway)
+    except ModelGatewayError as exc:
+        _fail(db, run, exc.code, retryable=exc.retryable or exc.code == "model.not_configured")
+        return
+    run.model_calls += follow_up_usage.model_calls
+    run.total_tokens += follow_up_usage.total_tokens
+    if follow_up is not None and follow_up.needs_clarification:
+        follow_up_clarification = ClarificationRequest(
+            reason_code="follow_up_relation_ambiguous",
+            question=follow_up.clarification_question or "你是想继续上一轮，还是开始一个新问题？",
+            missing_fields=("follow_up_relation",),
+            suggested_answers=("继续上一轮", "开始新主题"),
+            resume_node="understand",
+        )
+        run.status = AnalysisRunStatus.WAITING_FOR_CLARIFICATION
+        run.error_code = "agent.clarification_required"
+        run.context = {
+            **run.context,
+            "clarification": follow_up_clarification.model_dump(mode="json"),
+        }
+        _persist_agent_message(
+            db,
+            run,
+            clarification_presentation(follow_up_clarification),
+            key="follow-up-clarification",
+        )
+        add_event(
+            db,
+            run,
+            "run.clarification_required",
+            {"code": run.error_code, "clarification": run.context["clarification"]},
+        )
+        db.commit()
+        return
     _checkpoint(db, run, run.current_node)
 
     try:
+        if follow_up is not None and follow_up.relation == "explain":
+            raw_intent = run.context.get("intent")
+            if not isinstance(raw_intent, dict):
+                raise ModelGatewayError("agent.previous_result_not_available")
+            _complete_verified_result_explanation(db, run, Intent.model_validate(raw_intent))
+            return
         raw_intent = run.context.get("intent")
         revision_pending = run.context.get("intent_revision_pending") is True
         if isinstance(raw_intent, dict) and revision_pending:
             previous = Intent.model_validate(raw_intent)
             _check_budget(run, model=True)
             message = str(run.context.get("latest_user_message") or "")
-            intent, revision, usage = revise_intent(gateway, previous, message)
+            raw_decision = run.context.get("follow_up_decision")
+            follow_up_decision = (
+                FollowUpDecision.model_validate(raw_decision)
+                if isinstance(raw_decision, dict)
+                else None
+            )
+            intent, revision, usage = revise_intent(
+                gateway,
+                previous,
+                message,
+                relation=(
+                    follow_up_decision.relation
+                    if follow_up_decision is not None
+                    else None
+                ),
+                suggested_patch=(
+                    follow_up_decision.patch.model_dump(mode="json", exclude_none=True)
+                    if follow_up_decision is not None
+                    and follow_up_decision.patch is not None
+                    else None
+                ),
+            )
             run.model_calls += usage.model_calls
             run.total_tokens += usage.total_tokens
             revision_number = _as_int(run.context.get("intent_revision"), 1) + 1
@@ -548,37 +768,37 @@ def run_analysis(
             _checkpoint(db, run, "route")
         raw_route = run.context.get("route")
         if isinstance(raw_route, dict):
-            decision = RouteDecision.model_validate(raw_route)
+            route_decision = RouteDecision.model_validate(raw_route)
         else:
-            decision = route_intent(intent)
+            route_decision = route_intent(intent)
             run.context = {
                 **run.context,
-                "route": decision.model_dump(mode="json"),
-                "defaults_applied": decision.defaults_applied,
+                "route": route_decision.model_dump(mode="json"),
+                "defaults_applied": route_decision.defaults_applied,
             }
             add_event(
                 db,
                 run,
                 "run.route_selected",
                 {
-                    "route": decision.route,
-                    "requires_binding": decision.requires_binding,
+                    "route": route_decision.route,
+                    "requires_binding": route_decision.requires_binding,
                 },
             )
-            if decision.defaults_applied:
+            if route_decision.defaults_applied:
                 add_event(
                     db,
                     run,
                     "run.defaults_applied",
-                    {"defaults": decision.defaults_applied},
+                    {"defaults": route_decision.defaults_applied},
                 )
-        if decision.clarification is not None:
+        if route_decision.clarification is not None:
             raise SemanticBindingError(
                 "agent.clarification_required",
                 "The routed question needs clarification",
-                decision.clarification,
+                route_decision.clarification,
             )
-        if decision.route == "capability_help":
+        if route_decision.route == "capability_help":
             try:
                 _complete_capability_help(db, run, intent)
             except ModelGatewayError as exc:
@@ -586,7 +806,7 @@ def run_analysis(
             except Exception as exc:
                 _fail(db, run, _exception_code(exc), retryable=False)
             return
-        if decision.route == "catalog_exploration":
+        if route_decision.route == "catalog_exploration":
             try:
                 _complete_catalog_search(db, run, intent)
             except ModelGatewayError as exc:
@@ -594,7 +814,7 @@ def run_analysis(
             except Exception as exc:
                 _fail(db, run, _exception_code(exc), retryable=False)
             return
-        if not decision.requires_binding:
+        if not route_decision.requires_binding:
             _fail(db, run, "agent.route_not_available", retryable=False)
             return
         _checkpoint(db, run, "bind")
@@ -614,8 +834,8 @@ def run_analysis(
     except SemanticBindingError as exc:
         run.status = AnalysisRunStatus.WAITING_FOR_CLARIFICATION
         run.error_code = exc.code
-        clarification = exc.clarification.model_dump(mode="json")
-        run.context = {**run.context, "clarification": clarification}
+        clarification_payload = exc.clarification.model_dump(mode="json")
+        run.context = {**run.context, "clarification": clarification_payload}
         _persist_agent_message(
             db,
             run,
@@ -626,7 +846,7 @@ def run_analysis(
             db,
             run,
             "run.clarification_required",
-            {"code": exc.code, "clarification": clarification},
+            {"code": exc.code, "clarification": clarification_payload},
         )
         db.commit()
         return

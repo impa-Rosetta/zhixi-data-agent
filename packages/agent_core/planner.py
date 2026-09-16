@@ -100,6 +100,9 @@ def revise_intent(
     gateway: ModelGateway,
     previous: Intent,
     message: str,
+    *,
+    relation: str | None = None,
+    suggested_patch: dict[str, object] | None = None,
 ) -> tuple[Intent, IntentRevision, GatewayUsage]:
     prompt = (
         "Revise the prior manufacturing analysis intent using the new user message. "
@@ -107,6 +110,8 @@ def revise_intent(
         "metrics, dimensions, filters, time_range, comparison or output. Return mode=replace "
         "with a complete Intent only when the user explicitly changes the task goal. "
         "Never add formulas, SQL, code, credentials or authorization. "
+        f"Validated follow-up relation: {relation}. "
+        f"Deterministic safe patch candidate: {suggested_patch}. "
         f"Prior intent: {previous.model_dump(mode='json')}. New user message: {message}"
     )
     result = gateway.generate_structured(

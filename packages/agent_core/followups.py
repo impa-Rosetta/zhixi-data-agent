@@ -34,7 +34,15 @@ _REFINE_MARKERS = (
     "展开",
 )
 _CONTINUE_MARKERS = ("继续", "接着", "然后", "再看", "再分析", "还有呢")
-_SWITCH_MARKERS = ("换个话题", "新问题", "另外问", "不谈这个", "先不看这个")
+_SWITCH_MARKERS = (
+    "换个话题",
+    "开始新主题",
+    "新主题",
+    "新问题",
+    "另外问",
+    "不谈这个",
+    "先不看这个",
+)
 _CAPABILITY_OR_CATALOG_MARKERS = (
     "你是谁",
     "你能做什么",
