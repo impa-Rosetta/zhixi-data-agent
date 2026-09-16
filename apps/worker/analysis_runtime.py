@@ -670,6 +670,19 @@ def run_analysis(
         return
     run.model_calls += follow_up_usage.model_calls
     run.total_tokens += follow_up_usage.total_tokens
+    if follow_up is not None:
+        add_event(
+            db,
+            run,
+            "run.follow_up_classified",
+            {
+                "relation": follow_up.relation,
+                "confidence": follow_up.confidence,
+                "needs_clarification": follow_up.needs_clarification,
+            },
+        )
+        if follow_up.relation == "switch_topic":
+            add_event(db, run, "run.topic_switched", {"relation": "switch_topic"})
     if follow_up is not None and follow_up.needs_clarification:
         follow_up_clarification = ClarificationRequest(
             reason_code="follow_up_relation_ambiguous",

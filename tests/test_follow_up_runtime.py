@@ -14,6 +14,7 @@ from apps.worker.analysis_runtime import run_analysis
 from packages.agent_core.conversation_runtime import synchronize_conversation_after_run
 from packages.agent_core.persistence import (
     AnalysisArtifact,
+    AnalysisEvent,
     AnalysisEvidence,
     AnalysisMessage,
     AnalysisRun,
@@ -337,3 +338,8 @@ def test_switch_topic_does_not_seed_the_previous_metric_intent() -> None:
     assert run.context["intent"]["task_type"] == "catalog_exploration"
     assert run.context["intent"]["metrics"] == []
     assert run.context["follow_up_relation"] == "switch_topic"
+    event_types = db.scalars(
+        select(AnalysisEvent.event_type).where(AnalysisEvent.run_id == run.id)
+    ).all()
+    assert "run.follow_up_classified" in event_types
+    assert "run.topic_switched" in event_types
