@@ -17,14 +17,17 @@ from apps.api.services.analysis_conversations import (
 from apps.api.services.analysis_runs import create_run
 from packages.agent_core.conversation_runtime import synchronize_conversation_after_run
 from packages.agent_core.persistence import (
+    AnalysisArtifact,
     AnalysisConversation,
     AnalysisEvent,
+    AnalysisEvidence,
     AnalysisMessage,
     AnalysisRun,
     AnalysisRunStatus,
     AnalysisTurn,
     AnalysisTurnRelation,
     AnalysisTurnStatus,
+    AnalysisValidation,
 )
 from packages.platform_core.database import Base
 from packages.platform_core.models import OutboxEvent, User, Workspace
@@ -221,6 +224,101 @@ def test_completed_run_can_continue_in_same_conversation() -> None:
         limit=1,
     )
     assert [item.turn.sequence for item in latest_window.turns] == [2]
+
+
+def test_completed_run_updates_safe_context_and_queued_turn_uses_latest_snapshot() -> None:
+    db, user, workspace = _database()
+    conversation = create_conversation(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="context-conversation",
+        payload=CreateAnalysisConversationRequest(message="分析不良率"),
+    )
+    first_turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.sequence == 1))
+    assert first_turn is not None and first_turn.analysis_run_id is not None
+    first_run = db.get(AnalysisRun, first_turn.analysis_run_id)
+    assert first_run is not None
+    first_run.context = {
+        **first_run.context,
+        "intent": {
+            "domain": "manufacturing_quality",
+            "task_type": "metric_query",
+            "goal": "分析不良率",
+            "metrics": ["不良率"],
+            "dimensions": [],
+            "filters": {},
+            "time_range": None,
+            "comparison": None,
+            "output": ["table"],
+            "ambiguities": [],
+            "confidence": 1.0,
+        },
+        "binding": {
+            "semantic_model_id": str(uuid.uuid4()),
+            "semantic_version_id": str(uuid.uuid4()),
+            "snapshot_ids": [str(uuid.uuid4())],
+            "metric_keys": ["defect_rate"],
+            "dimension_keys": [],
+            "confidence": 1.0,
+        },
+        "result": {"rows": [[0.03]], "row_count": 1},
+        "connection_string": "must-not-be-inherited",
+    }
+    artifact = AnalysisArtifact(
+        workspace_id=workspace.id,
+        run_id=first_run.id,
+        artifact_type="query_result",
+        summary={"row_count": 1},
+        content_digest="a" * 64,
+    )
+    db.add(artifact)
+    db.flush()
+    evidence = AnalysisEvidence(
+        workspace_id=workspace.id,
+        run_id=first_run.id,
+        artifact_id=artifact.id,
+        evidence_type="query_execution",
+        reference={"trust": "trusted"},
+        evidence_digest="b" * 64,
+    )
+    db.add(evidence)
+    db.add(
+        AnalysisValidation(
+            workspace_id=workspace.id,
+            run_id=first_run.id,
+            validation_type="result_contract",
+            outcome="passed",
+            findings=[],
+        )
+    )
+    first_run.status = AnalysisRunStatus.RUNNING
+    first_turn.status = AnalysisTurnStatus.RUNNING
+    send_conversation_message(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=conversation.id,
+        actor_user_id=user.id,
+        idempotency_key="queued-refine",
+        payload=SendAnalysisConversationMessageRequest(message="按月份展开"),
+    )
+
+    first_run.status = AnalysisRunStatus.COMPLETED
+    first_run.finished_at = datetime.now(UTC)
+    assert synchronize_conversation_after_run(db, run_id=first_run.id)
+
+    stored = db.get(AnalysisConversation, conversation.id)
+    second_turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.sequence == 2))
+    assert stored is not None
+    assert second_turn is not None and second_turn.analysis_run_id is not None
+    second_run = db.get(AnalysisRun, second_turn.analysis_run_id)
+    assert second_run is not None
+    assert stored.context["metric"] == {"key": "defect_rate", "name": "不良率"}
+    assert stored.context["last_result"]["artifact_id"] == str(artifact.id)
+    assert stored.context["last_result"]["evidence_id"] == str(evidence.id)
+    assert "connection_string" not in stored.context
+    assert second_turn.context_before == stored.context
+    assert second_run.context["conversation_context"] == stored.context
 
 
 def test_messages_sent_while_running_queue_and_activate_strictly_in_order() -> None:
