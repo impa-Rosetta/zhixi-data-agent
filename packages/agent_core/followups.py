@@ -78,19 +78,38 @@ def classify_follow_up_deterministically(
             if "同比" in normalized or "去年" in normalized
             else "previous_period"
         )
+        dimensions: tuple[str, ...] | None = None
+        if "上月" in normalized:
+            dimensions = ("月份",)
+        elif "上周" in normalized:
+            dimensions = ("周",)
+        elif "同比" in normalized or "去年" in normalized:
+            dimensions = ("年份",)
         return FollowUpDecision(
             relation="compare",
-            patch=ContextPatch(comparison=comparison),
+            patch=ContextPatch(comparison=comparison, dimensions=dimensions),
             confidence=1.0,
         )
     if any(marker in normalized for marker in _REFINE_MARKERS):
-        output = ("time_series",) if any(
-            marker in normalized
-            for marker in ("按月", "每月", "月度", "按周", "每周", "按天", "每日", "按季度", "按年")
-        ) else None
+        grain: str | None = None
+        for markers, label in (
+            (("按月", "每月", "月度"), "月份"),
+            (("按周", "每周"), "周"),
+            (("按天", "每日"), "日期"),
+            (("按季度",), "季度"),
+            (("按年",), "年份"),
+        ):
+            if any(marker in normalized for marker in markers):
+                grain = label
+                break
+        output = ("time_series",) if grain is not None else None
         return FollowUpDecision(
             relation="refine",
-            patch=ContextPatch(output=output) if output is not None else None,
+            patch=(
+                ContextPatch(dimensions=(grain,), output=output)
+                if grain is not None
+                else None
+            ),
             confidence=1.0,
         )
     if any(marker in normalized for marker in _CONTINUE_MARKERS):

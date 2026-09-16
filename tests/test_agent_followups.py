@@ -40,6 +40,20 @@ def test_explicit_follow_ups_are_classified_without_model(
     assert gateway.calls == []
 
 
+def test_explicit_time_follow_ups_include_governed_context_patches() -> None:
+    gateway = FakeGateway([])
+
+    refine, _ = classify_follow_up(gateway, _intent(), "按月份展开")
+    compare, _ = classify_follow_up(gateway, _intent(), "与上月相比")
+
+    assert refine.patch is not None
+    assert refine.patch.dimensions == ("月份",)
+    assert refine.patch.output == ("time_series",)
+    assert compare.patch is not None
+    assert compare.patch.dimensions == ("月份",)
+    assert compare.patch.comparison == "previous_period"
+
+
 def test_ambiguous_follow_up_uses_strict_model_fallback() -> None:
     gateway = FakeGateway(
         [

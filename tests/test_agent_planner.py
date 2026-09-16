@@ -248,3 +248,55 @@ def test_intent_revision_can_explicitly_replace_the_user_goal() -> None:
     assert revised.task_type == "catalog_exploration"
     assert revised.goal == "inspection 表有哪些字段"
     assert revision.mode == "replace"
+
+
+def test_deterministic_follow_up_patch_cannot_be_dropped_by_model_revision() -> None:
+    previous = Intent(
+        task_type="metric_query",
+        goal="分析本月不良率",
+        metrics=("不良率",),
+        confidence=0.95,
+    )
+    gateway = _gateway(
+        {
+            "mode": "patch",
+            "patch": {"output": ["table"]},
+            "replacement": None,
+        }
+    )
+
+    revised, _, _ = revise_intent(
+        gateway,
+        previous,
+        "按月份展开",
+        relation="refine",
+        suggested_patch={"dimensions": ["月份"], "output": ["time_series"]},
+    )
+
+    assert revised.dimensions == ("月份",)
+    assert revised.output == ("time_series",)
+
+
+def test_time_grain_binds_to_the_temporal_dimension_supported_by_metric() -> None:
+    intent = Intent(
+        task_type="metric_query",
+        goal="分析本月不良率",
+        metrics=("不良率",),
+        dimensions=("月份",),
+        time_range="本月",
+        comparison="previous_period",
+        output=("time_series",),
+        confidence=1.0,
+    )
+    semantic = PublishedSemantic(
+        model_id="model-1",
+        version_id="version-1",
+        document=manufacturing_quality_template(),
+    )
+
+    binding = bind_intent(intent, (semantic,))
+    plan = create_plan(intent, binding)
+
+    assert binding.dimension_keys == ("inspection_time",)
+    assert plan.steps[0].arguments["time_grain"] == "month"
+    assert plan.steps[0].arguments["comparison"] == "previous_period"

@@ -73,7 +73,7 @@
 
 ### M7.2-A：Follow-up 契约与确定性分类
 
-状态：实现与自动化验收完成；真实 DeepSeek 回退验收待本地安全注入密钥
+状态：已完成（含真实 DeepSeek 回退与五轮问题链验收）
 
 - 增加 `FollowUpRelation`、安全 ContextPatch 和分类结果；
 - 确定性处理“按月”“换成”“与上月相比”“为什么”、能力和目录等高频表达；
@@ -82,7 +82,7 @@
 
 ### M7.2-B：跨运行 Intent 构建
 
-状态：实现、全量回归与 Compose 部署完成；真实 DeepSeek 问题链待验收
+状态：已完成（含显式时间补丁、指标兼容时间维度绑定与真实问题链）
 
 - 从上轮 `context_after` 白名单继承指标、维度、时间、过滤、比较和 Artifact 引用；
 - continue/refine/explain/compare 分别执行明确合并规则；

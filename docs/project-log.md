@@ -338,6 +338,10 @@
 - 完成白名单 Conversation Context 投影，只继承已验证指标语义和 Artifact/Evidence 引用；
 - 排队轮在执行时读取最新上下文，refine/compare 继承旧 Intent，switch_topic 清除旧主题，explain 使用 analysis.describe 且不重复查询；
 - 关系歧义在同一 Turn 内自然澄清，主题切换与分类结果进入可审计事件；
-- 后端 260 项、前端 51 项测试与全部静态门禁通过，Compose 全栈健康；
+- 显式时间追问补丁在模型修订后强制落地，“月份/周/年份”按指标支持范围绑定唯一时间维度，查询计划显式携带粒度；
+- 后端 263 项、前端 51 项测试与全部静态门禁通过，Compose 全栈健康；
 - Docker Desktop 陈旧 dockerInference socket 通过可恢复移动运行目录修复，旧目录为 `%LOCALAPPDATA%\Docker\run.stale-20260916-1455`；
-- 新 Worker 未持久化 DeepSeek 密钥，真实模型多轮问题链保持待验收，未在仓库、构建上下文或日志中写入密钥。
+- DeepSeek 密钥仅保存在本机 Git 忽略的 `.env`，官方 `deepseek-v4-pro` 最小连通性探测通过，未在仓库、构建上下文、数据库、日志或文档中写入密钥；
+- 真实五轮合成数据链 `initial → refine → compare → explain → switch_topic` 全部完成；解释轮复用验证结果不查源，换题轮返回 5 张授权目录表；
+- 真实回归先后发现并修复缺少受治理时间维度和合成语义模型时间映射的问题；通过正式草稿/发布 API 增加 `inspection_time → inspected_at` 并发布版本 3，未放宽编译与映射校验；
+- M7.2 已完全关闭，进入 M7.3 串行排队与恢复。

@@ -12,6 +12,7 @@ from packages.agent_core.contracts import (
     Binding,
     ClarificationCandidate,
     ClarificationRequest,
+    ContextPatch,
     Intent,
     IntentRevision,
     RouteDecision,
@@ -123,7 +124,10 @@ def revise_intent(
         IntentRevision,
     )
     revision = IntentRevision.model_validate(result.output)
-    return revision.apply(previous), revision, result.usage
+    revised = revision.apply(previous)
+    if suggested_patch:
+        revised = ContextPatch.model_validate(suggested_patch).apply(revised)
+    return revised, revision, result.usage
 
 
 def route_intent(intent: Intent) -> RouteDecision:
@@ -201,9 +205,10 @@ def bind_intent(
             intent.metrics,
             ((item.key, item.name, tuple(item.aliases)) for item in semantic.document.metrics),
         )
-        dimensions = _resolve_terms(
+        dimensions = _resolve_dimensions(
             intent.dimensions,
-            ((item.key, item.name, tuple(item.aliases)) for item in semantic.document.dimensions),
+            semantic.document,
+            metrics or (),
         )
         if metrics is not None and dimensions is not None:
             candidates.append((semantic, metrics, dimensions))
@@ -277,6 +282,76 @@ def _resolve_terms(
     return tuple(resolved)
 
 
+_TIME_GRAIN_TERMS = {
+    "小时": "hour",
+    "按小时": "hour",
+    "日期": "day",
+    "天": "day",
+    "按天": "day",
+    "周": "week",
+    "按周": "week",
+    "月份": "month",
+    "月": "month",
+    "按月": "month",
+    "季度": "quarter",
+    "按季度": "quarter",
+    "年份": "year",
+    "年": "year",
+    "按年": "year",
+}
+
+
+def _resolve_dimensions(
+    requested: tuple[str, ...],
+    document: SemanticDocument,
+    metric_keys: tuple[str, ...],
+) -> tuple[str, ...] | None:
+    metrics = {item.key: item for item in document.metrics}
+    supported_sets = [
+        set(metrics[key].supported_dimensions) for key in metric_keys if key in metrics
+    ]
+    supported = set.intersection(*supported_sets) if supported_sets else set()
+    resolved: list[str] = []
+    for term in requested:
+        normalized = term.strip().casefold()
+        if normalized in _TIME_GRAIN_TERMS:
+            matches = [
+                item.key
+                for item in document.dimensions
+                if item.dimension_type == "temporal" and item.key in supported
+            ]
+        else:
+            matches = [
+                item.key
+                for item in document.dimensions
+                if normalized
+                in {
+                    item.key.casefold(),
+                    item.name.casefold(),
+                    *(alias.casefold() for alias in item.aliases),
+                }
+            ]
+        if len(matches) != 1:
+            return None
+        resolved.append(matches[0])
+    return tuple(resolved)
+
+
+def _intent_time_grain(intent: Intent) -> str | None:
+    text = "".join((intent.goal, intent.time_range or "", *intent.dimensions)).casefold()
+    for markers, grain in (
+        (("小时", "按小时"), "hour"),
+        (("按天", "每日", "日期", "天粒度"), "day"),
+        (("按周", "每周", "上周", "周粒度"), "week"),
+        (("按月", "每月", "月份", "本月", "上月", "月度", "月粒度"), "month"),
+        (("按季度", "季度", "季粒度"), "quarter"),
+        (("按年", "每年", "年份", "去年", "年度", "年粒度"), "year"),
+    ):
+        if any(marker in text for marker in markers):
+            return grain
+    return None
+
+
 def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
     arguments: dict[str, object] = {
         "semantic_model_id": binding.semantic_model_id,
@@ -286,6 +361,7 @@ def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
         "filters": dict(intent.filters),
         "time_range": intent.time_range,
         "comparison": intent.comparison or "none",
+        "time_grain": _intent_time_grain(intent) if binding.dimension_keys else None,
         "limit": 200,
     }
     return AnalysisPlan(

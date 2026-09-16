@@ -7,7 +7,7 @@ import json
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -1046,7 +1046,12 @@ def _execute_metric(db: Session, run: AnalysisRun, plan: AnalysisPlan) -> dict[s
     comparison: Literal["none", "previous_period"] = (
         "previous_period" if arguments.get("comparison") == "previous_period" else "none"
     )
-    temporal = any(item in {"inspection_time", "production_time"} for item in dimensions)
+    raw_time_grain = arguments.get("time_grain")
+    time_grain: Literal["hour", "day", "week", "month", "quarter", "year"] | None = (
+        cast(Literal["hour", "day", "week", "month", "quarter", "year"], raw_time_grain)
+        if raw_time_grain in {"hour", "day", "week", "month", "quarter", "year"}
+        else None
+    )
     raw_metrics = arguments.get("metrics")
     metrics = [str(item) for item in raw_metrics] if isinstance(raw_metrics, list) else []
     request = SemanticQueryRequest(
@@ -1054,7 +1059,7 @@ def _execute_metric(db: Session, run: AnalysisRun, plan: AnalysisPlan) -> dict[s
         metrics=metrics,
         dimensions=dimensions,
         filters=filters,
-        time_grain="month" if temporal else None,
+        time_grain=time_grain,
         comparison=comparison,
         limit=_as_int(arguments.get("limit"), 200),
     )
