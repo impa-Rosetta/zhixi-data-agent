@@ -3,7 +3,7 @@
 - 状态：执行中
 - 日期：2026-09-15
 - 规格：`docs/superpowers/specs/2026-09-15-m7-multi-turn-conversation-design.md`
-- 当前入口：M7.2-A Follow-up 契约与确定性分类
+- 当前入口：M7.2 真实 DeepSeek 多轮验收与 M7.3-B 恢复强化
 
 ## 执行规则
 
@@ -73,12 +73,16 @@
 
 ### M7.2-A：Follow-up 契约与确定性分类
 
+状态：实现与自动化验收完成；真实 DeepSeek 回退验收待本地安全注入密钥
+
 - 增加 `FollowUpRelation`、安全 ContextPatch 和分类结果；
 - 确定性处理“按月”“换成”“与上月相比”“为什么”、能力和目录等高频表达；
 - 其余表达通过 Model Gateway 产生严格候选；
 - 本地验证关系、字段和上下文，不接受模型生成 SQL、工具名或权限。
 
 ### M7.2-B：跨运行 Intent 构建
+
+状态：实现、全量回归与 Compose 部署完成；真实 DeepSeek 问题链待验收
 
 - 从上轮 `context_after` 白名单继承指标、维度、时间、过滤、比较和 Artifact 引用；
 - continue/refine/explain/compare 分别执行明确合并规则；
@@ -87,7 +91,7 @@
 
 ### M7.2-C：完成态后的继续发送
 
-状态：基础链路已完成；上下文继承待 M7.2-A/B 完成
+状态：已完成
 
 - Conversation 消息接口在任何非归档状态可写；
 - 当前 Turn 澄清回复继续原 Run，其他稳定状态创建下一 Turn 和 Run；

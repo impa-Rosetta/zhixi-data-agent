@@ -332,3 +332,12 @@
 - 完整门禁为 Ruff、严格 MyPy 83 个源文件、223 项 Pytest、49 项 Vitest、ESLint、TypeScript 与 Vite 生产构建全绿；
 - 桌面 Chrome 与 390px 移动端的能力回答、目录结构、Evidence、验证结论和无横向溢出共 4 项 Playwright 验收通过；
 - 详细证据见 `docs/acceptance/M6.2-conversational-agent-presentation-acceptance.md`。
+## 2026-09-16：M7.2 追问分类与跨轮上下文继承
+
+- 新增严格 FollowUpDecision 和确定性优先分类器，高频追问无需额外模型调用，未知表达才进入 DeepSeek 结构化回退；
+- 完成白名单 Conversation Context 投影，只继承已验证指标语义和 Artifact/Evidence 引用；
+- 排队轮在执行时读取最新上下文，refine/compare 继承旧 Intent，switch_topic 清除旧主题，explain 使用 analysis.describe 且不重复查询；
+- 关系歧义在同一 Turn 内自然澄清，主题切换与分类结果进入可审计事件；
+- 后端 260 项、前端 51 项测试与全部静态门禁通过，Compose 全栈健康；
+- Docker Desktop 陈旧 dockerInference socket 通过可恢复移动运行目录修复，旧目录为 `%LOCALAPPDATA%\Docker\run.stale-20260916-1455`；
+- 新 Worker 未持久化 DeepSeek 密钥，真实模型多轮问题链保持待验收，未在仓库、构建上下文或日志中写入密钥。
