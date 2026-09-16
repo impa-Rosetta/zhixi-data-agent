@@ -345,3 +345,13 @@
 - 真实五轮合成数据链 `initial → refine → compare → explain → switch_topic` 全部完成；解释轮复用验证结果不查源，换题轮返回 5 张授权目录表；
 - 真实回归先后发现并修复缺少受治理时间维度和合成语义模型时间映射的问题；通过正式草稿/发布 API 增加 `inspection_time → inspected_at` 并发布版本 3，未放宽编译与映射校验；
 - M7.2 已完全关闭，进入 M7.3 串行排队与恢复。
+
+## 2026-09-16：M7.2.1 基础社交交互
+
+- 新增受控 small_talk 意图，确定性覆盖“你好、在吗、谢谢、再见”及常见中英文短寒暄，不调用 DeepSeek 或数据源；
+- 寒暄使用 system.small_talk 内部工具完整记录 Plan、ToolCall、assistant_message Artifact、conversation_scope Validation 和完成事件，不生成虚假数据 Evidence；
+- 分析会话中的寒暄不覆盖原业务上下文，后续追问跳过 small_talk Intent，继续引用最近一次业务 Intent 与已验证结果；
+- 完整短句匹配避免吞掉“你好，我想看不良率”等复合业务请求；
+- 后端 272 项测试、Ruff、严格 MyPy 89 个源文件全部通过；
+- 真实会话 `1890414e-b9b1-45a5-a8b9-50f07a66ed62` 中“你好”“谢谢”均 completed、模型调用 0、数据 Evidence 0；
+- Docker Desktop 4.46 再次命中陈旧 dockerInference socket，运行目录可恢复备份为 `%LOCALAPPDATA%\Docker\run.stale-20260916-204414` 后 Engine 28.4.0 与 Compose 全栈恢复，未删除镜像、卷或数据库。

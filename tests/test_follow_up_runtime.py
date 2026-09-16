@@ -343,3 +343,48 @@ def test_switch_topic_does_not_seed_the_previous_metric_intent() -> None:
     ).all()
     assert "run.follow_up_classified" in event_types
     assert "run.topic_switched" in event_types
+
+
+def test_small_talk_interlude_preserves_business_context_for_next_follow_up() -> None:
+    db, user, workspace = _database()
+    conversation_id, _, source_artifact = _completed_first_turn(db, user, workspace)
+    turn, run = _send_follow_up(
+        db,
+        user,
+        workspace,
+        conversation_id,
+        key="small-talk-interlude",
+        message="你好",
+    )
+
+    run_analysis(db, run_id=run.id, gateway=FakeGateway([]))
+    synchronize_conversation_after_run(db, run_id=run.id)
+    db.refresh(run)
+    db.refresh(turn)
+
+    assert run.status is AnalysisRunStatus.COMPLETED
+    assert run.context["intent"]["task_type"] == "small_talk"
+    assert turn.relation is AnalysisTurnRelation.CONTINUE
+    assert turn.context_before == turn.context_after
+    assert turn.context_after["metric"] == {"key": "defect_rate", "name": "不良率"}
+    assert turn.context_after["last_result"]["artifact_id"] == str(source_artifact.id)
+
+    send_conversation_message(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=conversation_id,
+        actor_user_id=user.id,
+        idempotency_key="explain-after-small-talk",
+        payload=SendAnalysisConversationMessageRequest(message="为什么会这样？"),
+    )
+    next_turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.sequence == 3))
+    assert next_turn is not None and next_turn.analysis_run_id is not None
+    next_run = db.get(AnalysisRun, next_turn.analysis_run_id)
+    assert next_run is not None
+
+    run_analysis(db, run_id=next_run.id, gateway=FakeGateway([]))
+
+    db.refresh(next_run)
+    db.refresh(next_turn)
+    assert next_run.status is AnalysisRunStatus.COMPLETED
+    assert next_turn.relation is AnalysisTurnRelation.EXPLAIN

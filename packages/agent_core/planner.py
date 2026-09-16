@@ -17,6 +17,7 @@ from packages.agent_core.contracts import (
     IntentRevision,
     RouteDecision,
 )
+from packages.agent_core.small_talk import classify_small_talk
 from packages.model_gateway import GatewayMessage, GatewayRequest, GatewayUsage, ModelGateway
 from packages.shared_contracts.semantic_models import SemanticDocument
 
@@ -67,18 +68,28 @@ def _direct_capability_intent(question: str) -> Intent | None:
     )
 
 
+def _direct_small_talk_intent(question: str) -> Intent | None:
+    if classify_small_talk(question) is None:
+        return None
+    return Intent(task_type="small_talk", goal=question.strip(), confidence=1.0)
+
+
 def understand(
     gateway: ModelGateway,
     question: str,
     *,
     context: dict[str, object] | None = None,
 ) -> tuple[Intent, GatewayUsage]:
+    direct_small_talk = _direct_small_talk_intent(question)
+    if direct_small_talk is not None:
+        return direct_small_talk, GatewayUsage(model_calls=0)
     direct_intent = _direct_capability_intent(question)
     if direct_intent is not None:
         return direct_intent, GatewayUsage(model_calls=0)
     prompt = (
         "Extract a manufacturing quality analysis intent as JSON. "
-        "Classify capability questions as capability_help, questions about available data, "
+        "Classify short social greetings or thanks as small_talk, capability questions as "
+        "capability_help, questions about available data, "
         "tables or fields as catalog_exploration, governed metric questions as metric_query, "
         "and unrelated or prohibited requests as unsupported. "
         "Use metric and dimension terms from the user; never invent formulas, SQL, code, "
@@ -131,6 +142,8 @@ def revise_intent(
 
 
 def route_intent(intent: Intent) -> RouteDecision:
+    if intent.task_type == "small_talk":
+        return RouteDecision(route="small_talk", requires_binding=False)
     if intent.task_type == "capability_help":
         return RouteDecision(route="capability_help", requires_binding=False)
     if intent.task_type in {"catalog_exploration", "exploration"}:

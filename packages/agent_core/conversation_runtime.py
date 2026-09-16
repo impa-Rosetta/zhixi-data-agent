@@ -22,6 +22,7 @@ from packages.agent_core.persistence import (
     AnalysisTurnStatus,
     AnalysisValidation,
 )
+from packages.agent_core.small_talk import classify_small_talk
 from packages.model_gateway import GatewayUsage, ModelGateway, ModelGatewayError
 from packages.platform_core.models import OutboxEvent
 from packages.shared_contracts.agents import AnalysisConversationContext
@@ -59,6 +60,8 @@ def _project_completed_context(
     if not isinstance(raw_intent, dict):
         return None
     intent = Intent.model_validate(raw_intent)
+    if intent.task_type == "small_talk":
+        return AnalysisConversationContext.model_validate(turn.context_before)
     raw_binding = run.context.get("binding")
     binding = Binding.model_validate(raw_binding) if isinstance(raw_binding, dict) else None
     artifact = db.scalar(
@@ -125,7 +128,9 @@ def _previous_intent_run(
     for previous_run in rows:
         raw_intent = previous_run.context.get("intent")
         if isinstance(raw_intent, dict):
-            return previous_run, Intent.model_validate(raw_intent)
+            intent = Intent.model_validate(raw_intent)
+            if intent.task_type != "small_talk":
+                return previous_run, intent
     return None, None
 
 
@@ -153,8 +158,30 @@ def prepare_conversation_run(
     )
     if turn is None or conversation is None or turn.sequence == 1:
         return None, GatewayUsage(model_calls=0)
-    previous_run, previous_intent = _previous_intent_run(db, run=run, turn=turn)
     message = str(run.context.get("latest_user_message") or run.context.get("goal") or "")
+    current_context = AnalysisConversationContext.model_validate(conversation.context)
+    if classify_small_talk(message) is not None:
+        decision = FollowUpDecision(relation="continue", confidence=1.0)
+        turn.relation = type(turn.relation)(decision.relation)
+        preserved = current_context.model_dump(mode="json")
+        turn.context_before = preserved
+        turn.context_after = preserved
+        run.context = {
+            **run.context,
+            "latest_user_message": message,
+            "conversation_context": preserved,
+            "follow_up_decision": decision.model_dump(mode="json"),
+            "follow_up_relation": decision.relation,
+            "intent": Intent(
+                task_type="small_talk",
+                goal=message.strip(),
+                confidence=1.0,
+            ).model_dump(mode="json"),
+            "intent_revision_pending": False,
+        }
+        db.flush()
+        return decision, GatewayUsage(model_calls=0)
+    previous_run, previous_intent = _previous_intent_run(db, run=run, turn=turn)
     deterministic = classify_follow_up_deterministically(
         message,
         has_prior_intent=previous_intent is not None,
@@ -168,7 +195,6 @@ def prepare_conversation_run(
             raise ModelGatewayError("agent.token_budget_exhausted")
     decision, usage = classify_follow_up(gateway, previous_intent, message)
     turn.relation = type(turn.relation)(decision.relation)
-    current_context = AnalysisConversationContext.model_validate(conversation.context)
     turn.context_before = current_context.model_dump(mode="json")
     if decision.relation == "switch_topic":
         context_after = AnalysisConversationContext(

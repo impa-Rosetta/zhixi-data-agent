@@ -55,7 +55,9 @@ from packages.agent_core.presentation import (
     clarification_presentation,
     failure_presentation,
     query_presentation,
+    small_talk_presentation,
 )
+from packages.agent_core.small_talk import small_talk_response
 from packages.model_gateway import ModelGateway, ModelGatewayError
 from packages.semantic_model.models import SemanticModel, SemanticModelVersion
 from packages.shared_contracts.queries import QueryFilter, SemanticQueryRequest
@@ -215,6 +217,120 @@ def _check_budget(run: AnalysisRun, *, model: bool = False, tool: bool = False) 
 
 def _as_int(value: object, default: int) -> int:
     return value if isinstance(value, int) else default
+
+
+def _complete_small_talk(db: Session, run: AnalysisRun, intent: Intent) -> None:
+    plan = AnalysisPlan(
+        goal=intent.goal,
+        steps=(
+            AnalysisStep(
+                id="respond_socially",
+                tool="system.small_talk",
+                arguments={"message": intent.goal},
+                expected_evidence=("conversation_scope",),
+            ),
+        ),
+    )
+    plan_record = AnalysisPlanRecord(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        revision=run.replan_count + 1,
+        goal=plan.goal,
+        document=plan.model_dump(mode="json"),
+        requires_confirmation=False,
+    )
+    db.add(plan_record)
+    db.flush()
+    step = AnalysisStepRecord(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        plan_id=plan_record.id,
+        step_key=plan.steps[0].id,
+        tool_name=plan.steps[0].tool,
+        arguments=plan.steps[0].arguments,
+        dependencies=[],
+        status=AnalysisStepStatus.PENDING,
+    )
+    db.add(step)
+    run.context = {**run.context, "plan": plan.model_dump(mode="json")}
+    _checkpoint(db, run, "policy_check")
+
+    _check_budget(run, tool=True)
+    step.status = AnalysisStepStatus.RUNNING
+    step.started_at = datetime.now(UTC)
+    _checkpoint(db, run, "execute")
+    result = small_talk_response(intent.goal)
+    _persist_agent_message(
+        db,
+        run,
+        small_talk_presentation(str(result["message"])),
+        key="small-talk-answer",
+    )
+    normalized = json.dumps(
+        plan.steps[0].arguments,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(normalized.encode()).hexdigest()
+    db.add(
+        AnalysisToolCall(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            step_id=step.id,
+            tool_name="system.small_talk",
+            tool_version="1.0.0",
+            idempotency_key=hashlib.sha256(
+                f"{run.id}:{run.replan_count}:{step.step_key}:{normalized}".encode()
+            ).hexdigest(),
+            argument_digest=digest,
+            status=AnalysisStepStatus.SUCCEEDED,
+            result_summary=result,
+        )
+    )
+    run.tool_calls += 1
+    step.status = AnalysisStepStatus.SUCCEEDED
+    step.finished_at = datetime.now(UTC)
+
+    canonical = json.dumps(result, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    artifact_digest = hashlib.sha256(canonical.encode()).hexdigest()
+    artifact = AnalysisArtifact(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        artifact_type="assistant_message",
+        summary=result,
+        content_digest=artifact_digest,
+    )
+    db.add(artifact)
+    db.flush()
+    db.add(
+        AnalysisValidation(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            validation_type="conversation_scope",
+            outcome="passed",
+            findings=[],
+        )
+    )
+    run.context = {
+        **run.context,
+        "result": result,
+        "artifact_id": str(artifact.id),
+        "evidence_digest": artifact_digest,
+    }
+    _checkpoint(db, run, "verify")
+    run.status = AnalysisRunStatus.COMPLETED
+    run.current_node = "present"
+    run.finished_at = datetime.now(UTC)
+    run.error_code = None
+    run.version += 1
+    add_event(
+        db,
+        run,
+        "run.completed",
+        {"artifact_id": str(artifact.id), "trust": "system", "kind": result["kind"]},
+    )
+    db.commit()
 
 
 def _complete_capability_help(db: Session, run: AnalysisRun, intent: Intent) -> None:
@@ -811,6 +927,14 @@ def run_analysis(
                 "The routed question needs clarification",
                 route_decision.clarification,
             )
+        if route_decision.route == "small_talk":
+            try:
+                _complete_small_talk(db, run, intent)
+            except ModelGatewayError as exc:
+                _fail(db, run, exc.code, retryable=exc.retryable)
+            except Exception as exc:
+                _fail(db, run, _exception_code(exc), retryable=False)
+            return
         if route_decision.route == "capability_help":
             try:
                 _complete_capability_help(db, run, intent)

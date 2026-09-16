@@ -151,6 +151,14 @@ def answer_presentation(content: str) -> AgentPresentation:
     return _presentation(content.strip() or "这项操作已经完成。", kind="answer")
 
 
+def small_talk_presentation(content: str) -> AgentPresentation:
+    return _presentation(
+        content.strip() or "你好！今天想分析什么？",
+        kind="answer",
+        quick_replies=("你能做什么？", "数据库里有哪些表？", "不良率是多少？"),
+    )
+
+
 def _safe_labels(values: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(label for value in values if (label := _safe_label(value)))
 

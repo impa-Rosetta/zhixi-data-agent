@@ -7,6 +7,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 AnalysisRoute = Literal[
+    "small_talk",
     "capability_help",
     "catalog_exploration",
     "metric_query",
@@ -22,6 +23,7 @@ class Intent(BaseModel):
     model_config = ConfigDict(extra="forbid")
     domain: str = "manufacturing_quality"
     task_type: Literal[
+        "small_talk",
         "capability_help",
         "catalog_exploration",
         "metric_query",

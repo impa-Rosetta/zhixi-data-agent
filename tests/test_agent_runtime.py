@@ -331,6 +331,35 @@ def test_runtime_completes_capability_help_without_semantic_or_data_access() -> 
     assert view.validations[0].outcome == "passed"
 
 
+def test_runtime_answers_greeting_without_model_or_data_access() -> None:
+    db, user, workspace = _database()
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="small-talk-greeting",
+        payload=CreateAnalysisRunRequest(message="你好"),
+    ).id
+
+    run_analysis(db, run_id=run_id, gateway=FakeGateway([]))
+
+    stored = db.get(AnalysisRun, run_id)
+    assert stored is not None
+    assert stored.status is AnalysisRunStatus.COMPLETED
+    assert stored.context["route"]["route"] == "small_talk"
+    assert stored.model_calls == 0
+    assert stored.tool_calls == 1
+    view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    assert view.steps[0].tool_name == "system.small_talk"
+    assert view.tool_calls[0].tool_name == "system.small_talk"
+    assert view.artifacts[0].artifact_type == "assistant_message"
+    assert view.evidence == []
+    assert view.validations[0].validation_type == "conversation_scope"
+    assert view.messages[-1].role == "assistant"
+    assert "你好" in view.messages[-1].content
+    assert "超出了" not in view.messages[-1].content
+
+
 def test_capability_help_respects_tool_budget_and_fails_inside_run_lifecycle() -> None:
     db, user, workspace = _database()
     run_id = create_run(

@@ -88,6 +88,33 @@ def test_unambiguous_capability_questions_bypass_model_classification(question: 
     assert usage.total_tokens == 0
 
 
+@pytest.mark.parametrize("message", ["你好", "您好！", "在吗？", "谢谢", "再见", "hello"])
+def test_short_social_messages_bypass_model_classification(message: str) -> None:
+    intent, usage = understand(FakeGateway([]), message)
+
+    assert intent.task_type == "small_talk"
+    assert intent.goal == message
+    assert usage.model_calls == 0
+    assert usage.total_tokens == 0
+
+
+def test_greeting_with_an_analysis_request_is_not_swallowed_as_small_talk() -> None:
+    gateway = _gateway(
+        {
+            "domain": "manufacturing_quality",
+            "task_type": "metric_query",
+            "goal": "分析不良率",
+            "metrics": ["不良率"],
+            "confidence": 0.98,
+        }
+    )
+
+    intent, usage = understand(gateway, "你好，我想看不良率")
+
+    assert intent.task_type == "metric_query"
+    assert usage.model_calls == 1
+
+
 def test_low_confidence_and_unknown_metric_require_clarification() -> None:
     intent, _ = understand(
         _gateway(
