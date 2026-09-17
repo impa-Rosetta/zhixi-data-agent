@@ -58,6 +58,7 @@ from packages.agent_core.presentation import (
     small_talk_presentation,
 )
 from packages.agent_core.small_talk import small_talk_response
+from packages.analysis_engine import compose_chart_spec, describe_verified_result
 from packages.model_gateway import ModelGateway, ModelGatewayError
 from packages.semantic_model.models import SemanticModel, SemanticModelVersion
 from packages.shared_contracts.queries import QueryFilter, SemanticQueryRequest
@@ -165,6 +166,142 @@ def _exception_code(exc: Exception) -> str:
     ):
         return text
     return "agent.execution_failed"
+
+
+def _complete_derived_step(
+    db: Session,
+    *,
+    run: AnalysisRun,
+    plan: AnalysisPlan,
+    step_key: str,
+    source_artifact: AnalysisArtifact,
+    source_evidence: AnalysisEvidence,
+    artifact_type: str,
+    summary: dict[str, object] | None,
+    evidence_type: str,
+    validation_type: str,
+) -> AnalysisArtifact | None:
+    step = db.scalar(
+        select(AnalysisStepRecord).where(
+            AnalysisStepRecord.run_id == run.id,
+            AnalysisStepRecord.step_key == step_key,
+        )
+    )
+    if step is None:
+        return None
+    if summary is None:
+        step.status = AnalysisStepStatus.SKIPPED
+        step.finished_at = datetime.now(UTC)
+        return None
+    _check_budget(run, tool=True)
+    planned = next((item for item in plan.steps if item.id == step_key), None)
+    if planned is None:
+        step.status = AnalysisStepStatus.SKIPPED
+        step.finished_at = datetime.now(UTC)
+        return None
+    resolved_arguments = {"artifact_id": str(source_artifact.id)}
+    normalized = json.dumps(resolved_arguments, sort_keys=True, separators=(",", ":"))
+    call_key = hashlib.sha256(f"{run.id}:{step_key}:{normalized}".encode()).hexdigest()
+    canonical = json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    artifact = AnalysisArtifact(
+        workspace_id=run.workspace_id,
+        run_id=run.id,
+        artifact_type=artifact_type,
+        summary=summary,
+        content_digest=hashlib.sha256(canonical.encode()).hexdigest(),
+    )
+    db.add(artifact)
+    db.flush()
+    db.add(
+        AnalysisToolCall(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            step_id=step.id,
+            tool_name=planned.tool,
+            tool_version="1.0.0",
+            idempotency_key=call_key,
+            argument_digest=hashlib.sha256(normalized.encode()).hexdigest(),
+            status=AnalysisStepStatus.SUCCEEDED,
+            result_summary={
+                "artifact_id": str(artifact.id),
+                "source_artifact_id": str(source_artifact.id),
+            },
+        )
+    )
+    db.add(
+        AnalysisEvidence(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            artifact_id=artifact.id,
+            evidence_type=evidence_type,
+            reference={
+                "source_artifact_id": str(source_artifact.id),
+                "source_evidence_id": str(source_evidence.id),
+                "transform_version": "1.0.0",
+            },
+            evidence_digest=hashlib.sha256(
+                f"{source_evidence.evidence_digest}:{artifact.content_digest}".encode()
+            ).hexdigest(),
+        )
+    )
+    db.add(
+        AnalysisValidation(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            validation_type=validation_type,
+            outcome="passed",
+            findings=[],
+        )
+    )
+    run.tool_calls += 1
+    step.status = AnalysisStepStatus.SUCCEEDED
+    step.started_at = step.started_at or datetime.now(UTC)
+    step.finished_at = datetime.now(UTC)
+    return artifact
+
+
+def _derive_analysis_artifacts(
+    db: Session,
+    *,
+    run: AnalysisRun,
+    plan: AnalysisPlan,
+    intent: Intent,
+    result: dict[str, object],
+    source_artifact: AnalysisArtifact,
+    source_evidence: AnalysisEvidence,
+) -> tuple[AnalysisArtifact | None, AnalysisArtifact | None]:
+    described = describe_verified_result(result, source_artifact_id=source_artifact.id)
+    analysis_artifact = _complete_derived_step(
+        db,
+        run=run,
+        plan=plan,
+        step_key="describe_result",
+        source_artifact=source_artifact,
+        source_evidence=source_evidence,
+        artifact_type="analysis_summary",
+        summary=described.model_dump(mode="json") if described is not None else None,
+        evidence_type="derived_analysis",
+        validation_type="descriptive_statistics",
+    )
+    chart = compose_chart_spec(
+        result,
+        source_artifact_id=source_artifact.id,
+        evidence_id=source_evidence.id,
+        title=intent.goal,
+    )
+    chart_artifact = _complete_derived_step(
+        db,
+        run=run,
+        plan=plan,
+        step_key="compose_visualization",
+        source_artifact=source_artifact,
+        source_evidence=source_evidence,
+        artifact_type="chart_spec",
+        summary=chart.model_dump(mode="json") if chart is not None else None,
+        evidence_type="chart_spec",
+        validation_type="chart_contract",
+    )
+    return analysis_artifact, chart_artifact
 
 
 def _fail(
@@ -852,15 +989,10 @@ def run_analysis(
                 gateway,
                 previous,
                 message,
-                relation=(
-                    follow_up_decision.relation
-                    if follow_up_decision is not None
-                    else None
-                ),
+                relation=(follow_up_decision.relation if follow_up_decision is not None else None),
                 suggested_patch=(
                     follow_up_decision.patch.model_dump(mode="json", exclude_none=True)
-                    if follow_up_decision is not None
-                    and follow_up_decision.patch is not None
+                    if follow_up_decision is not None and follow_up_decision.patch is not None
                     else None
                 ),
             )
@@ -1101,22 +1233,22 @@ def run_analysis(
         db.add(artifact)
         db.flush()
         evidence_digest = str(result.get("evidence_digest") or artifact_digest)
-        db.add(
-            AnalysisEvidence(
-                workspace_id=run.workspace_id,
-                run_id=run.id,
-                artifact_id=artifact.id,
-                evidence_type="query_execution",
-                reference={
-                    "validated_query_id": result.get("validated_query_id"),
-                    "execution_id": result.get("execution_id"),
-                    "semantic_version_id": binding.semantic_version_id,
-                    "snapshot_ids": list(binding.snapshot_ids),
-                    "trust": result.get("trust", "trusted"),
-                },
-                evidence_digest=evidence_digest,
-            )
+        query_evidence = AnalysisEvidence(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            artifact_id=artifact.id,
+            evidence_type="query_execution",
+            reference={
+                "validated_query_id": result.get("validated_query_id"),
+                "execution_id": result.get("execution_id"),
+                "semantic_version_id": binding.semantic_version_id,
+                "snapshot_ids": list(binding.snapshot_ids),
+                "trust": result.get("trust", "trusted"),
+            },
+            evidence_digest=evidence_digest,
         )
+        db.add(query_evidence)
+        db.flush()
         db.add(
             AnalysisValidation(
                 workspace_id=run.workspace_id,
@@ -1126,11 +1258,24 @@ def run_analysis(
                 findings=[],
             )
         )
+        analysis_artifact, chart_artifact = _derive_analysis_artifacts(
+            db,
+            run=run,
+            plan=plan,
+            intent=intent,
+            result=result,
+            source_artifact=artifact,
+            source_evidence=query_evidence,
+        )
         run.context = {
             **run.context,
             "result": result,
             "artifact_id": str(artifact.id),
             "evidence_digest": evidence_digest,
+            "analysis_artifact_id": (
+                str(analysis_artifact.id) if analysis_artifact is not None else None
+            ),
+            "chart_artifact_id": (str(chart_artifact.id) if chart_artifact is not None else None),
         }
         _persist_agent_message(db, run, query_presentation(intent, result), key="query-answer")
         _checkpoint(db, run, "verify")
@@ -1147,6 +1292,12 @@ def run_analysis(
                 "artifact_id": str(artifact.id),
                 "evidence_digest": evidence_digest,
                 "trust": result.get("trust", "trusted"),
+                "analysis_artifact_id": (
+                    str(analysis_artifact.id) if analysis_artifact is not None else None
+                ),
+                "chart_artifact_id": (
+                    str(chart_artifact.id) if chart_artifact is not None else None
+                ),
             },
         )
         db.commit()

@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from packages.agent_core.persistence import (
     AnalysisConversation,
+    AnalysisConversationEvent,
     AnalysisConversationStatus,
     AnalysisRun,
     AnalysisRunStatus,
@@ -177,3 +178,35 @@ def test_turn_cannot_reference_a_conversation_from_another_workspace() -> None:
 
     with pytest.raises(IntegrityError):
         db.commit()
+
+
+def test_conversation_events_are_ordered_and_scoped_to_a_conversation() -> None:
+    db, user, workspace = _database()
+    conversation = _conversation(db, user, workspace)
+    db.add_all(
+        [
+            AnalysisConversationEvent(
+                workspace_id=workspace.id,
+                conversation_id=conversation.id,
+                sequence=1,
+                event_type="conversation.created",
+                payload={"status": "active"},
+            ),
+            AnalysisConversationEvent(
+                workspace_id=workspace.id,
+                conversation_id=conversation.id,
+                sequence=2,
+                event_type="turn.queued",
+                payload={"turn_sequence": 2},
+            ),
+        ]
+    )
+    db.commit()
+
+    stored = db.scalars(
+        select(AnalysisConversationEvent)
+        .where(AnalysisConversationEvent.conversation_id == conversation.id)
+        .order_by(AnalysisConversationEvent.sequence)
+    ).all()
+    assert [item.sequence for item in stored] == [1, 2]
+    assert stored[1].payload == {"turn_sequence": 2}

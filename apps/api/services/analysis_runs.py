@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.audit import add_audit_event
+from packages.agent_core.conversation_events import append_conversation_event
 from packages.agent_core.conversation_runtime import synchronize_conversation_after_run
 from packages.agent_core.persistence import (
     AnalysisArtifact,
@@ -116,9 +117,9 @@ def list_runs(
     bounded_limit = max(1, min(limit, 100))
     bounded_offset = max(0, offset)
     total = db.scalar(
-        select(func.count()).select_from(AnalysisRun).where(
-            AnalysisRun.workspace_id == workspace_id
-        )
+        select(func.count())
+        .select_from(AnalysisRun)
+        .where(AnalysisRun.workspace_id == workspace_id)
     )
     runs = db.scalars(
         select(AnalysisRun)
@@ -171,6 +172,17 @@ def get_run_view(
         if plan is not None
         else []
     )
+    if plan is not None:
+        step_order: dict[str, int] = {}
+        plan_steps = plan.document.get("steps")
+        if isinstance(plan_steps, list):
+            for index, item in enumerate(plan_steps):
+                if isinstance(item, dict) and isinstance(item.get("id"), str):
+                    step_order[item["id"]] = index
+        steps = sorted(
+            steps,
+            key=lambda item: (step_order.get(item.step_key, len(step_order)), item.step_key),
+        )
     tool_calls = db.scalars(
         select(AnalysisToolCall)
         .where(
@@ -307,6 +319,17 @@ def add_event(
     )
     run.next_event_sequence += 1
     db.add(event)
+    if run.conversation_id is not None:
+        append_conversation_event(
+            db,
+            workspace_id=run.workspace_id,
+            conversation_id=run.conversation_id,
+            event_type=event_type,
+            payload=payload,
+            turn_id=run.turn_id,
+            run_id=run.id,
+            run_event_sequence=event.sequence,
+        )
     return event
 
 
@@ -441,6 +464,7 @@ async def stream_events(
     cursor = max(0, after)
     next_heartbeat = monotonic() + max(1.0, heartbeat_seconds)
     while True:
+
         def read_batch(
             after_sequence: int,
         ) -> tuple[list[AnalysisEventResponse], AnalysisRunStatus, int]:

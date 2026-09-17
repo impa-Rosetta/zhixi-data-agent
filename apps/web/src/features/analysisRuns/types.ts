@@ -154,10 +154,22 @@ export type AnalysisConversation = {
   context: Record<string, unknown>
   active_turn_id: string | null
   last_turn_sequence: number
+  last_event_sequence: number
   version: number
   created_at: string
   updated_at: string
   archived_at: string | null
+}
+
+export type AnalysisConversationEvent = {
+  sequence: number
+  event_type: string
+  turn_id: string | null
+  run_id: string | null
+  turn_sequence: number | null
+  run_event_sequence: number | null
+  payload: Record<string, unknown>
+  created_at: string
 }
 
 export type AnalysisConversationSummary = {
@@ -196,6 +208,14 @@ export type AnalysisTurn = {
 export type AnalysisConversationTurnView = {
   turn: AnalysisTurn
   analysis: AnalysisRunView
+  suggested_follow_ups: AnalysisSuggestedFollowUp[]
+}
+
+export type AnalysisSuggestedFollowUp = {
+  id: string
+  label: string
+  message: string
+  source: string
 }
 
 export type AnalysisConversationView = {

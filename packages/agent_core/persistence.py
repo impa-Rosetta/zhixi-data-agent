@@ -404,3 +404,44 @@ class AnalysisEvent(Base):
     event_type: Mapped[str] = mapped_column(String(64), index=True)
     payload: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AnalysisConversationEvent(Base):
+    """A replayable, conversation-scoped projection of turn and run events."""
+
+    __tablename__ = "analysis_conversation_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "sequence",
+            name="uq_analysis_conversation_event_sequence",
+        ),
+        ForeignKeyConstraint(
+            ["workspace_id", "conversation_id"],
+            ["analysis_conversations.workspace_id", "analysis_conversations.id"],
+            name="fk_analysis_conversation_event_conversation_workspace",
+            ondelete="CASCADE",
+        ),
+        Index(
+            "ix_analysis_conversation_event_replay",
+            "conversation_id",
+            "sequence",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    turn_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_turns.id", ondelete="SET NULL"), index=True
+    )
+    run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="SET NULL"), index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    run_event_sequence: Mapped[int | None] = mapped_column(Integer)
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

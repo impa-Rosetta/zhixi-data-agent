@@ -1,5 +1,5 @@
 import { apiClient } from '../../lib/api/client'
-import type { AnalysisEvent } from './types'
+import type { AnalysisConversationEvent, AnalysisEvent } from './types'
 
 type EventHandler = (event: AnalysisEvent) => void | Promise<void>
 
@@ -139,6 +139,49 @@ export async function watchAnalysisEvents(
         signal,
       )
       if (reachedTerminal || signal?.aborted) return
+      retryDelay = 500
+    } catch (reason) {
+      if (signal?.aborted) return
+      if (
+        reason instanceof Error &&
+        reason.message.startsWith('analysis_event.') &&
+        reason.message !== 'analysis_event.missing_body'
+      ) {
+        throw reason
+      }
+    }
+    await abortableDelay(retryDelay, signal)
+    retryDelay = Math.min(retryDelay * 2, 10_000)
+  }
+}
+
+export async function watchConversationEvents(
+  workspaceId: string,
+  conversationId: string,
+  initialSequence: number,
+  onEvent: (event: AnalysisConversationEvent) => void | Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  let cursor = Math.max(0, initialSequence)
+  let retryDelay = 500
+  while (!signal?.aborted) {
+    try {
+      const response = await apiClient.requestStream(
+        `/api/v1/workspaces/${workspaceId}/analysis-conversations/${conversationId}/events/stream`,
+        {
+          headers: { 'Last-Event-ID': String(cursor) },
+          signal,
+        },
+      )
+      await consumeSse(
+        response,
+        async (event) => {
+          if (event.sequence <= cursor) return
+          cursor = event.sequence
+          await onEvent(event as AnalysisConversationEvent)
+        },
+        signal,
+      )
       retryDelay = 500
     } catch (reason) {
       if (signal?.aborted) return

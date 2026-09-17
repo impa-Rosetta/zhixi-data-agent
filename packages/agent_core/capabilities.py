@@ -28,7 +28,7 @@ class CapabilityManifest(BaseModel):
 
 
 CAPABILITY_MANIFEST = CapabilityManifest(
-    version="1.0.0",
+    version="1.1.0",
     product_name="智析 Data Agent",
     description="面向企业制造质量数据的可信问析 Agent。",
     capabilities=(
@@ -55,14 +55,16 @@ CAPABILITY_MANIFEST = CapabilityManifest(
         Capability(
             key="analysis",
             title="高级统计分析",
-            status="planned",
-            description="描述统计、比较、排名、相关性和异常检测将在 M7 开放。",
+            status="available",
+            description="对已验证查询结果生成可追溯的描述统计摘要。",
+            examples=("统计最近三个月不良率",),
         ),
         Capability(
             key="visualization",
             title="图表生成",
-            status="planned",
-            description="受限 ChartSpec 与图表渲染将在 M7 开放。",
+            status="available",
+            description="基于已验证查询结果生成受限 ChartSpec 并安全渲染图表。",
+            examples=("画出最近三个月不良率趋势",),
         ),
         Capability(
             key="report",

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -8,14 +9,22 @@ from sqlalchemy.pool import StaticPool
 
 from apps.api.services.analysis_conversations import (
     AnalysisConversationServiceError,
+    cancel_conversation_turn,
     create_conversation,
     get_conversation,
     get_conversation_view,
     list_conversations,
     send_conversation_message,
 )
-from apps.api.services.analysis_runs import create_run
-from packages.agent_core.conversation_runtime import synchronize_conversation_after_run
+from apps.api.services.analysis_runs import add_event, create_run
+from packages.agent_core.conversation_events import (
+    list_conversation_events,
+    stream_conversation_events,
+)
+from packages.agent_core.conversation_runtime import (
+    recover_conversation_queues,
+    synchronize_conversation_after_run,
+)
 from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisConversation,
@@ -88,6 +97,54 @@ def test_create_conversation_atomically_creates_first_turn_and_worker_run() -> N
     assert outbox is not None
     assert outbox.aggregate_id == run.id
     assert outbox.event_type == "analysis.run.requested"
+
+
+def test_run_events_are_projected_to_replayable_conversation_events() -> None:
+    db, user, workspace = _database()
+    response = create_conversation(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="conversation-events",
+        payload=CreateAnalysisConversationRequest(message="分析本月不良率"),
+    )
+    turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.conversation_id == response.id))
+    assert turn is not None and turn.analysis_run_id is not None
+    run = db.get(AnalysisRun, turn.analysis_run_id)
+    assert run is not None
+    add_event(db, run, "run.node", {"node": "understand"})
+    db.commit()
+
+    events = list_conversation_events(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=response.id,
+    )
+    assert [event.event_type for event in events] == ["run.created", "run.node"]
+    assert [event.sequence for event in events] == [1, 2]
+    assert events[1].turn_id == turn.id
+    assert events[1].run_id == run.id
+    assert events[1].turn_sequence == 1
+    assert events[1].run_event_sequence == 2
+
+    stream = stream_conversation_events(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=response.id,
+        after=1,
+        poll_interval_seconds=0.01,
+        heartbeat_seconds=60,
+    )
+
+    async def read_one() -> str:
+        item = await anext(stream)
+        await stream.aclose()
+        return item
+
+    frame = asyncio.run(read_one())
+    assert "id: 2" in frame
+    assert "event: run.node" in frame
+    assert '"turn_sequence":1' in frame
 
 
 def test_create_conversation_is_idempotent_inside_workspace() -> None:
@@ -374,6 +431,109 @@ def test_messages_sent_while_running_queue_and_activate_strictly_in_order() -> N
     assert third_turn is not None
     assert stored_conversation.active_turn_id == third_turn.id
     assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 3
+
+
+def test_recovery_activates_a_queued_successor_after_worker_commit_gap() -> None:
+    db, user, workspace = _database()
+    conversation = create_conversation(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="recovery-conversation",
+        payload=CreateAnalysisConversationRequest(message="先分析不良率"),
+    )
+    first_turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.sequence == 1))
+    assert first_turn is not None and first_turn.analysis_run_id is not None
+    first_run = db.get(AnalysisRun, first_turn.analysis_run_id)
+    assert first_run is not None
+    first_run.status = AnalysisRunStatus.RUNNING
+    first_turn.status = AnalysisTurnStatus.RUNNING
+    send_conversation_message(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=conversation.id,
+        actor_user_id=user.id,
+        idempotency_key="queued-after-gap",
+        payload=SendAnalysisConversationMessageRequest(message="再按月份展开"),
+    )
+    first_run.status = AnalysisRunStatus.COMPLETED
+    first_run.finished_at = datetime.now(UTC)
+    db.commit()
+
+    assert recover_conversation_queues(db) == 1
+    db.commit()
+
+    stored = db.get(AnalysisConversation, conversation.id)
+    second_turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.sequence == 2))
+    assert stored is not None and second_turn is not None
+    assert stored.active_turn_id == second_turn.id
+    requested = db.scalars(
+        select(OutboxEvent).where(OutboxEvent.event_type == "analysis.run.requested")
+    ).all()
+    assert len(requested) == 2
+    assert recover_conversation_queues(db) == 0
+    assert len(db.scalars(select(OutboxEvent)).all()) == 2
+
+
+def test_recovery_repairs_missing_active_turn_without_duplicate_outbox() -> None:
+    db, user, workspace = _database()
+    conversation = create_conversation(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="recovery-no-active",
+        payload=CreateAnalysisConversationRequest(message="分析不良率"),
+    )
+    stored = db.get(AnalysisConversation, conversation.id)
+    assert stored is not None
+    stored.active_turn_id = None
+    db.commit()
+
+    assert recover_conversation_queues(db) == 1
+    db.commit()
+    turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.conversation_id == conversation.id))
+    assert turn is not None
+    assert stored.active_turn_id == turn.id
+    assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+
+
+def test_cancelling_active_turn_preserves_and_activates_queued_successor() -> None:
+    db, user, workspace = _database()
+    conversation = create_conversation(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="cancel-with-queue",
+        payload=CreateAnalysisConversationRequest(message="执行较长分析"),
+    )
+    first_turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.sequence == 1))
+    assert first_turn is not None and first_turn.analysis_run_id is not None
+    first_run = db.get(AnalysisRun, first_turn.analysis_run_id)
+    assert first_run is not None
+    first_run.status = AnalysisRunStatus.RUNNING
+    first_turn.status = AnalysisTurnStatus.RUNNING
+    send_conversation_message(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=conversation.id,
+        actor_user_id=user.id,
+        idempotency_key="after-cancel",
+        payload=SendAnalysisConversationMessageRequest(message="改看数据库有哪些表"),
+    )
+
+    result = cancel_conversation_turn(
+        db,
+        workspace_id=workspace.id,
+        conversation_id=conversation.id,
+        turn_id=first_turn.id,
+        actor_user_id=user.id,
+    )
+    second_turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.sequence == 2))
+    assert second_turn is not None
+    assert first_run.status is AnalysisRunStatus.CANCELLED
+    assert first_turn.status is AnalysisTurnStatus.CANCELLED
+    assert result.active_turn_id == second_turn.id
+    assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 2
 
 
 def test_clarification_reply_reuses_current_turn_and_run() -> None:

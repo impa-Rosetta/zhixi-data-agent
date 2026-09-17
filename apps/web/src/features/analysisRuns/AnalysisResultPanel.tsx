@@ -1,4 +1,11 @@
+import { lazy, Suspense } from 'react'
+
 import type { AnalysisArtifact, AnalysisRunView } from './types'
+
+const AnalysisChart = lazy(async () => {
+  const module = await import('./AnalysisChart')
+  return { default: module.AnalysisChart }
+})
 
 type QueryResult = {
   columns: string[]
@@ -16,6 +23,10 @@ export function AnalysisResultPanel({ view }: { view: AnalysisRunView }) {
   const artifact = view.artifacts.find((item) => item.artifact_type === 'query_result')
   if (!artifact) return null
   const result = readQueryResult(artifact)
+  const analysis = view.artifacts.find((item) =>
+    item.artifact_type === 'analysis_summary' && item.summary.source_artifact_id === artifact.id)
+  const chart = view.artifacts.find((item) =>
+    item.artifact_type === 'chart_spec' && item.summary.source_artifact_id === artifact.id)
   const linkedEvidence = view.evidence.find((item) => item.artifact_id === artifact.id)
   const validationPassed = view.validations.some((item) => item.outcome === 'passed')
 
@@ -69,6 +80,13 @@ export function AnalysisResultPanel({ view }: { view: AnalysisRunView }) {
         </div>
       )}
 
+      {analysis && <DescriptiveAnalysis artifact={analysis} />}
+      {chart && (
+        <Suspense fallback={<div className="analysis-chart-loading" role="status">正在加载图表…</div>}>
+          <AnalysisChart artifact={chart} source={artifact} />
+        </Suspense>
+      )}
+
       <footer>
         <span className={validationPassed ? 'validation-passed' : 'validation-pending'}>
           {validationPassed ? '✓ 证据校验通过' : '证据校验待确认'}
@@ -81,6 +99,38 @@ export function AnalysisResultPanel({ view }: { view: AnalysisRunView }) {
   )
 }
 
+function DescriptiveAnalysis({ artifact }: { artifact: AnalysisArtifact }) {
+  const rawColumns = artifact.summary.numeric_columns
+  const columns = Array.isArray(rawColumns)
+    ? rawColumns.filter((item): item is Record<string, unknown> =>
+      typeof item === 'object' && item !== null && !Array.isArray(item),
+    ).slice(0, 6)
+    : []
+  if (columns.length === 0) return null
+  return (
+    <section className="analysis-statistics" aria-label="描述统计">
+      <header>
+        <div><p className="analysis-kicker">验证结果派生</p><h4>描述统计</h4></div>
+        <span>{numberValue(artifact.summary.row_count)} 行</span>
+      </header>
+      <div>
+        {columns.map((column, index) => (
+          <article key={textValue(column.field) || index}>
+            <strong>{textValue(column.field) || '数值字段'}</strong>
+            <dl>
+              <div><dt>均值</dt><dd>{formatCell(column.mean)}</dd></div>
+              <div><dt>中位数</dt><dd>{formatCell(column.median)}</dd></div>
+              <div><dt>最小值</dt><dd>{formatCell(column.minimum)}</dd></div>
+              <div><dt>最大值</dt><dd>{formatCell(column.maximum)}</dd></div>
+              <div><dt>标准差</dt><dd>{formatCell(column.standard_deviation)}</dd></div>
+              <div><dt>缺失数</dt><dd>{formatCell(column.null_count)}</dd></div>
+            </dl>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
 function CapabilityResult({ artifact, view }: { artifact: AnalysisArtifact; view: AnalysisRunView }) {
   const message = textValue(artifact.summary.message)
   const available = stringList(artifact.summary.available)

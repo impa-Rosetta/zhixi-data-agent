@@ -136,6 +136,13 @@ class CreateAnalysisConversationRequest(CreateAnalysisRunRequest):
 class SendAnalysisConversationMessageRequest(AppendAnalysisMessageRequest):
     """Send a follow-up or clarification reply in an active conversation."""
 
+    suggestion_id: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=100,
+        pattern=r"^[a-z][a-z0-9_.-]+$",
+    )
+
 
 class AnalysisConversationResponse(StrictContract):
     id: uuid.UUID
@@ -145,6 +152,7 @@ class AnalysisConversationResponse(StrictContract):
     context: AnalysisConversationContext
     active_turn_id: uuid.UUID | None
     last_turn_sequence: int = Field(ge=0)
+    last_event_sequence: int = Field(ge=0)
     version: int = Field(ge=1)
     created_at: datetime
     updated_at: datetime
@@ -213,6 +221,17 @@ class AnalysisRunResponse(BaseModel):
 class AnalysisEventResponse(BaseModel):
     sequence: int
     event_type: str
+    payload: dict[str, object]
+    created_at: datetime
+
+
+class AnalysisConversationEventResponse(StrictContract):
+    sequence: int = Field(ge=1)
+    event_type: str = Field(min_length=1, max_length=64)
+    turn_id: uuid.UUID | None = None
+    run_id: uuid.UUID | None = None
+    turn_sequence: int | None = Field(default=None, ge=1)
+    run_event_sequence: int | None = Field(default=None, ge=1)
     payload: dict[str, object]
     created_at: datetime
 
@@ -318,9 +337,20 @@ class AnalysisRunViewResponse(BaseModel):
     last_event_sequence: int
 
 
+class AnalysisSuggestedFollowUpResponse(StrictContract):
+    id: str = Field(min_length=3, max_length=100, pattern=r"^[a-z][a-z0-9_.-]+$")
+    label: str = Field(min_length=1, max_length=100)
+    message: str = Field(min_length=1, max_length=500)
+    source: str = Field(min_length=1, max_length=50)
+
+
 class AnalysisConversationTurnViewResponse(StrictContract):
     turn: AnalysisTurnResponse
     analysis: AnalysisRunViewResponse
+    suggested_follow_ups: list[AnalysisSuggestedFollowUpResponse] = Field(
+        default_factory=list,
+        max_length=3,
+    )
 
 
 class AnalysisConversationViewResponse(StrictContract):

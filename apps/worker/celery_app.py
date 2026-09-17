@@ -34,6 +34,10 @@ celery_app.conf.update(
             "task": "scan_jobs.recover_stale",
             "schedule": 60.0,
         },
+        "recover-analysis-conversation-queues": {
+            "task": "analysis_conversations.recover_queues",
+            "schedule": 30.0,
+        },
     },
 )
 

@@ -75,12 +75,12 @@ test('shows immutable evidence references and validation outcome', () => {
   expect(screen.getByText('通过 · 0 个发现')).toBeInTheDocument()
 })
 
-test('renders a versioned capability answer without pretending planned features are ready', () => {
+test('renders a versioned capability answer without pretending report export is ready', () => {
   render(<AnalysisResultPanel view={resultView({
-    message: '智析 Data Agent 支持可信指标查询。图表生成尚未开放。',
-    manifest_version: '1.0.0',
-    available: ['可信指标查询', '结果证据追溯'],
-    planned: ['图表生成'],
+    message: '智析 Data Agent 支持可信指标查询、高级统计分析和图表生成。报告导出尚未开放。',
+    manifest_version: '1.1.0',
+    available: ['可信指标查询', '结果证据追溯', '高级统计分析', '图表生成'],
+    planned: ['报告导出'],
     examples: ['分析不良率'],
     boundaries: ['不会执行任意 SQL'],
     trust: 'system',
@@ -155,4 +155,60 @@ test('shows governed route, snapshot evidence and safety validation details', ()
   expect(screen.getByText('授权范围')).toBeInTheDocument()
   expect(screen.getByText('catalog_search')).toBeInTheDocument()
   expect(screen.getByText('最近 30 天')).toBeInTheDocument()
+})
+
+test('renders derived statistics and a validated chart attachment', async () => {
+  const view = resultView({
+    columns: ['inspection_month', 'defect_rate'],
+    rows: [['2026-01', 2], ['2026-02', 4]],
+    row_count: 2,
+    truncated: false,
+    trust: 'trusted',
+  })
+  view.artifacts.push(
+    {
+      id: 'analysis-1',
+      artifact_type: 'analysis_summary',
+      summary: {
+        version: 1,
+        source_artifact_id: 'artifact-1',
+        row_count: 2,
+        numeric_columns: [{
+          field: 'defect_rate',
+          count: 2,
+          null_count: 0,
+          minimum: 2,
+          maximum: 4,
+          mean: 3,
+          median: 3,
+          standard_deviation: 1,
+        }],
+      },
+      content_digest: 'c'.repeat(64),
+      created_at: '2026-09-17T00:01:00Z',
+    },
+    {
+      id: 'chart-1',
+      artifact_type: 'chart_spec',
+      summary: {
+        version: 1,
+        chart_type: 'line',
+        source_artifact_id: 'artifact-1',
+        evidence_id: 'evidence-1',
+        title: '月度不良率趋势',
+        category_field: 'inspection_month',
+        series: [{ field: 'defect_rate', label: '不良率' }],
+        row_limit: 200,
+        truncated: false,
+      },
+      content_digest: 'd'.repeat(64),
+      created_at: '2026-09-17T00:01:00Z',
+    },
+  )
+
+  render(<AnalysisResultPanel view={view} />)
+
+  expect(screen.getByRole('region', { name: '描述统计' })).toBeInTheDocument()
+  expect(screen.getByText('标准差')).toBeInTheDocument()
+  expect(await screen.findByRole('img', { name: '月度不良率趋势 折线图' }, { timeout: 5_000 })).toBeInTheDocument()
 })

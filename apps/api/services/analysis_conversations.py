@@ -7,8 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.audit import add_audit_event
-from apps.api.services.analysis_runs import append_message, create_run, get_run_view
+from apps.api.services.analysis_runs import append_message, cancel_run, create_run, get_run_view
 from packages.agent_core.persistence import (
+    AnalysisArtifact,
     AnalysisConversation,
     AnalysisConversationStatus,
     AnalysisMessage,
@@ -18,6 +19,7 @@ from packages.agent_core.persistence import (
     AnalysisTurnRelation,
     AnalysisTurnStatus,
 )
+from packages.agent_core.recommendations import recommend_follow_ups
 from packages.shared_contracts.agents import (
     AnalysisConversationContext,
     AnalysisConversationPage,
@@ -55,6 +57,7 @@ def _response(conversation: AnalysisConversation) -> AnalysisConversationRespons
         context=_context(dict(conversation.context)),
         active_turn_id=conversation.active_turn_id,
         last_turn_sequence=conversation.last_turn_sequence,
+        last_event_sequence=max(0, conversation.next_event_sequence - 1),
         version=conversation.version,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
@@ -227,6 +230,18 @@ def get_conversation_view(
             AnalysisConversationTurnViewResponse(
                 turn=_turn_response(turn, run),
                 analysis=get_run_view(db, workspace_id=workspace_id, run_id=run.id),
+                suggested_follow_ups=recommend_follow_ups(
+                    context=_context(dict(turn.context_after)),
+                    run_status=run.status,
+                    artifacts=list(
+                        db.scalars(
+                            select(AnalysisArtifact).where(
+                                AnalysisArtifact.workspace_id == workspace_id,
+                                AnalysisArtifact.run_id == run.id,
+                            )
+                        )
+                    ),
+                ),
             )
             for turn, run in rows
         ],
@@ -334,6 +349,13 @@ def send_conversation_message(
         enqueue=not has_active_run,
     )
     turn.analysis_run_id = run_response.id
+    if payload.suggestion_id is not None:
+        suggested_run = db.get(AnalysisRun, run_response.id)
+        if suggested_run is not None:
+            suggested_run.context = {
+                **suggested_run.context,
+                "suggestion_id": payload.suggestion_id,
+            }
     conversation.context = context_after.model_dump(mode="json")
     conversation.last_turn_sequence = sequence
     conversation.version += 1
@@ -347,6 +369,52 @@ def send_conversation_message(
         resource_id=str(conversation.id),
         actor_user_id=actor_user_id,
         workspace_id=workspace_id,
+    )
+    if payload.suggestion_id is not None:
+        add_audit_event(
+            db,
+            action="analysis_conversation.suggestion_clicked",
+            outcome="success",
+            resource_type="analysis_conversation",
+            resource_id=str(conversation.id),
+            actor_user_id=actor_user_id,
+            workspace_id=workspace_id,
+            detail=f"suggestion_id={payload.suggestion_id};turn_sequence={sequence}",
+        )
+    db.flush()
+    return _response(conversation)
+
+
+def cancel_conversation_turn(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    turn_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+) -> AnalysisConversationResponse:
+    conversation = _get_conversation(db, workspace_id, conversation_id)
+    if conversation.active_turn_id != turn_id:
+        raise AnalysisConversationServiceError(
+            "analysis_conversation.turn_not_active",
+            "Only the active conversation turn can be cancelled",
+        )
+    turn = db.scalar(
+        select(AnalysisTurn).where(
+            AnalysisTurn.id == turn_id,
+            AnalysisTurn.workspace_id == workspace_id,
+            AnalysisTurn.conversation_id == conversation_id,
+        )
+    )
+    if turn is None or turn.analysis_run_id is None:
+        raise AnalysisConversationServiceError(
+            "analysis_conversation.turn_not_found", "Analysis turn not found"
+        )
+    cancel_run(
+        db,
+        workspace_id=workspace_id,
+        run_id=turn.analysis_run_id,
+        actor_user_id=actor_user_id,
     )
     db.flush()
     return _response(conversation)

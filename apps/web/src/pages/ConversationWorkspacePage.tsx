@@ -7,8 +7,8 @@ import { ConversationList } from '../features/analysisRuns/ConversationList'
 import {
   useAnalysisConversationCommands,
   useAnalysisConversations,
-  useAnalysisConversationView,
 } from '../features/analysisRuns/conversationApi'
+import { useRealtimeAnalysisConversation } from '../features/analysisRuns/useRealtimeAnalysisConversation'
 import { useAuth } from '../features/auth/context'
 import { ApiError } from '../lib/api/client'
 import './AnalysisHomePage.css'
@@ -24,7 +24,7 @@ export function ConversationWorkspacePage() {
   const canAnalyze = workspace?.role !== 'auditor'
   const workspaceId = canAnalyze ? workspace?.id : undefined
   const conversations = useAnalysisConversations(workspaceId)
-  const view = useAnalysisConversationView(workspaceId, conversationId)
+  const view = useRealtimeAnalysisConversation(workspaceId, conversationId)
   const commands = useAnalysisConversationCommands(workspaceId)
   const latest = view.data?.turns.at(-1)?.analysis
 
@@ -38,7 +38,7 @@ export function ConversationWorkspacePage() {
     )
   }
 
-  const submit = async (message: string): Promise<void> => {
+  const submit = async (message: string, suggestionId?: string): Promise<void> => {
     setError(null)
     try {
       if (conversationId) {
@@ -46,6 +46,7 @@ export function ConversationWorkspacePage() {
           conversationId,
           message,
           idempotencyKey: newIdempotencyKey(),
+          suggestionId,
         })
       } else {
         const conversation = await commands.create.mutateAsync({
@@ -60,6 +61,17 @@ export function ConversationWorkspacePage() {
           ? reason.message
           : '消息发送失败，请稍后重试。',
       )
+      throw reason
+    }
+  }
+
+  const cancel = async (turnId: string): Promise<void> => {
+    if (!conversationId) return
+    setError(null)
+    try {
+      await commands.cancel.mutateAsync({ conversationId, turnId })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '取消失败，请稍后重试。')
       throw reason
     }
   }
@@ -112,9 +124,10 @@ export function ConversationWorkspacePage() {
             <ContinuousConversation
               view={view.data}
               userName={user?.display_name}
-              busy={commands.create.isPending || commands.message.isPending}
+              busy={commands.create.isPending || commands.message.isPending || commands.cancel.isPending}
               error={error}
               onSubmit={submit}
+              onCancel={cancel}
             />
           )}
         </div>
@@ -122,8 +135,8 @@ export function ConversationWorkspacePage() {
           <AnalysisInspector
             view={latest}
             events={[]}
-            connection={latest ? 'live' : 'idle'}
-            streamError={null}
+            connection={latest ? view.connection : 'idle'}
+            streamError={view.streamError}
           />
         </div>
       </section>

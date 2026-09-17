@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from apps.worker.celery_app import celery_app
+from packages.agent_core.conversation_runtime import recover_conversation_queues
 from packages.platform_core.database import get_engine
 from packages.platform_core.scheduled_scan_jobs import (
     dispatch_due_schedules,
@@ -18,3 +19,11 @@ def dispatch_schedules() -> int:
 def recover_stale() -> int:
     with Session(get_engine()) as db:
         return recover_stale_scan_jobs(db)
+
+
+@celery_app.task(name="analysis_conversations.recover_queues")  # type: ignore[untyped-decorator]
+def recover_analysis_conversations() -> int:
+    with Session(get_engine()) as db:
+        recovered = recover_conversation_queues(db)
+        db.commit()
+        return recovered

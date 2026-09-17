@@ -386,6 +386,20 @@ def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
                 arguments=arguments,
                 expected_evidence=("validated_query", "query_execution"),
             ),
+            AnalysisStep(
+                id="describe_result",
+                tool="analysis.describe",
+                arguments={"artifact_id": "$trusted_metric_query.artifact"},
+                depends_on=("trusted_metric_query",),
+                expected_evidence=("descriptive_statistics",),
+            ),
+            AnalysisStep(
+                id="compose_visualization",
+                tool="visualization.compose",
+                arguments={"artifact_id": "$trusted_metric_query.artifact"},
+                depends_on=("trusted_metric_query",),
+                expected_evidence=("chart_spec",),
+            ),
         ),
         requires_confirmation=False,
     )

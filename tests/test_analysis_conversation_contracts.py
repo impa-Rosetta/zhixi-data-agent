@@ -121,6 +121,7 @@ def test_public_conversation_view_has_no_internal_idempotency_or_queue_fields() 
         context=AnalysisConversationContext(),
         active_turn_id=turn_id,
         last_turn_sequence=1,
+        last_event_sequence=0,
         version=1,
         created_at=now,
         updated_at=now,

@@ -15,6 +15,7 @@ function view(status: AnalysisRunStatus): AnalysisConversationView {
       context: { version: 1 },
       active_turn_id: 'turn-1',
       last_turn_sequence: 1,
+      last_event_sequence: 0,
       version: 1,
       created_at: now,
       updated_at: now,
@@ -67,6 +68,7 @@ function view(status: AnalysisRunStatus): AnalysisConversationView {
         validations: [],
         last_event_sequence: 2,
       },
+      suggested_follow_ups: [],
     }],
     total_turns: 1,
     limit: 20,
@@ -110,4 +112,63 @@ test('allows another message while the agent is running and labels it as queued'
 
   await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('再比较上个月'))
   expect(screen.getByText('Agent 正在处理，发送后将自动排队')).toBeInTheDocument()
+})
+
+test('cancels the active running turn without disabling the conversation composer', async () => {
+  const onCancel = vi.fn().mockResolvedValue(undefined)
+  render(
+    <ContinuousConversation
+      view={view('running')}
+      busy={false}
+      error={null}
+      onSubmit={vi.fn().mockResolvedValue(undefined)}
+      onCancel={onCancel}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: '取消当前分析' }))
+  await waitFor(() => expect(onCancel).toHaveBeenCalledWith('turn-1'))
+  expect(screen.getByLabelText('继续追问')).toBeEnabled()
+})
+
+test('shows topic switches and supports control-enter submission', async () => {
+  const data = view('completed')
+  data.turns[0].turn.relation = 'switch_topic'
+  const onSubmit = vi.fn().mockResolvedValue(undefined)
+  render(
+    <ContinuousConversation
+      view={data}
+      busy={false}
+      error={null}
+      onSubmit={onSubmit}
+    />,
+  )
+
+  expect(screen.getByText(/已切换到新的分析主题/)).toBeInTheDocument()
+  const composer = screen.getByLabelText('继续追问')
+  fireEvent.change(composer, { target: { value: '数据库有哪些表' } })
+  fireEvent.keyDown(composer, { key: 'Enter', ctrlKey: true })
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('数据库有哪些表'))
+})
+
+test('sends a recommendation through the normal message callback with its audit id', async () => {
+  const data = view('completed')
+  data.turns[0].suggested_follow_ups = [{
+    id: 'metric.trend',
+    label: '查看月度趋势',
+    message: '按月份展开不良率',
+    source: 'metric_context',
+  }]
+  const onSubmit = vi.fn().mockResolvedValue(undefined)
+  render(
+    <ContinuousConversation
+      view={data}
+      busy={false}
+      error={null}
+      onSubmit={onSubmit}
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: '查看月度趋势' }))
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('按月份展开不良率', 'metric.trend'))
 })

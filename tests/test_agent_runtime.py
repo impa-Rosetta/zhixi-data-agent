@@ -279,8 +279,12 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
     assert view.plan is not None
     assert view.plan.goal == "分析不良率"
-    assert len(view.steps) == 1
-    assert view.steps[0].tool_name == "query.metric"
+    assert [step.tool_name for step in view.steps] == [
+        "query.metric",
+        "analysis.describe",
+        "visualization.compose",
+    ]
+    assert [step.status for step in view.steps] == ["succeeded", "skipped", "skipped"]
     assert len(view.tool_calls) == 1
     assert view.tool_calls[0].result_summary["rows"] == [[2.5]]
     assert len(view.artifacts) == 1
@@ -324,7 +328,7 @@ def test_runtime_completes_capability_help_without_semantic_or_data_access() -> 
     assert view.steps[0].tool_name == "system.capabilities"
     assert view.tool_calls[0].tool_name == "system.capabilities"
     assert view.artifacts[0].artifact_type == "assistant_message"
-    assert view.artifacts[0].summary["manifest_version"] == "1.0.0"
+    assert view.artifacts[0].summary["manifest_version"] == "1.1.0"
     assert "可信指标查询" in str(view.artifacts[0].summary["message"])
     assert view.evidence[0].evidence_type == "capability_manifest"
     assert view.validations[0].validation_type == "capability_scope"
@@ -598,3 +602,83 @@ def test_event_stream_sends_heartbeat_while_run_is_active(
     first, second = asyncio.run(read_stream())
     assert "event: run.created" in first
     assert second == ": keep-alive\n\n"
+
+
+def test_runtime_derives_statistics_and_chart_from_verified_query_result() -> None:
+    db, user, workspace = _database()
+    document = manufacturing_quality_template()
+    model = SemanticModel(
+        workspace_id=workspace.id,
+        name="Quality analytics",
+        status=SemanticModelStatus.PUBLISHED,
+        created_by_user_id=user.id,
+        updated_by_user_id=user.id,
+    )
+    db.add(model)
+    db.flush()
+    version = SemanticModelVersion(
+        workspace_id=workspace.id,
+        semantic_model_id=model.id,
+        revision=1,
+        status=SemanticVersionStatus.PUBLISHED,
+        document=document.model_dump(mode="json"),
+        counts={},
+        content_digest="e" * 64,
+        created_by_user_id=user.id,
+        published_by_user_id=user.id,
+    )
+    db.add(version)
+    db.flush()
+    model.active_version_id = version.id
+    run_id = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="derived-analysis",
+        payload=CreateAnalysisRunRequest(message="按月份分析不良率"),
+    ).id
+    gateway = _fake(
+        {
+            "domain": "manufacturing_quality",
+            "task_type": "trend",
+            "goal": "按月份分析不良率",
+            "metrics": ["不良率"],
+            "confidence": 0.98,
+        }
+    )
+    result = {
+        "validated_query_id": str(uuid.uuid4()),
+        "execution_id": str(uuid.uuid4()),
+        "columns": ["inspection_month", "defect_rate"],
+        "rows": [["2026-01", 2.0], ["2026-02", 4.0], ["2026-03", 3.0]],
+        "evidence_digest": "f" * 64,
+        "trust": "trusted",
+    }
+
+    run_analysis(db, run_id=run_id, gateway=gateway, metric_executor=lambda *_: result)
+
+    stored = db.get(AnalysisRun, run_id)
+    assert stored is not None
+    assert stored.status is AnalysisRunStatus.COMPLETED
+    assert stored.tool_calls == 3
+    view = get_run_view(db, workspace_id=workspace.id, run_id=run_id)
+    assert [step.status for step in view.steps] == ["succeeded", "succeeded", "succeeded"]
+    assert {item.artifact_type for item in view.artifacts} == {
+        "query_result",
+        "analysis_summary",
+        "chart_spec",
+    }
+    assert {item.evidence_type for item in view.evidence} == {
+        "query_execution",
+        "derived_analysis",
+        "chart_spec",
+    }
+    assert {item.validation_type for item in view.validations} == {
+        "evidence",
+        "descriptive_statistics",
+        "chart_contract",
+    }
+    chart = next(item for item in view.artifacts if item.artifact_type == "chart_spec")
+    assert chart.summary["chart_type"] == "line"
+    assert chart.summary["category_field"] == "inspection_month"
+    assert stored.context["chart_artifact_id"] == str(chart.id)

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from packages.agent_core.contracts import Binding, FollowUpDecision, Intent
 from packages.agent_core.conversation_context import project_completed_run_context
+from packages.agent_core.conversation_events import append_conversation_event
 from packages.agent_core.followups import (
     classify_follow_up,
     classify_follow_up_deterministically,
@@ -26,6 +27,32 @@ from packages.agent_core.small_talk import classify_small_talk
 from packages.model_gateway import GatewayUsage, ModelGateway, ModelGatewayError
 from packages.platform_core.models import OutboxEvent
 from packages.shared_contracts.agents import AnalysisConversationContext
+
+_TERMINAL_RUN_STATUSES = {
+    AnalysisRunStatus.COMPLETED,
+    AnalysisRunStatus.FAILED,
+    AnalysisRunStatus.CANCELLED,
+}
+
+
+def _ensure_run_requested(db: Session, run: AnalysisRun) -> bool:
+    existing = db.scalar(
+        select(OutboxEvent.id).where(
+            OutboxEvent.aggregate_id == run.id,
+            OutboxEvent.event_type == "analysis.run.requested",
+        )
+    )
+    if existing is not None:
+        return False
+    db.add(
+        OutboxEvent(
+            aggregate_type="analysis_run",
+            aggregate_id=run.id,
+            event_type="analysis.run.requested",
+            payload={"run_id": str(run.id)},
+        )
+    )
+    return True
 
 
 def _turn_status(run_status: AnalysisRunStatus) -> AnalysisTurnStatus:
@@ -202,9 +229,7 @@ def prepare_conversation_run(
             last_relation="switch_topic",
         )
     else:
-        context_after = current_context.model_copy(
-            update={"last_relation": decision.relation}
-        )
+        context_after = current_context.model_copy(update={"last_relation": decision.relation})
     turn.context_after = context_after.model_dump(mode="json")
     context = {
         **run.context,
@@ -299,23 +324,85 @@ def synchronize_conversation_after_run(db: Session, *, run_id: uuid.UUID) -> boo
                 **next_run.context,
                 "conversation_context": current_context,
             }
-            existing_outbox = db.scalar(
-                select(OutboxEvent.id).where(
-                    OutboxEvent.aggregate_id == next_run.id,
-                    OutboxEvent.event_type == "analysis.run.requested",
-                )
-            )
-            if existing_outbox is None:
-                db.add(
-                    OutboxEvent(
-                        aggregate_type="analysis_run",
-                        aggregate_id=next_run.id,
-                        event_type="analysis.run.requested",
-                        payload={"run_id": str(next_run.id)},
-                    )
+            if _ensure_run_requested(db, next_run):
+                append_conversation_event(
+                    db,
+                    workspace_id=run.workspace_id,
+                    conversation_id=conversation.id,
+                    event_type="turn.activated",
+                    payload={"turn_sequence": next_turn.sequence, "status": "queued"},
+                    turn_id=next_turn.id,
+                    run_id=next_run.id,
                 )
     if changed:
         conversation.version += 1
         conversation.updated_at = datetime.now(UTC)
     db.flush()
     return changed
+
+
+def recover_conversation_queues(db: Session, *, limit: int = 100) -> int:
+    """Repair activation gaps without creating duplicate turns or Outbox requests."""
+    conversations = list(
+        db.scalars(
+            select(AnalysisConversation)
+            .where(AnalysisConversation.status == "active")
+            .order_by(AnalysisConversation.updated_at)
+            .limit(max(1, min(limit, 500)))
+            .with_for_update(skip_locked=True)
+        )
+    )
+    recovered = 0
+    for conversation in conversations:
+        active_turn = (
+            db.get(AnalysisTurn, conversation.active_turn_id)
+            if conversation.active_turn_id is not None
+            else None
+        )
+        active_run = (
+            db.get(AnalysisRun, active_turn.analysis_run_id)
+            if active_turn is not None and active_turn.analysis_run_id is not None
+            else None
+        )
+        if active_run is not None and active_run.status in _TERMINAL_RUN_STATUSES:
+            if synchronize_conversation_after_run(db, run_id=active_run.id):
+                recovered += 1
+            continue
+        if active_run is not None:
+            if active_run.status is AnalysisRunStatus.QUEUED and _ensure_run_requested(
+                db, active_run
+            ):
+                recovered += 1
+            continue
+
+        next_row = db.execute(
+            select(AnalysisTurn, AnalysisRun)
+            .join(AnalysisRun, AnalysisRun.id == AnalysisTurn.analysis_run_id)
+            .where(
+                AnalysisTurn.workspace_id == conversation.workspace_id,
+                AnalysisTurn.conversation_id == conversation.id,
+                AnalysisTurn.status == AnalysisTurnStatus.QUEUED,
+                AnalysisRun.status == AnalysisRunStatus.QUEUED,
+            )
+            .order_by(AnalysisTurn.sequence)
+            .limit(1)
+        ).one_or_none()
+        if next_row is None:
+            continue
+        turn, run = next_row
+        conversation.active_turn_id = turn.id
+        conversation.version += 1
+        conversation.updated_at = datetime.now(UTC)
+        _ensure_run_requested(db, run)
+        append_conversation_event(
+            db,
+            workspace_id=conversation.workspace_id,
+            conversation_id=conversation.id,
+            event_type="turn.recovered",
+            payload={"turn_sequence": turn.sequence, "status": "queued"},
+            turn_id=turn.id,
+            run_id=run.id,
+        )
+        recovered += 1
+    db.flush()
+    return recovered

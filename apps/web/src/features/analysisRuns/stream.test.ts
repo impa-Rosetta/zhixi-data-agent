@@ -4,6 +4,7 @@ import { apiClient } from '../../lib/api/client'
 import {
   connectAnalysisEventStream,
   consumeSse,
+  watchConversationEvents,
   watchAnalysisEvents,
 } from './stream'
 
@@ -94,4 +95,32 @@ test('reconnects after an interrupted stream and deduplicates replayed events', 
 
   expect(events).toEqual([2, 3])
   expect(request).toHaveBeenCalledTimes(2)
+})
+
+test('streams conversation events from the persisted conversation cursor', async () => {
+  const request = vi.spyOn(apiClient, 'requestStream').mockResolvedValue(
+    new Response(
+      'id: 8\nevent: run.node\ndata: {"sequence":8,"event_type":"run.node","turn_id":"turn-2","run_id":"run-2","turn_sequence":2,"run_event_sequence":3,"payload":{"node":"execute"},"created_at":"2026-09-16T00:00:00Z"}\n\n',
+      { headers: { 'Content-Type': 'text/event-stream' } },
+    ),
+  )
+  const controller = new AbortController()
+  const events: string[] = []
+
+  await watchConversationEvents(
+    'workspace-1',
+    'conversation-1',
+    7,
+    (event) => {
+      events.push(`${event.turn_id}:${event.sequence}`)
+      controller.abort()
+    },
+    controller.signal,
+  )
+
+  expect(events).toEqual(['turn-2:8'])
+  expect(request.mock.calls[0]?.[0]).toBe(
+    '/api/v1/workspaces/workspace-1/analysis-conversations/conversation-1/events/stream',
+  )
+  expect(new Headers(request.mock.calls[0]?.[1]?.headers).get('Last-Event-ID')).toBe('7')
 })

@@ -38,11 +38,6 @@ export function useAnalysisConversationView(
       `/api/v1/workspaces/${workspaceId}/analysis-conversations/${conversationId}/view`,
     ),
     enabled: Boolean(workspaceId && conversationId),
-    refetchInterval: (query) => {
-      const view = query.state.data
-      const latest = view?.turns.at(-1)?.analysis.run.status
-      return latest && ['queued', 'running'].includes(latest) ? 1000 : false
-    },
   })
 }
 
@@ -74,15 +69,27 @@ export function useAnalysisConversationCommands(workspaceId: string | undefined)
       conversationId: string
       message: string
       idempotencyKey: string
+      suggestionId?: string
     }) => apiClient.request<AnalysisConversation>(
       `/api/v1/workspaces/${workspaceId}/analysis-conversations/${input.conversationId}/messages`,
       {
         method: 'POST',
         headers: { 'Idempotency-Key': input.idempotencyKey },
-        body: JSON.stringify({ message: input.message }),
+        body: JSON.stringify({
+          message: input.message,
+          ...(input.suggestionId ? { suggestion_id: input.suggestionId } : {}),
+        }),
       },
     ),
     onSuccess: refresh,
   })
-  return { create, message }
+  const cancel = useMutation({
+    mutationFn: (input: { conversationId: string; turnId: string }) =>
+      apiClient.request<AnalysisConversation>(
+        `/api/v1/workspaces/${workspaceId}/analysis-conversations/${input.conversationId}/turns/${input.turnId}/cancel`,
+        { method: 'POST' },
+      ),
+    onSuccess: refresh,
+  })
+  return { create, message, cancel }
 }
