@@ -8,6 +8,13 @@ A07 企业数据底座智能问析 Agent 系统。M0至M6已完成产品级验�
 2. 执行 `docker compose up --build`。
 3. 打开 Web：<http://localhost:5173>。
 4. API 健康检查：<http://localhost:8000/health>。
+### Windows 桌面一键启动
+
+双击桌面的“智析 Data Agent”快捷方式，或运行仓库根目录的
+启动智析DataAgent.cmd。启动器会检查并按需启动 Docker Desktop、处理已知的
+临时套接字故障、构建并启动 Compose 服务、等待 API 与 Web 健康，然后打开
+<http://127.0.0.1:5173/app>。启动日志保存在
+%LOCALAPPDATA%\ZhixiDataAgent\logs，脚本不会保存登录密码或模型 API Key。
 
 ## M1认证接口
 

@@ -7,8 +7,34 @@ $knownStaleSockets = @(
     (Join-Path $dockerRun 'userAnalyticsOtlpHttp.sock')
 )
 
-docker info *> $null
-if ($LASTEXITCODE -eq 0) {
+function Test-DockerEngine {
+    $process = $null
+    try {
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = (Get-Command docker.exe -ErrorAction Stop).Source
+        $startInfo.Arguments = 'version --format "{{.Server.Version}}"'
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        [void]$process.Start()
+        if (-not $process.WaitForExit(5000)) {
+            $process.Kill()
+            return $false
+        }
+        return $process.ExitCode -eq 0
+    }
+    catch {
+        return $false
+    }
+    finally {
+        if ($null -ne $process) { $process.Dispose() }
+    }
+}
+
+if (Test-DockerEngine) {
     Write-Host 'Docker engine is healthy.'
     exit 0
 }
