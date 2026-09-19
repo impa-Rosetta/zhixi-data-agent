@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from packages.agent_core.contracts import Binding, Intent
 from packages.agent_core.conversation_context import project_completed_run_context
@@ -14,6 +15,7 @@ def test_completed_run_projects_only_bounded_verified_context() -> None:
             metrics=("不良率",),
             dimensions=("月份",),
             filters={"production_line": "A线"},
+            time_range="本月",
             comparison="previous_period",
             output=("time_series",),
             confidence=1,
@@ -31,12 +33,16 @@ def test_completed_run_projects_only_bounded_verified_context() -> None:
         evidence_id=evidence_id,
         result={"columns": ["month", "defect_rate"], "rows": [["2026-08", 0.03]], "row_count": 1},
         result_is_validated=True,
+        reference_time=datetime(2026, 8, 20, tzinfo=UTC),
     )
 
     assert context.metric is not None
     assert context.metric.key == "defect_rate"
     assert context.dimensions[0].key == "month"
     assert context.time_grain == "month"
+    assert context.time_range is not None
+    assert context.time_range.start.isoformat() == "2026-08-01"
+    assert context.time_range.end.isoformat() == "2026-09-01"
     assert context.filters[0].field_key == "production_line"
     assert context.comparison == "previous_period"
     assert context.last_result is not None

@@ -107,7 +107,17 @@ def query_presentation(intent: Intent, result: dict[str, object]) -> AgentPresen
     safe_rows = rows if isinstance(rows, list) else []
     safe_columns = columns if isinstance(columns, list) else []
     metric = "、".join(_safe_labels(intent.metrics)) or "查询结果"
-    if len(safe_rows) == 1 and isinstance(safe_rows[0], list) and len(safe_rows[0]) == 1:
+    time_series_requested = (
+        intent.task_type == "trend"
+        or "time_series" in intent.output
+        or any(marker in item for item in intent.output for marker in ("趋势", "折线"))
+    )
+    if time_series_requested and len(safe_rows) == 1:
+        content = (
+            f"我完成了{metric}的查询，但当前范围只有 1 个时间点，无法形成有意义的趋势。"
+            "你可以补充更多月份的数据，扩大时间范围，或改为查看本期不同产线或产品的分布。"
+        )
+    elif len(safe_rows) == 1 and isinstance(safe_rows[0], list) and len(safe_rows[0]) == 1:
         content = f"{metric}为 {_format_value(safe_rows[0][0])}。"
     elif not safe_rows:
         content = f"我完成了{metric}的查询，但在当前授权范围和筛选条件下没有找到数据。"

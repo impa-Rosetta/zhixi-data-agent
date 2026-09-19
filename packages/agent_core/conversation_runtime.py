@@ -132,6 +132,7 @@ def _project_completed_context(
         artifact_type=artifact.artifact_type if artifact is not None else "query_result",
         result=result,
         result_is_validated=validated is not None,
+        reference_time=run.created_at,
     )
 
 

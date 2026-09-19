@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from pydantic import ValidationError
 
 from packages.agent_core.contracts import Binding, Intent
+from packages.agent_core.time_ranges import date_bounds
 from packages.shared_contracts.agents import (
     AnalysisConversationContext,
     AnalysisDimensionContext,
     AnalysisFilterContext,
     AnalysisMetricContext,
     AnalysisResultContext,
+    AnalysisTimeRangeContext,
     ComparisonMode,
     ResultShape,
     TimeGrain,
@@ -41,8 +44,7 @@ def _comparison(value: str | None) -> ComparisonMode | None:
     if any(marker in normalized for marker in ("同比", "previous_year", "year_over_year")):
         return "previous_year"
     if any(
-        marker in normalized
-        for marker in ("环比", "上月", "上周", "上一期", "previous_period")
+        marker in normalized for marker in ("环比", "上月", "上周", "上一期", "previous_period")
     ):
         return "previous_period"
     if any(marker in normalized for marker in ("基线", "baseline")):
@@ -54,9 +56,7 @@ def _filters(intent: Intent) -> list[AnalysisFilterContext]:
     projected: list[AnalysisFilterContext] = []
     for field_key, value in list(intent.filters.items())[:20]:
         try:
-            projected.append(
-                AnalysisFilterContext(field_key=field_key, operator="eq", value=value)
-            )
+            projected.append(AnalysisFilterContext(field_key=field_key, operator="eq", value=value))
         except ValidationError:
             continue
     return projected
@@ -95,11 +95,7 @@ def _result_context(
     raw_count = result.get("row_count")
     row_count = raw_count if isinstance(raw_count, int) and raw_count >= 0 else len(safe_rows)
     primary_value: str | None = None
-    if (
-        len(safe_rows) == 1
-        and isinstance(safe_rows[0], list)
-        and len(safe_rows[0]) == 1
-    ):
+    if len(safe_rows) == 1 and isinstance(safe_rows[0], list) and len(safe_rows[0]) == 1:
         primary_value = str(safe_rows[0][0])[:200]
     return AnalysisResultContext(
         artifact_id=artifact_id,
@@ -120,6 +116,7 @@ def project_completed_run_context(
     artifact_type: str = "query_result",
     result: dict[str, object] | None = None,
     result_is_validated: bool = False,
+    reference_time: datetime | None = None,
 ) -> AnalysisConversationContext:
     """Keep only strict business context and verified result references."""
     metric: AnalysisMetricContext | None = None
@@ -145,10 +142,14 @@ def project_completed_run_context(
             artifact_type=artifact_type,
             result=result,
         )
+    bounds = date_bounds(intent.time_range, reference=reference_time or datetime.now(UTC))
     return AnalysisConversationContext(
         topic_summary=intent.goal[:500],
         metric=metric,
         dimensions=dimensions,
+        time_range=(
+            AnalysisTimeRangeContext(start=bounds[0], end=bounds[1]) if bounds is not None else None
+        ),
         time_grain=_time_grain(intent),
         filters=_filters(intent),
         comparison=_comparison(intent.comparison),

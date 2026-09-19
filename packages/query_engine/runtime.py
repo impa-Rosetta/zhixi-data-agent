@@ -1,5 +1,6 @@
 import ipaddress
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 import psycopg
@@ -149,5 +150,7 @@ def _execute_mysql(
 def _json_value(value: object) -> object:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
+    if isinstance(value, Decimal):
+        return float(value)
     isoformat = getattr(value, "isoformat", None)
     return isoformat() if callable(isoformat) else str(value)

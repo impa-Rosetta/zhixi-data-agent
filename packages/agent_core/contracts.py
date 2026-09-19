@@ -183,6 +183,7 @@ class Binding(BaseModel):
     snapshot_ids: tuple[str, ...]
     metric_keys: tuple[str, ...]
     dimension_keys: tuple[str, ...]
+    time_dimension_key: str | None = None
     confidence: float = Field(ge=0, le=1)
 
 

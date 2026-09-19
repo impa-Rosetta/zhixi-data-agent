@@ -255,6 +255,18 @@ def bind_intent(
             ),
         )
     semantic, metrics, dimensions = candidates[0]
+    metric_definitions = {item.key: item for item in semantic.document.metrics}
+    supported_sets = [
+        set(metric_definitions[key].supported_dimensions)
+        for key in metrics
+        if key in metric_definitions
+    ]
+    supported = set.intersection(*supported_sets) if supported_sets else set()
+    temporal_dimensions = [
+        item.key
+        for item in semantic.document.dimensions
+        if item.dimension_type == "temporal" and item.key in supported
+    ]
     snapshots = tuple(sorted({str(mapping.snapshot_id) for mapping in semantic.document.mappings}))
     return Binding(
         semantic_model_id=semantic.model_id,
@@ -262,6 +274,7 @@ def bind_intent(
         snapshot_ids=snapshots,
         metric_keys=metrics,
         dimension_keys=dimensions,
+        time_dimension_key=temporal_dimensions[0] if len(temporal_dimensions) == 1 else None,
         confidence=intent.confidence,
     )
 
@@ -373,6 +386,7 @@ def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
         "dimensions": list(binding.dimension_keys),
         "filters": dict(intent.filters),
         "time_range": intent.time_range,
+        "time_dimension": binding.time_dimension_key,
         "comparison": intent.comparison or "none",
         "time_grain": _intent_time_grain(intent) if binding.dimension_keys else None,
         "limit": 200,

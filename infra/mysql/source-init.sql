@@ -34,17 +34,49 @@ FROM production_orders po
 LEFT JOIN quality_inspections qi ON qi.order_id = po.id
 GROUP BY po.id, po.order_no;
 
-INSERT INTO production_orders (order_no, product_code, planned_quantity, completed_quantity)
+INSERT INTO production_orders
+    (order_no, product_code, planned_quantity, completed_quantity, started_at)
 VALUES
-    ('MO-2026-001', 'MOTOR-A', 1000, 960),
-    ('MO-2026-002', 'MOTOR-B', 800, 620);
+    ('MO-2025-010', 'MOTOR-A', 1000, 955, '2025-10-02 08:00:00'),
+    ('MO-2025-011', 'MOTOR-B', 1000, 948, '2025-11-02 08:00:00'),
+    ('MO-2025-012', 'MOTOR-A', 1000, 962, '2025-12-02 08:00:00'),
+    ('MO-2026-001', 'MOTOR-B', 1000, 951, '2026-01-02 08:00:00'),
+    ('MO-2026-002', 'MOTOR-A', 1000, 966, '2026-02-02 08:00:00'),
+    ('MO-2026-003', 'MOTOR-B', 1000, 944, '2026-03-02 08:00:00'),
+    ('MO-2026-004', 'MOTOR-A', 1000, 958, '2026-04-02 08:00:00'),
+    ('MO-2026-005', 'MOTOR-B', 1000, 969, '2026-05-02 08:00:00'),
+    ('MO-2026-006', 'MOTOR-A', 1000, 953, '2026-06-02 08:00:00'),
+    ('MO-2026-007', 'MOTOR-B', 1000, 972, '2026-07-02 08:00:00'),
+    ('MO-2026-008', 'MOTOR-A', 1000, 961, '2026-08-02 08:00:00'),
+    ('MO-2026-009', 'MOTOR-B', 1000, 947, '2026-09-02 08:00:00');
 
 INSERT INTO quality_inspections
-    (order_id, inspected_quantity, defect_quantity, result)
+    (order_id, inspected_quantity, defect_quantity, result, inspected_at)
 VALUES
-    (1, 200, 3, 'passed'),
-    (1, 200, 8, 'failed'),
-    (2, 100, 1, 'passed');
+    (1, 200, 5, 'failed', '2025-10-05 09:00:00'),
+    (1, 200, 4, 'failed', '2025-10-20 09:00:00'),
+    (2, 200, 3, 'passed', '2025-11-05 09:00:00'),
+    (2, 200, 5, 'failed', '2025-11-20 09:00:00'),
+    (3, 200, 2, 'passed', '2025-12-05 09:00:00'),
+    (3, 200, 3, 'passed', '2025-12-20 09:00:00'),
+    (4, 200, 4, 'failed', '2026-01-05 09:00:00'),
+    (4, 200, 5, 'failed', '2026-01-20 09:00:00'),
+    (5, 200, 2, 'passed', '2026-02-05 09:00:00'),
+    (5, 200, 4, 'failed', '2026-02-20 09:00:00'),
+    (6, 200, 6, 'failed', '2026-03-05 09:00:00'),
+    (6, 200, 7, 'failed', '2026-03-20 09:00:00'),
+    (7, 200, 3, 'passed', '2026-04-05 09:00:00'),
+    (7, 200, 4, 'failed', '2026-04-20 09:00:00'),
+    (8, 200, 2, 'passed', '2026-05-05 09:00:00'),
+    (8, 200, 3, 'passed', '2026-05-20 09:00:00'),
+    (9, 200, 4, 'failed', '2026-06-05 09:00:00'),
+    (9, 200, 5, 'failed', '2026-06-20 09:00:00'),
+    (10, 200, 3, 'passed', '2026-07-05 09:00:00'),
+    (10, 200, 4, 'failed', '2026-07-20 09:00:00'),
+    (11, 200, 5, 'failed', '2026-08-05 09:00:00'),
+    (11, 200, 6, 'failed', '2026-08-20 09:00:00'),
+    (12, 200, 8, 'failed', '2026-09-05 09:00:00'),
+    (12, 200, 4, 'failed', '2026-09-20 09:00:00');
 
 CREATE USER 'zhixi_reader'@'%' IDENTIFIED BY 'reader-local-only';
 GRANT SELECT, SHOW VIEW ON factory_demo.* TO 'zhixi_reader'@'%';

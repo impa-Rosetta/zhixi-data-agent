@@ -58,6 +58,7 @@ from packages.agent_core.presentation import (
     small_talk_presentation,
 )
 from packages.agent_core.small_talk import small_talk_response
+from packages.agent_core.time_ranges import resolve_time_range
 from packages.analysis_engine import compose_chart_spec, describe_verified_result
 from packages.model_gateway import ModelGateway, ModelGatewayError
 from packages.semantic_model.models import SemanticModel, SemanticModelVersion
@@ -1316,6 +1317,22 @@ def _execute_metric(db: Session, run: AnalysisRun, plan: AnalysisPlan) -> dict[s
         for key, value in filter_values.items()
         if isinstance(key, str) and isinstance(value, (str, int, float, bool))
     ]
+    raw_time_dimension = arguments.get("time_dimension")
+    time_dimension = raw_time_dimension if isinstance(raw_time_dimension, str) else None
+    raw_time_range = arguments.get("time_range")
+    time_range = resolve_time_range(
+        raw_time_range if isinstance(raw_time_range, str) else None,
+        reference=run.created_at,
+    )
+    if time_range is not None:
+        if time_dimension is None:
+            raise ValueError("query.time_dimension_required")
+        filters.extend(
+            (
+                QueryFilter(dimension=time_dimension, operator="gte", value=time_range.start),
+                QueryFilter(dimension=time_dimension, operator="lt", value=time_range.end),
+            )
+        )
     raw_dimensions = arguments.get("dimensions")
     dimensions = [str(item) for item in raw_dimensions] if isinstance(raw_dimensions, list) else []
     comparison: Literal["none", "previous_period"] = (

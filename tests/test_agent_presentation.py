@@ -104,3 +104,25 @@ def test_serialized_decimal_query_result_does_not_expose_database_scale() -> Non
     )
 
     assert response.content == "不良率为 2.4。"
+
+
+def test_single_point_trend_explains_data_is_insufficient() -> None:
+    response = query_presentation(
+        Intent(
+            task_type="trend",
+            goal="最近三个月不良率趋势",
+            metrics=("不良率",),
+            dimensions=("月份",),
+            time_range="最近三个月",
+            output=("time_series",),
+            confidence=0.99,
+        ),
+        {
+            "columns": ["inspection_time", "defect_rate"],
+            "rows": [["2026-09-01", 2.4]],
+            "row_count": 1,
+        },
+    )
+
+    assert "只有 1 个时间点" in response.content
+    assert "无法形成有意义的趋势" in response.content

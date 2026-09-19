@@ -11,7 +11,6 @@ COPY --chown=zhixi:zhixi alembic.ini ./
 COPY --chown=zhixi:zhixi apps ./apps
 COPY --chown=zhixi:zhixi packages ./packages
 COPY --chown=zhixi:zhixi infra/migrations ./infra/migrations
-RUN pip install --no-cache-dir --no-deps .
 USER zhixi
 EXPOSE 8000
 CMD ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

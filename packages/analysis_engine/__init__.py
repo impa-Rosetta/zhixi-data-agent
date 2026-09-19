@@ -164,8 +164,17 @@ def _table(result: dict[str, object]) -> tuple[list[str], list[list[object]]]:
     return columns, rows
 
 
-def _is_number(value: object) -> TypeGuard[int | float]:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+def _is_number(value: object) -> TypeGuard[int | float | str]:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return math.isfinite(value)
+    if isinstance(value, str):
+        try:
+            return math.isfinite(float(value))
+        except ValueError:
+            return False
+    return False
 
 
 __all__ = [

@@ -56,9 +56,32 @@ def test_scalar_results_do_not_create_misleading_statistics_or_charts() -> None:
     artifact_id = uuid.uuid4()
     result = {"columns": ["defect_rate"], "rows": [[2.4]]}
     assert describe_verified_result(result, source_artifact_id=artifact_id) is None
-    assert compose_chart_spec(
+    assert (
+        compose_chart_spec(
+            result,
+            source_artifact_id=artifact_id,
+            evidence_id=None,
+            title="不良率",
+        )
+        is None
+    )
+
+
+def test_numeric_database_strings_are_accepted_defensively() -> None:
+    artifact_id = uuid.uuid4()
+    result = {
+        "columns": ["month", "defect_rate"],
+        "rows": [["2026-07", "2.5"], ["2026-08", "3.75"]],
+        "row_count": 2,
+    }
+    summary = describe_verified_result(result, source_artifact_id=artifact_id)
+    chart = compose_chart_spec(
         result,
         source_artifact_id=artifact_id,
         evidence_id=None,
-        title="不良率",
-    ) is None
+        title="趋势",
+    )
+    assert summary is not None
+    assert summary.numeric_columns[0].mean == 3.125
+    assert chart is not None
+    assert chart.series[0].field == "defect_rate"

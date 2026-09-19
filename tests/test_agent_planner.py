@@ -325,5 +325,7 @@ def test_time_grain_binds_to_the_temporal_dimension_supported_by_metric() -> Non
     plan = create_plan(intent, binding)
 
     assert binding.dimension_keys == ("inspection_time",)
+    assert binding.time_dimension_key == "inspection_time"
     assert plan.steps[0].arguments["time_grain"] == "month"
+    assert plan.steps[0].arguments["time_dimension"] == "inspection_time"
     assert plan.steps[0].arguments["comparison"] == "previous_period"
