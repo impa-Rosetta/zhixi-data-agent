@@ -191,7 +191,7 @@ def route_intent(intent: Intent) -> RouteDecision:
     if intent.time_range is None:
         defaults["time_range"] = "all_available"
     if not intent.dimensions:
-        defaults["dimensions"] = "aggregate"
+        defaults["dimensions"] = "time" if route == "trend" else "aggregate"
     return RouteDecision(
         route=route,
         requires_binding=True,
@@ -267,14 +267,18 @@ def bind_intent(
         for item in semantic.document.dimensions
         if item.dimension_type == "temporal" and item.key in supported
     ]
+    time_dimension = temporal_dimensions[0] if len(temporal_dimensions) == 1 else None
+    effective_dimensions = dimensions
+    if intent.task_type == "trend" and not effective_dimensions and time_dimension is not None:
+        effective_dimensions = (time_dimension,)
     snapshots = tuple(sorted({str(mapping.snapshot_id) for mapping in semantic.document.mappings}))
     return Binding(
         semantic_model_id=semantic.model_id,
         semantic_version_id=semantic.version_id,
         snapshot_ids=snapshots,
         metric_keys=metrics,
-        dimension_keys=dimensions,
-        time_dimension_key=temporal_dimensions[0] if len(temporal_dimensions) == 1 else None,
+        dimension_keys=effective_dimensions,
+        time_dimension_key=time_dimension,
         confidence=intent.confidence,
     )
 
@@ -379,6 +383,9 @@ def _intent_time_grain(intent: Intent) -> str | None:
 
 
 def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
+    time_grain = _intent_time_grain(intent)
+    if time_grain is None and intent.task_type == "trend" and binding.dimension_keys:
+        time_grain = "month"
     arguments: dict[str, object] = {
         "semantic_model_id": binding.semantic_model_id,
         "semantic_version_id": binding.semantic_version_id,
@@ -388,7 +395,7 @@ def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
         "time_range": intent.time_range,
         "time_dimension": binding.time_dimension_key,
         "comparison": intent.comparison or "none",
-        "time_grain": _intent_time_grain(intent) if binding.dimension_keys else None,
+        "time_grain": time_grain if binding.dimension_keys else None,
         "limit": 200,
     }
     return AnalysisPlan(

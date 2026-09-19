@@ -157,7 +157,14 @@ def _previous_intent_run(
         raw_intent = previous_run.context.get("intent")
         if isinstance(raw_intent, dict):
             intent = Intent.model_validate(raw_intent)
-            if intent.task_type != "small_talk":
+            if intent.task_type in {
+                "catalog_exploration",
+                "metric_query",
+                "comparison",
+                "ranking",
+                "trend",
+                "exploration",
+            }:
                 return previous_run, intent
     return None, None
 
