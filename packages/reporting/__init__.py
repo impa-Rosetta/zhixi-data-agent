@@ -178,6 +178,18 @@ def render_html(spec: ReportSpecV1) -> str:
         payload = html.escape(
             json.dumps(section.summary, ensure_ascii=False, sort_keys=True, indent=2)
         )
+        '<meta http-equiv="Content-Security-Policy" '
+        'content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;">'
+        "<style>"
+        "@page{size:A4;margin:20mm 18mm;}"
+        "body{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;"
+        "color:#17213a;line-height:1.65;font-size:11pt;}"
+        "h1{font-size:24pt;color:#243fbd;border-bottom:2px solid #dfe5ff;padding-bottom:12px;}"
+        "h2{font-size:15pt;margin-top:24px;color:#243fbd;}"
+        "section{break-inside:avoid;border:1px solid #dfe5ee;border-radius:8px;"
+        "padding:14px;margin:14px 0;}"
+        "pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fb;padding:12px;}"
+        ".evidence{font-size:9pt;color:#52617a;}</style>"
         sections.append(
             "<section>"
             f"<h2>{html.escape(section.title)}</h2>"
