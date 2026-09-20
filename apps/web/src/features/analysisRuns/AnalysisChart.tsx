@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef } from 'react'
 import { BarChart, LineChart, ScatterChart } from 'echarts/charts'
 import {
   DataZoomComponent,
+  DatasetComponent,
   GridComponent,
   LegendComponent,
   TooltipComponent,
 } from 'echarts/components'
 import { init, use as registerEChartsComponents, type EChartsCoreOption } from 'echarts/core'
+import { LegacyGridContainLabel } from 'echarts/features'
 import { SVGRenderer } from 'echarts/renderers'
 
 import type { AnalysisArtifact } from './types'
@@ -16,9 +18,11 @@ registerEChartsComponents([
   LineChart,
   ScatterChart,
   DataZoomComponent,
+  DatasetComponent,
   GridComponent,
   LegendComponent,
   TooltipComponent,
+  LegacyGridContainLabel,
   SVGRenderer,
 ])
 
@@ -36,6 +40,13 @@ type SafeChartSpec = {
 type QueryData = {
   columns: string[]
   rows: unknown[][]
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  defect_rate: '不良率',
+  defect_quantity: '不良数量',
+  inspected_quantity: '检验数量',
+  inspection_time: '检验时间',
 }
 
 export function AnalysisChart({
@@ -135,7 +146,10 @@ function readQueryData(artifact: AnalysisArtifact): QueryData | null {
   return columns.length > 1 && rows.length > 1 ? { columns, rows } : null
 }
 
-function createSafeOption(spec: SafeChartSpec, data: QueryData): EChartsCoreOption | null {
+export function createSafeOption(
+  spec: SafeChartSpec,
+  data: QueryData,
+): EChartsCoreOption | null {
   const allowedFields = new Set(data.columns)
   if (!allowedFields.has(spec.categoryField)) return null
   const series = spec.series.filter((item) => allowedFields.has(item.field))
@@ -166,7 +180,7 @@ function createSafeOption(spec: SafeChartSpec, data: QueryData): EChartsCoreOpti
       ? [{ type: 'inside', start: 0, end: Math.max(20, Math.floor(1200 / records.length)) }, { type: 'slider', height: 16 }]
       : [],
     series: series.map((item) => ({
-      name: item.label,
+      name: displaySeriesLabel(item.label, item.field),
       type: spec.chartType === 'line' ? 'line' : spec.chartType === 'scatter' ? 'scatter' : 'bar',
       encode: horizontal
         ? { x: item.field, y: spec.categoryField }
@@ -184,6 +198,10 @@ function safeValue(value: unknown): string | number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'boolean') return value ? 1 : 0
   return null
+}
+
+function displaySeriesLabel(label: string, field: string): string {
+  return label === field ? (FIELD_LABELS[field] ?? label) : label
 }
 
 function isChartType(value: unknown): value is ChartType {
