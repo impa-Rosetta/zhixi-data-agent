@@ -15,6 +15,10 @@ class Action(enum.StrEnum):
     SEMANTIC_READ = "semantic.read"
     SEMANTIC_MANAGE = "semantic.manage"
     ANALYSIS_RUN = "analysis.run"
+    ANALYSIS_REPORT_CREATE = "analysis.report.create"
+    ANALYSIS_REPORT_READ = "analysis.report.read"
+    ANALYSIS_REPORT_DOWNLOAD = "analysis.report.download"
+    ANALYSIS_REPORT_RETRY = "analysis.report.retry"
     AUDIT_READ = "audit.read"
 
 
@@ -28,10 +32,23 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
             Action.DATA_SOURCE_MANAGE,
             Action.CATALOG_READ,
             Action.ANALYSIS_RUN,
+            Action.ANALYSIS_REPORT_CREATE,
+            Action.ANALYSIS_REPORT_READ,
+            Action.ANALYSIS_REPORT_DOWNLOAD,
+            Action.ANALYSIS_REPORT_RETRY,
         }
     ),
     WorkspaceRole.ANALYST: frozenset(
-        {Action.WORKSPACE_READ, Action.CATALOG_READ, Action.SEMANTIC_READ, Action.ANALYSIS_RUN}
+        {
+            Action.WORKSPACE_READ,
+            Action.CATALOG_READ,
+            Action.SEMANTIC_READ,
+            Action.ANALYSIS_RUN,
+            Action.ANALYSIS_REPORT_CREATE,
+            Action.ANALYSIS_REPORT_READ,
+            Action.ANALYSIS_REPORT_DOWNLOAD,
+            Action.ANALYSIS_REPORT_RETRY,
+        }
     ),
     WorkspaceRole.AUDITOR: frozenset(
         {
@@ -40,6 +57,8 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
             Action.CATALOG_READ,
             Action.SEMANTIC_READ,
             Action.AUDIT_READ,
+            Action.ANALYSIS_REPORT_READ,
+            Action.ANALYSIS_REPORT_DOWNLOAD,
         }
     ),
 }

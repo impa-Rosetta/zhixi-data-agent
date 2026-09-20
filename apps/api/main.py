@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.routes.analysis_conversations import router as analysis_conversations_router
+from apps.api.routes.analysis_reports import router as analysis_reports_router
 from apps.api.routes.analysis_runs import router as analysis_runs_router
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.data_sources import router as data_sources_router
@@ -48,3 +49,4 @@ app.include_router(semantic_models_router)
 app.include_router(queries_router)
 app.include_router(analysis_conversations_router)
 app.include_router(analysis_runs_router)
+app.include_router(analysis_reports_router)

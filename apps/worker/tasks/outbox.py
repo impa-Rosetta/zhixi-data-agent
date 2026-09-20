@@ -9,6 +9,7 @@ from packages.platform_core.models import OutboxEvent
 
 _TASK_BY_EVENT = {
     "analysis.run.requested": ("analysis_runs.execute", "run_id"),
+    "analysis.report.requested": ("analysis_reports.generate", "report_id"),
     "data_source.connection_test.requested": ("data_sources.test_connection", "job_id"),
     "data_source.metadata_scan.requested": ("data_sources.scan_metadata", "job_id"),
     "data_source.profile_scan.requested": ("data_sources.scan_profile", "job_id"),

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ReportArtifactType = Literal["query_result", "analysis_summary", "chart_spec"]
 ReportSectionKind = Literal["data", "analysis", "chart"]
@@ -41,3 +41,47 @@ class ReportSpecV1(StrictReportContract):
     generated_at: datetime
     title: str = Field(min_length=1, max_length=300)
     sections: list[ReportSection] = Field(min_length=1, max_length=100)
+
+
+ReportStatus = Literal["queued", "generating", "succeeded", "failed", "expired"]
+
+
+class CreateAnalysisReportRequest(StrictReportContract):
+    conversation_id: uuid.UUID
+    turn_ids: list[uuid.UUID] = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=300)
+    template_key: Literal["quality-analysis-v1"] = "quality-analysis-v1"
+
+    @field_validator("turn_ids")
+    @classmethod
+    def _unique_turn_ids(cls, values: list[uuid.UUID]) -> list[uuid.UUID]:
+        if len(values) != len(set(values)):
+            raise ValueError("turn_ids must be unique")
+        return values
+
+
+class AnalysisReportResponse(StrictReportContract):
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    conversation_id: uuid.UUID
+    created_by_user_id: uuid.UUID
+    title: str
+    status: ReportStatus
+    template_key: str
+    template_version: str
+    renderer_version: str
+    spec: ReportSpecV1
+    source_digest: str
+    content_digest: str | None
+    error_code: str | None
+    attempt_count: int
+    expires_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisReportPage(StrictReportContract):
+    items: list[AnalysisReportResponse]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1, le=100)
+    offset: int = Field(ge=0)

@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from packages.agent_core.persistence import (
     AnalysisArtifact,
@@ -22,6 +23,7 @@ from packages.reporting import (
     render_html,
     render_markdown,
 )
+from packages.shared_contracts.reports import CreateAnalysisReportRequest
 
 
 def _source(*, summary: dict[str, object] | None = None) -> dict[str, Any]:
@@ -160,3 +162,26 @@ def test_html_escapes_untrusted_text_and_markdown_keeps_evidence() -> None:
     assert "&lt;script&gt;" in html
     assert "证据定位" in markdown
     assert str(composition.spec.sections[0].source.artifact_id) in markdown
+
+
+def test_create_report_request_rejects_duplicate_turns() -> None:
+    turn_id = uuid.uuid4()
+
+    with pytest.raises(ValidationError):
+        CreateAnalysisReportRequest(
+            conversation_id=uuid.uuid4(),
+            turn_ids=[turn_id, turn_id],
+            title="质量报告",
+        )
+
+
+def test_create_report_request_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        CreateAnalysisReportRequest.model_validate(
+            {
+                "conversation_id": str(uuid.uuid4()),
+                "turn_ids": [str(uuid.uuid4())],
+                "title": "质量报告",
+                "unexpected": True,
+            }
+        )

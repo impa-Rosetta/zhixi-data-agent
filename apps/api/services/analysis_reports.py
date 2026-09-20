@@ -1,0 +1,266 @@
+"""Transactional services for trusted report creation and retrieval."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from apps.api.audit import add_audit_event
+from packages.agent_core.persistence import (
+    AnalysisArtifact,
+    AnalysisConversation,
+    AnalysisEvidence,
+    AnalysisReport,
+    AnalysisReportStatus,
+    AnalysisRun,
+    AnalysisRunStatus,
+    AnalysisTurn,
+    AnalysisValidation,
+)
+from packages.platform_core.models import OutboxEvent
+from packages.reporting import ReportCompositionError, compose_report_spec
+from packages.shared_contracts.reports import (
+    AnalysisReportPage,
+    AnalysisReportResponse,
+    CreateAnalysisReportRequest,
+    ReportSpecV1,
+)
+
+
+class AnalysisReportServiceError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
+def _response(report: AnalysisReport) -> AnalysisReportResponse:
+    return AnalysisReportResponse(
+        id=report.id,
+        workspace_id=report.workspace_id,
+        conversation_id=report.conversation_id,
+        created_by_user_id=report.created_by_user_id,
+        title=report.title,
+        status=report.status.value,
+        template_key=report.template_key,
+        template_version=report.template_version,
+        renderer_version=report.renderer_version,
+        spec=ReportSpecV1.model_validate(report.report_spec),
+        source_digest=report.source_digest,
+        content_digest=report.content_digest,
+        error_code=report.error_code,
+        attempt_count=report.attempt_count,
+        expires_at=report.expires_at,
+        created_at=report.created_at,
+        updated_at=report.updated_at,
+    )
+
+
+def _get_report(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    report_id: uuid.UUID,
+) -> AnalysisReport:
+    report = db.scalar(
+        select(AnalysisReport).where(
+            AnalysisReport.id == report_id,
+            AnalysisReport.workspace_id == workspace_id,
+        )
+    )
+    if report is None:
+        raise AnalysisReportServiceError("analysis_report.not_found", "Report not found")
+    return report
+
+
+def create_report(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    idempotency_key: str,
+    payload: CreateAnalysisReportRequest,
+) -> AnalysisReportResponse:
+    existing = db.scalar(
+        select(AnalysisReport).where(
+            AnalysisReport.workspace_id == workspace_id,
+            AnalysisReport.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        return _response(existing)
+
+    conversation = db.scalar(
+        select(AnalysisConversation).where(
+            AnalysisConversation.id == payload.conversation_id,
+            AnalysisConversation.workspace_id == workspace_id,
+        )
+    )
+    if conversation is None:
+        raise AnalysisReportServiceError(
+            "analysis_report.conversation_not_found",
+            "Analysis conversation not found",
+        )
+
+    turns = list(
+        db.scalars(
+            select(AnalysisTurn).where(
+                AnalysisTurn.workspace_id == workspace_id,
+                AnalysisTurn.conversation_id == conversation.id,
+                AnalysisTurn.id.in_(payload.turn_ids),
+            )
+        )
+    )
+    if len(turns) != len(payload.turn_ids):
+        raise AnalysisReportServiceError(
+            "analysis_report.turn_not_found",
+            "One or more selected turns were not found",
+        )
+    run_ids = [turn.analysis_run_id for turn in turns if turn.analysis_run_id is not None]
+    if len(run_ids) != len(turns):
+        raise AnalysisReportServiceError(
+            "analysis_report.turn_not_completed",
+            "Every selected turn must have a completed analysis run",
+        )
+    runs = list(
+        db.scalars(
+            select(AnalysisRun).where(
+                AnalysisRun.workspace_id == workspace_id,
+                AnalysisRun.id.in_(run_ids),
+            )
+        )
+    )
+    if len(runs) != len(run_ids) or any(
+        run.status is not AnalysisRunStatus.COMPLETED for run in runs
+    ):
+        raise AnalysisReportServiceError(
+            "analysis_report.turn_not_completed",
+            "Every selected turn must have a completed analysis run",
+        )
+    artifacts = list(
+        db.scalars(
+            select(AnalysisArtifact).where(
+                AnalysisArtifact.workspace_id == workspace_id,
+                AnalysisArtifact.run_id.in_(run_ids),
+                AnalysisArtifact.artifact_type.in_(
+                    ("query_result", "analysis_summary", "chart_spec")
+                ),
+            )
+        )
+    )
+    artifact_ids = [artifact.id for artifact in artifacts]
+    evidence = (
+        list(
+            db.scalars(
+                select(AnalysisEvidence).where(
+                    AnalysisEvidence.workspace_id == workspace_id,
+                    AnalysisEvidence.artifact_id.in_(artifact_ids),
+                )
+            )
+        )
+        if artifact_ids
+        else []
+    )
+    validations = list(
+        db.scalars(
+            select(AnalysisValidation).where(
+                AnalysisValidation.workspace_id == workspace_id,
+                AnalysisValidation.run_id.in_(run_ids),
+            )
+        )
+    )
+    try:
+        composition = compose_report_spec(
+            workspace_id=workspace_id,
+            conversation_id=conversation.id,
+            created_by_user_id=actor_user_id,
+            title=payload.title,
+            generated_at=datetime.now(UTC),
+            runs=runs,
+            turns=turns,
+            artifacts=artifacts,
+            evidence=evidence,
+            validations=validations,
+        )
+    except ReportCompositionError as exc:
+        raise AnalysisReportServiceError(
+            exc.code, "Selected analysis results are not reportable"
+        ) from exc
+
+    report = AnalysisReport(
+        workspace_id=workspace_id,
+        conversation_id=conversation.id,
+        created_by_user_id=actor_user_id,
+        idempotency_key=idempotency_key,
+        title=composition.spec.title,
+        status=AnalysisReportStatus.QUEUED,
+        template_key=composition.spec.template_key,
+        template_version=composition.spec.template_version,
+        renderer_version="1.0.0",
+        report_spec=composition.spec.model_dump(mode="json"),
+        source_digest=composition.source_digest,
+    )
+    db.add(report)
+    db.flush()
+    db.add(
+        OutboxEvent(
+            aggregate_type="analysis_report",
+            aggregate_id=report.id,
+            event_type="analysis.report.requested",
+            payload={"report_id": str(report.id)},
+        )
+    )
+    add_audit_event(
+        db,
+        action="analysis_report.created",
+        outcome="success",
+        resource_type="analysis_report",
+        resource_id=str(report.id),
+        actor_user_id=actor_user_id,
+        workspace_id=workspace_id,
+        detail=f"turns={len(turns)};template={report.template_key}",
+    )
+    db.flush()
+    return _response(report)
+
+
+def get_report(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    report_id: uuid.UUID,
+) -> AnalysisReportResponse:
+    return _response(_get_report(db, workspace_id=workspace_id, report_id=report_id))
+
+
+def list_reports(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    limit: int = 30,
+    offset: int = 0,
+) -> AnalysisReportPage:
+    bounded_limit = max(1, min(limit, 100))
+    bounded_offset = max(0, offset)
+    total = db.scalar(
+        select(func.count())
+        .select_from(AnalysisReport)
+        .where(AnalysisReport.workspace_id == workspace_id)
+    )
+    reports = list(
+        db.scalars(
+            select(AnalysisReport)
+            .where(AnalysisReport.workspace_id == workspace_id)
+            .order_by(AnalysisReport.created_at.desc(), AnalysisReport.id.desc())
+            .offset(bounded_offset)
+            .limit(bounded_limit)
+        )
+    )
+    return AnalysisReportPage(
+        items=[_response(report) for report in reports],
+        total=int(total or 0),
+        limit=bounded_limit,
+        offset=bounded_offset,
+    )

@@ -28,3 +28,17 @@ def test_cross_workspace_access_is_always_denied() -> None:
     assert not is_allowed(
         request(WorkspaceRole.SYSTEM_ADMIN, Action.WORKSPACE_READ, cross_workspace=True)
     )
+
+
+def test_analyst_can_create_and_retry_reports() -> None:
+    assert is_allowed(request(WorkspaceRole.ANALYST, Action.ANALYSIS_REPORT_CREATE))
+    assert is_allowed(request(WorkspaceRole.ANALYST, Action.ANALYSIS_REPORT_READ))
+    assert is_allowed(request(WorkspaceRole.ANALYST, Action.ANALYSIS_REPORT_DOWNLOAD))
+    assert is_allowed(request(WorkspaceRole.ANALYST, Action.ANALYSIS_REPORT_RETRY))
+
+
+def test_auditor_has_read_only_report_access() -> None:
+    assert is_allowed(request(WorkspaceRole.AUDITOR, Action.ANALYSIS_REPORT_READ))
+    assert is_allowed(request(WorkspaceRole.AUDITOR, Action.ANALYSIS_REPORT_DOWNLOAD))
+    assert not is_allowed(request(WorkspaceRole.AUDITOR, Action.ANALYSIS_REPORT_CREATE))
+    assert not is_allowed(request(WorkspaceRole.AUDITOR, Action.ANALYSIS_REPORT_RETRY))
