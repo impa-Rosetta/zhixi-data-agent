@@ -71,6 +71,20 @@ class AnalysisTurnStatus(enum.StrEnum):
     CANCELLED = "cancelled"
 
 
+
+
+class AnalysisReportStatus(enum.StrEnum):
+    QUEUED = "queued"
+    GENERATING = "generating"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    EXPIRED = "expired"
+
+
+class AnalysisReportFormat(enum.StrEnum):
+    MARKDOWN = "markdown"
+    HTML = "html"
+    PDF = "pdf"
 class AnalysisConversation(Base):
     __tablename__ = "analysis_conversations"
     __table_args__ = (
@@ -367,6 +381,84 @@ class AnalysisValidation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+
+
+class AnalysisReport(Base):
+    __tablename__ = "analysis_reports"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "idempotency_key",
+            name="uq_analysis_report_idempotency",
+        ),
+        UniqueConstraint("workspace_id", "id", name="uq_analysis_report_workspace_id"),
+        ForeignKeyConstraint(
+            ["workspace_id", "conversation_id"],
+            ["analysis_conversations.workspace_id", "analysis_conversations.id"],
+            name="fk_analysis_report_conversation_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_analysis_report_workspace_created", "workspace_id", "created_at"),
+        Index("ix_analysis_report_workspace_status", "workspace_id", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(String(300))
+    status: Mapped[AnalysisReportStatus] = mapped_column(
+        Enum(AnalysisReportStatus, native_enum=False, values_callable=_values), index=True
+    )
+    template_key: Mapped[str] = mapped_column(String(100))
+    template_version: Mapped[str] = mapped_column(String(32))
+    renderer_version: Mapped[str] = mapped_column(String(32))
+    report_spec: Mapped[dict[str, object]] = mapped_column(JSON)
+    source_digest: Mapped[str] = mapped_column(String(64), index=True)
+    content_digest: Mapped[str | None] = mapped_column(String(64), index=True)
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AnalysisReportFile(Base):
+    __tablename__ = "analysis_report_files"
+    __table_args__ = (
+        UniqueConstraint("report_id", "format", name="uq_analysis_report_file_format"),
+        ForeignKeyConstraint(
+            ["workspace_id", "report_id"],
+            ["analysis_reports.workspace_id", "analysis_reports.id"],
+            name="fk_analysis_report_file_report_workspace",
+            ondelete="CASCADE",
+        ),
+        Index("ix_analysis_report_file_workspace_report", "workspace_id", "report_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    report_id: Mapped[uuid.UUID] = mapped_column(index=True)
+    format: Mapped[AnalysisReportFormat] = mapped_column(
+        Enum(AnalysisReportFormat, native_enum=False, values_callable=_values), index=True
+    )
+    object_key: Mapped[str] = mapped_column(String(500))
+    media_type: Mapped[str] = mapped_column(String(100))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    sha256_digest: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 class AnalysisCheckpoint(Base):
     __tablename__ = "analysis_checkpoints"
     __table_args__ = (
