@@ -1,6 +1,7 @@
 import asyncio
 import json
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from packages.connectors.metadata import (
     MetadataRelation,
     MetadataSchema,
 )
+from packages.evaluation import verify_answer_claims
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
 from packages.platform_core.catalog_store import replace_snapshot_document
 from packages.platform_core.database import Base
@@ -296,6 +298,35 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     assert view.last_event_sequence >= 1
     assert view.messages[-1].role == "assistant"
     assert view.messages[-1].content == "不良率为 2.5。"
+    assert view.messages[-1].context_patch["answer_claims"] == [
+        {
+            "column": "defect_rate",
+            "value": "2.5",
+            "artifact_id": str(view.artifacts[0].id),
+            "evidence_id": str(view.evidence[0].id),
+            "validation_id": str(view.validations[0].id),
+        }
+    ]
+    checked = verify_answer_claims(view)
+    assert checked.status == "verified"
+    assert checked.displayed_numbers == {"defect_rate": Decimal("2.5")}
+    assert checked.evidence_numbers == {"defect_rate": Decimal("2.5")}
+    last_message = view.messages[-1]
+    old_message = last_message.model_copy(update={"context_patch": {}})
+    old_view = view.model_copy(update={"messages": [*view.messages[:-1], old_message]})
+    assert verify_answer_claims(old_view).status == "unverified"
+    bad_claim = {**last_message.context_patch["answer_claims"][0], "value": "9.9"}
+    altered_message = last_message.model_copy(
+        update={"context_patch": {"answer_claims": [bad_claim]}}
+    )
+    altered_view = view.model_copy(update={"messages": [*view.messages[:-1], altered_message]})
+    assert verify_answer_claims(altered_view).reason == "answer_claim_value_mismatch"
+    wrong_evidence = {**bad_claim, "value": "2.5", "evidence_id": str(uuid.uuid4())}
+    altered_message = last_message.model_copy(
+        update={"context_patch": {"answer_claims": [wrong_evidence]}}
+    )
+    altered_view = view.model_copy(update={"messages": [*view.messages[:-1], altered_message]})
+    assert verify_answer_claims(altered_view).reason == "answer_claim_reference_mismatch"
 
 
 def test_runtime_completes_capability_help_without_semantic_or_data_access() -> None:

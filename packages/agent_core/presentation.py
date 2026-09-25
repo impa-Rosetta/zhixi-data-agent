@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
@@ -101,12 +102,20 @@ def failure_presentation(
     return _presentation(content, kind="error", retryable=retryable, technical_code=code)
 
 
-def query_presentation(intent: Intent, result: dict[str, object]) -> AgentPresentation:
+def query_presentation(
+    intent: Intent,
+    result: dict[str, object],
+    *,
+    source_artifact_id: uuid.UUID | None = None,
+    evidence_id: uuid.UUID | None = None,
+    validation_id: uuid.UUID | None = None,
+) -> AgentPresentation:
     rows = result.get("rows")
     columns = result.get("columns")
     safe_rows = rows if isinstance(rows, list) else []
     safe_columns = columns if isinstance(columns, list) else []
     metric = "、".join(_safe_labels(intent.metrics)) or "查询结果"
+    displayed_values: list[tuple[str, object]] = []
     time_series_requested = (
         intent.task_type == "trend"
         or "time_series" in intent.output
@@ -119,6 +128,8 @@ def query_presentation(intent: Intent, result: dict[str, object]) -> AgentPresen
         )
     elif len(safe_rows) == 1 and isinstance(safe_rows[0], list) and len(safe_rows[0]) == 1:
         content = f"{metric}为 {_format_value(safe_rows[0][0])}。"
+        if len(safe_columns) == 1 and isinstance(safe_columns[0], str):
+            displayed_values.append((safe_columns[0], safe_rows[0][0]))
     elif not safe_rows:
         content = f"我完成了{metric}的查询，但在当前授权范围和筛选条件下没有找到数据。"
     else:
@@ -130,11 +141,55 @@ def query_presentation(intent: Intent, result: dict[str, object]) -> AgentPresen
                 f"{_safe_label(column)}为 {_format_value(value)}"
                 for column, value in zip(safe_columns[:6], safe_rows[0][:6], strict=False)
             ]
+            displayed_values.extend(
+                (column, value)
+                for column, value in zip(safe_columns[:6], safe_rows[0][:6], strict=False)
+                if isinstance(column, str)
+            )
             detail = "，" + "，".join(pairs) if pairs else ""
         content = (
             f"我已经完成{metric}的分析，共得到 {count} 行结果{detail}。详细数据和证据见下方结果。"
         )
-    return _presentation(content, kind="answer")
+    presentation = _presentation(content, kind="answer")
+    if source_artifact_id is None or evidence_id is None or validation_id is None:
+        return presentation
+    claims = [
+        claim
+        for column, value in displayed_values
+        if (claim := _numeric_claim(column, value, source_artifact_id, evidence_id, validation_id))
+        is not None
+    ]
+    if not claims:
+        return presentation
+    return AgentPresentation(
+        content=presentation.content,
+        context_patch={**presentation.context_patch, "answer_claims": claims},
+    )
+
+
+def _numeric_claim(
+    column: str,
+    value: object,
+    artifact_id: uuid.UUID,
+    evidence_id: uuid.UUID,
+    validation_id: uuid.UUID,
+) -> dict[str, str] | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal, str)):
+        return None
+    displayed = _format_value(value)
+    try:
+        number = Decimal(displayed)
+    except (ValueError, ArithmeticError):
+        return None
+    if not number.is_finite():
+        return None
+    return {
+        "column": _safe_label(column),
+        "value": displayed,
+        "artifact_id": str(artifact_id),
+        "evidence_id": str(evidence_id),
+        "validation_id": str(validation_id),
+    }
 
 
 def catalog_presentation(result: dict[str, object]) -> AgentPresentation:

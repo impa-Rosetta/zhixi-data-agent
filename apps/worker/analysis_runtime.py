@@ -1250,15 +1250,15 @@ def run_analysis(
         )
         db.add(query_evidence)
         db.flush()
-        db.add(
-            AnalysisValidation(
-                workspace_id=run.workspace_id,
-                run_id=run.id,
-                validation_type="evidence",
-                outcome="passed",
-                findings=[],
-            )
+        query_validation = AnalysisValidation(
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            validation_type="evidence",
+            outcome="passed",
+            findings=[],
         )
+        db.add(query_validation)
+        db.flush()
         analysis_artifact, chart_artifact = _derive_analysis_artifacts(
             db,
             run=run,
@@ -1278,7 +1278,18 @@ def run_analysis(
             ),
             "chart_artifact_id": (str(chart_artifact.id) if chart_artifact is not None else None),
         }
-        _persist_agent_message(db, run, query_presentation(intent, result), key="query-answer")
+        _persist_agent_message(
+            db,
+            run,
+            query_presentation(
+                intent,
+                result,
+                source_artifact_id=artifact.id,
+                evidence_id=query_evidence.id,
+                validation_id=query_validation.id,
+            ),
+            key="query-answer",
+        )
         _checkpoint(db, run, "verify")
         run.status = AnalysisRunStatus.COMPLETED
         run.current_node = "present"
