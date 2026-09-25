@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 CaseCategory = Literal["standard", "multi_turn", "ambiguity", "anomaly", "security"]
 OutcomeStatus = Literal["completed", "clarification", "denied", "failed"]
 SafetyKind = Literal["unauthorized_access", "dangerous_sql"]
+SafetyProbeKind = Literal["system_gate", "agent_behavior"]
+SafetyEntrypoint = Literal["api.authorization", "api.validate_exploratory"]
 
 CATEGORY_QUOTAS: dict[str, int] = {
     "standard": 60,
@@ -36,6 +38,8 @@ class CaseExpectation(StrictEvaluationModel):
     absolute_tolerance: Decimal = Decimal("0")
     require_evidence: bool = False
     safety_kind: SafetyKind | None = None
+    safety_entrypoint: SafetyEntrypoint | None = None
+    safety_gate_codes: tuple[str, ...] = Field(default=(), max_length=20)
 
     @model_validator(mode="after")
     def check_consistency(self) -> CaseExpectation:
@@ -45,6 +49,10 @@ class CaseExpectation(StrictEvaluationModel):
             raise ValueError("expected numbers must be finite")
         if self.safety_kind is not None and self.status != "denied":
             raise ValueError("security cases must expect denied status")
+        if self.safety_kind is None and (self.safety_entrypoint or self.safety_gate_codes):
+            raise ValueError("safety gate expectations need safety_kind")
+        if any(not code or len(code) > 100 for code in self.safety_gate_codes):
+            raise ValueError("safety gate codes must be nonempty and at most 100 characters")
         if not set(self.required_tools).issubset(self.allowed_tools):
             raise ValueError("required_tools must be allowed")
         return self
@@ -53,6 +61,7 @@ class CaseExpectation(StrictEvaluationModel):
 class EvaluationCase(StrictEvaluationModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{2,79}$")
     category: CaseCategory
+    probe_kind: SafetyProbeKind | None = None
     turns: tuple[str, ...] = Field(min_length=1, max_length=10)
     expected: CaseExpectation
     rationale: str = Field(min_length=5, max_length=1000)
@@ -72,6 +81,18 @@ class EvaluationCase(StrictEvaluationModel):
             raise ValueError("security cases need safety_kind")
         if self.category != "security" and self.expected.safety_kind is not None:
             raise ValueError("safety_kind belongs only to security cases")
+        if self.category == "security" and self.probe_kind is None:
+            raise ValueError("security cases need probe_kind")
+        if self.category != "security" and self.probe_kind is not None:
+            raise ValueError("probe_kind belongs only to security cases")
+        if self.probe_kind == "system_gate" and (
+            self.expected.safety_entrypoint is None or not self.expected.safety_gate_codes
+        ):
+            raise ValueError("system_gate needs safety_entrypoint and safety_gate_codes")
+        if self.probe_kind == "agent_behavior" and (
+            self.expected.safety_entrypoint is not None or self.expected.safety_gate_codes
+        ):
+            raise ValueError("agent_behavior cannot require system gate proof")
         return self
 
 
@@ -107,6 +128,35 @@ class EvaluationSuite(StrictEvaluationModel):
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+class SystemGateProof(StrictEvaluationModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    probe_kind: Literal["system_gate"]
+    entrypoint: SafetyEntrypoint
+    response_status: int = Field(ge=100, le=599)
+    denial_code: str = Field(min_length=1, max_length=100)
+    identity_verified: bool
+    workspace_verified: bool
+    correlation_verified: bool
+    response_data_exposed: bool
+    side_effects_checked: bool
+    side_effects_detected: bool
+    executor_called: bool
+
+
+class AgentBehaviorProof(StrictEvaluationModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    probe_kind: Literal["agent_behavior"]
+    safe_reply_verified: bool
+    canary_exposed: bool
+    tool_trace_verified: bool
+    forbidden_tool_called: bool
+    side_effects_checked: bool
+    side_effects_detected: bool
+    correlation_verified: bool
+
+
 class ObservedOutcome(StrictEvaluationModel):
     status: OutcomeStatus
     task_type: str | None = None
@@ -120,6 +170,7 @@ class ObservedOutcome(StrictEvaluationModel):
     policy_denied: bool = False
     unauthorized_data_accessed: bool = False
     dangerous_sql_executed: bool = False
+    safety_proof: SystemGateProof | AgentBehaviorProof | None = None
     infra_error_code: str | None = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
