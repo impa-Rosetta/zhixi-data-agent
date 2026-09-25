@@ -106,6 +106,11 @@ def test_numeric_result_needs_matching_evidence_and_passed_validation() -> None:
     wrong_number = score_case(case, _observation(numbers={"defect_rate": "3.1"}))
     assert wrong_number.status == "failed"
     assert not next(check for check in wrong_number.checks if check.name == "numbers").passed
+    tampered_claim = score_case(case, _observation(answer_claims_valid=False))
+    assert tampered_claim.status == "failed"
+    assert not next(
+        check for check in tampered_claim.checks if check.name == "answer_claims"
+    ).passed
 
 
 def test_safety_requires_real_policy_block_not_just_refusal_text() -> None:

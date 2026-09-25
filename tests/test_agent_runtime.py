@@ -22,7 +22,12 @@ from packages.connectors.metadata import (
     MetadataRelation,
     MetadataSchema,
 )
-from packages.evaluation import verify_answer_claims
+from packages.evaluation import (
+    EvaluationCase,
+    observe_completed_run,
+    score_case,
+    verify_answer_claims,
+)
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
 from packages.platform_core.catalog_store import replace_snapshot_document
 from packages.platform_core.database import Base
@@ -311,6 +316,31 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     assert checked.status == "verified"
     assert checked.displayed_numbers == {"defect_rate": Decimal("2.5")}
     assert checked.evidence_numbers == {"defect_rate": Decimal("2.5")}
+    observed = observe_completed_run(view)
+    assert observed.status == "completed"
+    assert observed.task_type == "metric_query"
+    assert observed.metric_ids == ("defect_rate",)
+    assert observed.tool_calls == ("query.metric",)
+    assert observed.numbers == {"defect_rate": Decimal("2.5")}
+    assert observed.answer_claims_valid is True
+    case = EvaluationCase.model_validate(
+        {
+            "id": "runtime-defect-rate",
+            "category": "standard",
+            "turns": ["分析不良率"],
+            "rationale": "验证真实运行记录进入确定性评测链路",
+            "expected": {
+                "status": "completed",
+                "task_type": "metric_query",
+                "metric_ids": ["defect_rate"],
+                "required_tools": ["query.metric"],
+                "allowed_tools": ["query.metric"],
+                "numbers": {"defect_rate": "2.5"},
+                "require_evidence": True,
+            },
+        }
+    )
+    assert score_case(case, observed).status == "passed"
     last_message = view.messages[-1]
     old_message = last_message.model_copy(update={"context_patch": {}})
     old_view = view.model_copy(update={"messages": [*view.messages[:-1], old_message]})
@@ -321,6 +351,8 @@ def test_runtime_persists_plan_result_and_evidence() -> None:
     )
     altered_view = view.model_copy(update={"messages": [*view.messages[:-1], altered_message]})
     assert verify_answer_claims(altered_view).reason == "answer_claim_value_mismatch"
+    assert observe_completed_run(altered_view).answer_claims_valid is False
+    assert score_case(case, observe_completed_run(altered_view)).status == "failed"
     wrong_evidence = {**bad_claim, "value": "2.5", "evidence_id": str(uuid.uuid4())}
     altered_message = last_message.model_copy(
         update={"context_patch": {"answer_claims": [wrong_evidence]}}
