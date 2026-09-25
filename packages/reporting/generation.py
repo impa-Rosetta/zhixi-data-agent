@@ -87,6 +87,17 @@ class MinioReportObjectStorage:
             content_type=media_type,
         )
 
+    def get(self, object_key: str, *, max_bytes: int) -> bytes:
+        response = self._client.get_object(self._bucket, object_key)
+        try:
+            content = response.read(max_bytes + 1)
+            if len(content) > max_bytes:
+                raise ValueError("Report object exceeds download limit")
+            return bytes(content)
+        finally:
+            response.close()
+            response.release_conn()
+
 
 def render_pdf(html_document: str) -> bytes:
     try:

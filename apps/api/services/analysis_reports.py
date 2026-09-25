@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import UTC, datetime
+from typing import Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -14,6 +16,8 @@ from packages.agent_core.persistence import (
     AnalysisConversation,
     AnalysisEvidence,
     AnalysisReport,
+    AnalysisReportFile,
+    AnalysisReportFormat,
     AnalysisReportStatus,
     AnalysisRun,
     AnalysisRunStatus,
@@ -34,6 +38,82 @@ class AnalysisReportServiceError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code, self.message = code, message
+
+
+class ReportFileStorage(Protocol):
+    def get(self, object_key: str, *, max_bytes: int) -> bytes: ...
+
+
+def read_report_file(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    report_id: uuid.UUID,
+    format_value: AnalysisReportFormat,
+    storage: ReportFileStorage,
+    actor_user_id: uuid.UUID,
+    preview: bool = False,
+    max_bytes: int = 25 * 1024 * 1024,
+) -> tuple[bytes, str, str]:
+    """Read one private file and verify it before returning any bytes."""
+    report = _get_report(db, workspace_id=workspace_id, report_id=report_id)
+    if report.status is not AnalysisReportStatus.SUCCEEDED:
+        raise AnalysisReportServiceError("analysis_report.not_ready", "Report is not ready")
+    now = datetime.now(UTC)
+    if report.expires_at is not None:
+        expiry = (
+            report.expires_at.replace(tzinfo=UTC)
+            if report.expires_at.tzinfo is None
+            else report.expires_at
+        )
+        if expiry <= now:
+            raise AnalysisReportServiceError("analysis_report.expired", "Report has expired")
+    report_file = db.scalar(
+        select(AnalysisReportFile).where(
+            AnalysisReportFile.workspace_id == workspace_id,
+            AnalysisReportFile.report_id == report_id,
+            AnalysisReportFile.format == format_value,
+        )
+    )
+    if report_file is None:
+        raise AnalysisReportServiceError("analysis_report.file_not_found", "Report file not found")
+    if report_file.expires_at is not None:
+        expiry = (
+            report_file.expires_at.replace(tzinfo=UTC)
+            if report_file.expires_at.tzinfo is None
+            else report_file.expires_at
+        )
+        if expiry <= now:
+            raise AnalysisReportServiceError("analysis_report.expired", "Report file has expired")
+    if report_file.byte_size < 0 or report_file.byte_size > max_bytes:
+        raise AnalysisReportServiceError(
+            "analysis_report.file_too_large", "Report file unavailable"
+        )
+    try:
+        content = storage.get(report_file.object_key, max_bytes=max_bytes)
+    except Exception as exc:
+        raise AnalysisReportServiceError(
+            "analysis_report.storage_unavailable", "Report file unavailable"
+        ) from exc
+    if (
+        len(content) != report_file.byte_size
+        or hashlib.sha256(content).hexdigest() != report_file.sha256_digest
+    ):
+        raise AnalysisReportServiceError(
+            "analysis_report.integrity_failed", "Report file failed integrity verification"
+        )
+    add_audit_event(
+        db,
+        action="analysis_report.previewed" if preview else "analysis_report.downloaded",
+        outcome="success",
+        resource_type="analysis_report",
+        resource_id=str(report_id),
+        actor_user_id=actor_user_id,
+        workspace_id=workspace_id,
+        detail=f"format={format_value.value}",
+    )
+    db.commit()
+    return content, report_file.media_type, report.title
 
 
 def _response(report: AnalysisReport) -> AnalysisReportResponse:
