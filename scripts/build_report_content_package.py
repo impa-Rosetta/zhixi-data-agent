@@ -49,17 +49,17 @@ def add_markdown_table(doc: Document, lines: list[str]) -> None:
     tune_table_borders(table)
 
 
-def add_page_number(section) -> None:
+def add_page_number(section, label: str) -> None:
     paragraph = section.footer.paragraphs[0]
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_run_font(paragraph.add_run("智析 Data Agent 报告主笔资料包  ·  "), size=8)
+    set_run_font(paragraph.add_run(f"{label}  ·  "), size=8)
     field = OxmlElement("w:fldSimple")
     field.set(qn("w:instr"), "PAGE")
     paragraph._p.append(field)
 
 
-def build() -> None:
-    text = SOURCE.read_text(encoding="utf-8")
+def build(source: Path = SOURCE, output: Path = OUTPUT, footer_label: str = "智析 Data Agent 报告主笔资料包") -> None:
+    text = source.read_text(encoding="utf-8")
     lines = text.splitlines()
     doc = Document()
     section = doc.sections[0]
@@ -80,7 +80,7 @@ def build() -> None:
     border = p_pr.find(qn("w:pBdr"))
     if border is not None:
         p_pr.remove(border)
-    add_page_number(section)
+    add_page_number(section, footer_label)
 
     index = 0
     while index < len(lines):
@@ -131,9 +131,9 @@ def build() -> None:
             index += 1
         add_body(doc, " ".join(paragraph_lines))
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(OUTPUT)
-    print(OUTPUT.resolve())
+    output.parent.mkdir(parents=True, exist_ok=True)
+    doc.save(output)
+    print(output.resolve())
 
 
 if __name__ == "__main__":
