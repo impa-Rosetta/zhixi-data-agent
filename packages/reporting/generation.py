@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -37,6 +37,12 @@ class ReportGenerationError(RuntimeError):
 
 class ReportObjectStorage(Protocol):
     def put(self, object_key: str, content: bytes, media_type: str) -> None: ...
+
+    def delete(self, object_key: str) -> None: ...
+
+
+class ReportGarbageCollectingStorage(Protocol):
+    def list_older_than(self, cutoff: datetime) -> Iterable[str]: ...
 
     def delete(self, object_key: str) -> None: ...
 
@@ -98,6 +104,16 @@ class MinioReportObjectStorage:
 
     def delete(self, object_key: str) -> None:
         self._client.remove_object(self._bucket, object_key)
+
+    def list_older_than(self, cutoff: datetime) -> Iterable[str]:
+        for item in self._client.list_objects(self._bucket, prefix="reports/", recursive=True):
+            if item.object_name is None or item.last_modified is None:
+                continue
+            modified = item.last_modified
+            if modified.tzinfo is None:
+                modified = modified.replace(tzinfo=UTC)
+            if modified <= cutoff:
+                yield item.object_name
 
     def get(self, object_key: str, *, max_bytes: int) -> bytes:
         response = self._client.get_object(self._bucket, object_key)
@@ -400,3 +416,45 @@ def recover_stale_reports(
         recovered += 1
     db.commit()
     return recovered
+
+
+def cleanup_orphaned_report_objects(
+    db: Session,
+    storage: ReportGarbageCollectingStorage,
+    *,
+    now: datetime | None = None,
+    min_age: timedelta = timedelta(hours=24),
+    batch_size: int = 500,
+) -> int:
+    cutoff = (now or datetime.now(UTC)) - min_age
+    deleted = 0
+    for object_key in storage.list_older_than(cutoff):
+        parts = object_key.split("/")
+        if len(parts) != 5 or parts[0] != "reports" or not parts[3].startswith("attempt-"):
+            continue
+        try:
+            workspace_id = uuid.UUID(parts[1])
+            report_id = uuid.UUID(parts[2])
+        except ValueError:
+            continue
+        report = db.get(AnalysisReport, report_id)
+        if report is None or report.workspace_id != workspace_id:
+            continue
+        if report.status is AnalysisReportStatus.GENERATING:
+            continue
+        referenced = db.scalar(
+            select(AnalysisReportFile.id)
+            .where(
+                AnalysisReportFile.workspace_id == workspace_id,
+                AnalysisReportFile.report_id == report_id,
+                AnalysisReportFile.object_key == object_key,
+            )
+            .limit(1)
+        )
+        if referenced is not None:
+            continue
+        storage.delete(object_key)
+        deleted += 1
+        if deleted >= batch_size:
+            break
+    return deleted

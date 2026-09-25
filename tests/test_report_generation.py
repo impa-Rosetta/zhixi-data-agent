@@ -18,6 +18,7 @@ from packages.platform_core.models import AuditEvent, OutboxEvent, User, Workspa
 from packages.reporting.generation import (
     ReportGenerationError,
     claim_report,
+    cleanup_orphaned_report_objects,
     publish_report,
     recover_stale_reports,
     render_report,
@@ -45,6 +46,10 @@ class MemoryStorage:
 
     def delete(self, object_key: str) -> None:
         self.objects.pop(object_key, None)
+
+    def list_older_than(self, cutoff: datetime) -> list[str]:
+        del cutoff
+        return list(self.objects)
 
 
 def _database() -> tuple[Session, AnalysisReport]:
@@ -272,3 +277,31 @@ def test_recovery_ignores_fresh_work_and_fails_exhausted_attempts() -> None:
     assert report.status is AnalysisReportStatus.FAILED
     assert report.error_code == "report.worker_lost"
     assert not list(db.scalars(select(OutboxEvent).where(OutboxEvent.aggregate_id == report.id)))
+
+
+def test_cleanup_removes_only_unreferenced_old_attempt_objects() -> None:
+    db, report = _database()
+    claim = claim_report(db, report.id)
+    assert claim is not None
+    generated = render_report(claim.spec, pdf_renderer=lambda _: b"%PDF-1.7")
+    storage = MemoryStorage()
+    publish_report(
+        db,
+        report_id=report.id,
+        generated=generated,
+        storage=storage,
+        expected_attempt_count=claim.attempt_count,
+    )
+    legitimate_keys = set(storage.objects)
+    orphan_key = f"reports/{report.workspace_id}/{report.id}/attempt-0/orphan.pdf"
+    storage.put(orphan_key, b"orphan", "application/pdf")
+    malformed_key = "reports/not-a-workspace/not-a-report/attempt-0/bad.pdf"
+    storage.put(malformed_key, b"bad", "application/pdf")
+
+    report.status = AnalysisReportStatus.GENERATING
+    db.commit()
+    assert cleanup_orphaned_report_objects(db, storage) == 0
+    report.status = AnalysisReportStatus.SUCCEEDED
+    db.commit()
+    assert cleanup_orphaned_report_objects(db, storage) == 1
+    assert set(storage.objects) == legitimate_keys | {malformed_key}

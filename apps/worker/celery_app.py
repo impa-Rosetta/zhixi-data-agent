@@ -43,6 +43,10 @@ celery_app.conf.update(
             "task": "analysis_reports.recover_stale",
             "schedule": 60.0,
         },
+        "cleanup-orphaned-analysis-report-objects": {
+            "task": "analysis_reports.cleanup_orphans",
+            "schedule": 21600.0,
+        },
     },
 )
 

@@ -378,3 +378,9 @@
 - Worker 增加 15 分钟陈旧任务扫描、最多 5 次尝试及尝试编号防护；迟到 Worker 不能覆盖新任务；上传失败清理本次已写入对象；
 - 后端 323 项、前端 63 项测试通过，相关 Ruff/MyPy/TypeScript/ESLint 与前端生产构建通过；
 - Docker Desktop 依手册备份已知残留运行目录后仍返回 500；Windows 本机缺少 WeasyPrint 原生库。真实 PDF、MinIO、移动端与端到端验收仍待完成，详见 `docs/acceptance/M7.7-C2-report-recovery-preview-acceptance.md`。
+
+## 2026-09-25：M7.7-B1c 旧尝试对象回收
+
+- 增加每 6 小时执行的孤儿对象清理，只删除超过 24 小时、未被数据库引用且不处于生成中的报告旧尝试文件；
+- 后端全量 324 项测试、Ruff 和相关严格 MyPy 通过；真实 MinIO/Worker 调度尚待 Docker 恢复后验收；
+- Docker 后端日志指出 `Ubuntu-22.04` WSL 集成代理启动超时，当前并非项目数据库损坏；详见 `docs/acceptance/M7.7-B1c-report-orphan-cleanup-acceptance.md`。

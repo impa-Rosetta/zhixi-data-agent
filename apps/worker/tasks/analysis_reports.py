@@ -14,6 +14,7 @@ from packages.reporting.generation import (
     MinioReportObjectStorage,
     ReportGenerationError,
     claim_report,
+    cleanup_orphaned_report_objects,
     publish_report,
     recover_stale_reports,
     render_report,
@@ -79,3 +80,9 @@ def generate_analysis_report(task: Task, report_id: str) -> None:
 def recover_stale_analysis_reports() -> int:
     with Session(get_engine()) as db:
         return recover_stale_reports(db)
+
+
+@celery_app.task(name="analysis_reports.cleanup_orphans")  # type: ignore[untyped-decorator]
+def cleanup_orphaned_analysis_report_objects() -> int:
+    with Session(get_engine()) as db:
+        return cleanup_orphaned_report_objects(db, _storage())
