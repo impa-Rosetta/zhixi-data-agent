@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -13,11 +14,12 @@ from packages.agent_core.persistence import (
     AnalysisReportStatus,
 )
 from packages.platform_core.database import Base
-from packages.platform_core.models import AuditEvent, User, Workspace
+from packages.platform_core.models import AuditEvent, OutboxEvent, User, Workspace
 from packages.reporting.generation import (
     ReportGenerationError,
     claim_report,
     publish_report,
+    recover_stale_reports,
     render_report,
     reset_or_fail_report,
 )
@@ -29,14 +31,20 @@ from packages.shared_contracts.reports import (
 
 
 class MemoryStorage:
-    def __init__(self, *, fail: bool = False) -> None:
+    def __init__(self, *, fail: bool = False, fail_on_put: int | None = None) -> None:
         self.fail = fail
+        self.fail_on_put = fail_on_put
+        self.put_count = 0
         self.objects: dict[str, tuple[bytes, str]] = {}
 
     def put(self, object_key: str, content: bytes, media_type: str) -> None:
-        if self.fail:
+        self.put_count += 1
+        if self.fail or self.put_count == self.fail_on_put:
             raise OSError("storage unavailable")
         self.objects[object_key] = (content, media_type)
+
+    def delete(self, object_key: str) -> None:
+        self.objects.pop(object_key, None)
 
 
 def _database() -> tuple[Session, AnalysisReport]:
@@ -119,15 +127,27 @@ def test_render_report_produces_three_hashed_formats() -> None:
 
 def test_claim_and_publish_are_idempotent() -> None:
     db, report = _database()
-    spec = claim_report(db, report.id)
-    assert spec is not None
+    claim = claim_report(db, report.id)
+    assert claim is not None
     assert db.get(AnalysisReport, report.id).status is AnalysisReportStatus.GENERATING
     assert claim_report(db, report.id) is None
 
-    generated = render_report(spec, pdf_renderer=lambda _: b"%PDF-1.7")
+    generated = render_report(claim.spec, pdf_renderer=lambda _: b"%PDF-1.7")
     storage = MemoryStorage()
-    publish_report(db, report_id=report.id, generated=generated, storage=storage)
-    publish_report(db, report_id=report.id, generated=generated, storage=storage)
+    publish_report(
+        db,
+        report_id=report.id,
+        generated=generated,
+        storage=storage,
+        expected_attempt_count=claim.attempt_count,
+    )
+    publish_report(
+        db,
+        report_id=report.id,
+        generated=generated,
+        storage=storage,
+        expected_attempt_count=claim.attempt_count,
+    )
 
     stored = db.get(AnalysisReport, report.id)
     assert stored is not None and stored.status is AnalysisReportStatus.SUCCEEDED
@@ -139,9 +159,9 @@ def test_claim_and_publish_are_idempotent() -> None:
 
 def test_storage_failure_can_be_requeued_then_failed() -> None:
     db, report = _database()
-    spec = claim_report(db, report.id)
-    assert spec is not None
-    generated = render_report(spec, pdf_renderer=lambda _: b"%PDF-1.7")
+    claim = claim_report(db, report.id)
+    assert claim is not None
+    generated = render_report(claim.spec, pdf_renderer=lambda _: b"%PDF-1.7")
 
     with pytest.raises(ReportGenerationError) as error:
         publish_report(
@@ -149,6 +169,7 @@ def test_storage_failure_can_be_requeued_then_failed() -> None:
             report_id=report.id,
             generated=generated,
             storage=MemoryStorage(fail=True),
+            expected_attempt_count=claim.attempt_count,
         )
     assert error.value.retryable
 
@@ -157,15 +178,97 @@ def test_storage_failure_can_be_requeued_then_failed() -> None:
         report_id=report.id,
         error_code=error.value.code,
         retrying=True,
+        expected_attempt_count=claim.attempt_count,
     )
     assert db.get(AnalysisReport, report.id).status is AnalysisReportStatus.QUEUED
-    assert claim_report(db, report.id) is not None
+    second_claim = claim_report(db, report.id)
+    assert second_claim is not None
     reset_or_fail_report(
         db,
         report_id=report.id,
         error_code=error.value.code,
         retrying=False,
+        expected_attempt_count=second_claim.attempt_count,
     )
     stored = db.get(AnalysisReport, report.id)
     assert stored is not None and stored.status is AnalysisReportStatus.FAILED
     assert stored.finished_at is not None
+
+
+def test_partial_upload_is_removed_before_retry() -> None:
+    db, report = _database()
+    claim = claim_report(db, report.id)
+    assert claim is not None
+    generated = render_report(claim.spec, pdf_renderer=lambda _: b"%PDF-1.7")
+    storage = MemoryStorage(fail_on_put=2)
+
+    with pytest.raises(ReportGenerationError, match="report.storage_unavailable"):
+        publish_report(
+            db,
+            report_id=report.id,
+            generated=generated,
+            storage=storage,
+            expected_attempt_count=claim.attempt_count,
+        )
+    assert storage.objects == {}
+    assert db.get(AnalysisReport, report.id).status is AnalysisReportStatus.GENERATING
+
+
+def test_recovery_requeues_stale_generation_and_fences_old_worker() -> None:
+    db, report = _database()
+    first = claim_report(db, report.id)
+    assert first is not None
+    report.started_at = datetime(2026, 9, 1, tzinfo=UTC)
+    db.commit()
+
+    assert recover_stale_reports(db, now=datetime(2026, 9, 2, tzinfo=UTC)) == 1
+    db.refresh(report)
+    assert report.status is AnalysisReportStatus.QUEUED
+    assert report.error_code == "report.worker_lost"
+    assert db.scalar(select(OutboxEvent).where(OutboxEvent.aggregate_id == report.id))
+
+    second = claim_report(db, report.id)
+    assert second is not None and second.attempt_count == first.attempt_count + 1
+    reset_or_fail_report(
+        db,
+        report_id=report.id,
+        error_code="report.storage_unavailable",
+        retrying=False,
+        expected_attempt_count=first.attempt_count,
+    )
+    db.refresh(report)
+    assert report.status is AnalysisReportStatus.GENERATING
+    generated = render_report(first.spec, pdf_renderer=lambda _: b"%PDF-1.7")
+    with pytest.raises(ReportGenerationError, match="report.state_conflict"):
+        publish_report(
+            db,
+            report_id=report.id,
+            generated=generated,
+            storage=MemoryStorage(),
+            expected_attempt_count=first.attempt_count,
+        )
+    publish_report(
+        db,
+        report_id=report.id,
+        generated=generated,
+        storage=MemoryStorage(),
+        expected_attempt_count=second.attempt_count,
+    )
+    db.refresh(report)
+    assert report.status is AnalysisReportStatus.SUCCEEDED
+
+
+def test_recovery_ignores_fresh_work_and_fails_exhausted_attempts() -> None:
+    db, report = _database()
+    claim = claim_report(db, report.id)
+    assert claim is not None
+    assert recover_stale_reports(db, now=datetime.now(UTC), max_age=timedelta(hours=1)) == 0
+    report.started_at = datetime(2026, 9, 1, tzinfo=UTC)
+    report.attempt_count = 5
+    db.commit()
+
+    assert recover_stale_reports(db, now=datetime(2026, 9, 2, tzinfo=UTC)) == 1
+    db.refresh(report)
+    assert report.status is AnalysisReportStatus.FAILED
+    assert report.error_code == "report.worker_lost"
+    assert not list(db.scalars(select(OutboxEvent).where(OutboxEvent.aggregate_id == report.id)))

@@ -1,7 +1,14 @@
 import { useState, type FormEvent } from 'react'
 
 import type { AnalysisConversationView } from '../analysisRuns/types'
-import { downloadReportFile, useConversationReports, useCreateConversationReport, type ReportFormat } from './api'
+import {
+  downloadReportFile,
+  previewReportHtml,
+  useConversationReports,
+  useCreateConversationReport,
+  useRetryConversationReport,
+  type ReportFormat,
+} from './api'
 import { ApiError } from '../../lib/api/client'
 
 type Props = {
@@ -20,12 +27,21 @@ const extensions: Record<ReportFormat, string> = {
   pdf: 'pdf',
 }
 
+const retryableErrors = new Set([
+  'report.storage_unavailable',
+  'report.pdf_renderer_unavailable',
+  'report.pdf_render_failed',
+  'report.generation_unavailable',
+  'report.worker_lost',
+])
+
 function errorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 'report.validation_required') return '所选轮次缺少可信验证结果，请选择有数据和证据的分析。'
     if (error.code === 'analysis_report.turn_not_completed') return '所选分析尚未完成，请完成后再生成报告。'
     if (error.code === 'analysis_report.not_ready') return '报告仍在生成，请稍后再试。'
     if (error.code === 'analysis_report.integrity_failed') return '报告文件校验失败，已阻止下载。'
+    if (error.code === 'analysis_report.retry_not_allowed') return '该报告无法继续重试，请重新选择可信分析生成报告。'
   }
   return error instanceof Error ? error.message : '操作失败，请稍后重试。'
 }
@@ -41,10 +57,14 @@ export function ConversationReports({ view }: Props) {
   const conversationId = view.conversation.id
   const reports = useConversationReports(workspaceId, conversationId)
   const create = useCreateConversationReport(workspaceId, conversationId)
+  const retry = useRetryConversationReport(workspaceId, conversationId)
   const [title, setTitle] = useState(`${view.conversation.title}报告`)
   const [excluded, setExcluded] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
   const eligible = view.turns.filter(({ turn, analysis }) => {
     if (turn.status !== 'completed' || analysis.run.status !== 'completed') return false
@@ -89,6 +109,36 @@ export function ConversationReports({ view }: Props) {
       setError(errorText(reason))
     } finally {
       setDownloading(null)
+    }
+  }
+
+  const preview = async (reportId: string) => {
+    if (previewId === reportId) {
+      setPreviewId(null)
+      setPreviewHtml(null)
+      return
+    }
+    setError(null)
+    setPreviewLoading(true)
+    setPreviewId(null)
+    setPreviewHtml(null)
+    try {
+      const html = await previewReportHtml(workspaceId, reportId)
+      setPreviewHtml(html)
+      setPreviewId(reportId)
+    } catch (reason) {
+      setError(errorText(reason))
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const retryFailed = async (reportId: string) => {
+    setError(null)
+    try {
+      await retry.mutateAsync(reportId)
+    } catch (reason) {
+      setError(errorText(reason))
     }
   }
 
@@ -152,6 +202,14 @@ export function ConversationReports({ view }: Props) {
           </div>
           {report.status === 'succeeded' ? (
             <nav aria-label={`下载${report.title}`}>
+              <button
+                type="button"
+                aria-expanded={previewId === report.id}
+                disabled={previewLoading}
+                onClick={() => void preview(report.id)}
+              >
+                {previewLoading ? '正在读取…' : previewId === report.id ? '关闭预览' : '在线预览'}
+              </button>
               {(['markdown', 'html', 'pdf'] as const).map((format) => (
                 <button
                   type="button"
@@ -164,7 +222,38 @@ export function ConversationReports({ view }: Props) {
               ))}
             </nav>
           ) : report.status === 'failed' && (
-            <p>本次生成未完成。请重新选择可信轮次创建报告；自动恢复功能仍在完善。</p>
+            <div className="conversation-report-failure">
+              <p>本次生成未完成。{retryableErrors.has(report.error_code ?? '')
+                ? '你可以重试，系统会复用已验证的报告内容。'
+                : '请重新选择可信分析生成报告。'}</p>
+              {retryableErrors.has(report.error_code ?? '') && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={retry.isPending}
+                  onClick={() => void retryFailed(report.id)}
+                >
+                  {retry.isPending ? '正在重试…' : '重新尝试'}
+                </button>
+              )}
+            </div>
+          )}
+          {report.status === 'succeeded' && (
+            <nav className="conversation-report-evidence" aria-label={`${report.title}来源证据`}>
+              {Array.from(new Set(report.spec.sections.flatMap((section) => section.source.evidence_ids))).map((evidenceId, index) => (
+                <a href={`#evidence-${evidenceId}`} key={evidenceId}>定位证据 {index + 1}</a>
+              ))}
+            </nav>
+          )}
+          {previewId === report.id && previewHtml && (
+            <div className="conversation-report-preview">
+              <iframe
+                title={`${report.title}预览`}
+                sandbox=""
+                referrerPolicy="no-referrer"
+                srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">${previewHtml}`}
+              />
+            </div>
           )}
         </article>
       ))}

@@ -12,6 +12,14 @@ export type AnalysisReport = {
   status: ReportStatus
   error_code: string | null
   created_at: string
+  spec: {
+    sections: Array<{
+      source: {
+        turn_id: string
+        evidence_ids: string[]
+      }
+    }>
+  }
 }
 
 type ReportPage = {
@@ -69,6 +77,27 @@ export function useCreateConversationReport(
   })
 }
 
+export function useRetryConversationReport(
+  workspaceId: string | undefined,
+  conversationId: string | undefined,
+) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (reportId: string) => {
+      if (!workspaceId) throw new Error('请先打开报告所在的工作空间。')
+      return apiClient.request<AnalysisReport>(
+        `/api/v1/workspaces/${workspaceId}/reports/${reportId}/retry`,
+        { method: 'POST' },
+      )
+    },
+    onSuccess: async () => {
+      if (workspaceId && conversationId) {
+        await queryClient.invalidateQueries({ queryKey: reportKey(workspaceId, conversationId) })
+      }
+    },
+  })
+}
+
 export function downloadReportFile(
   workspaceId: string,
   reportId: string,
@@ -77,4 +106,14 @@ export function downloadReportFile(
   return apiClient.requestBlob(
     `/api/v1/workspaces/${workspaceId}/reports/${reportId}/files/${format}`,
   )
+}
+
+export async function previewReportHtml(
+  workspaceId: string,
+  reportId: string,
+): Promise<string> {
+  const content = await apiClient.requestBlob(
+    `/api/v1/workspaces/${workspaceId}/reports/${reportId}/preview`,
+  )
+  return content.text()
 }

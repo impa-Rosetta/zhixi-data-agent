@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Protocol
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from apps.api.audit import add_audit_event
@@ -38,6 +38,17 @@ class AnalysisReportServiceError(RuntimeError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code, self.message = code, message
+
+
+_RETRYABLE_REPORT_ERRORS = frozenset(
+    {
+        "report.storage_unavailable",
+        "report.pdf_renderer_unavailable",
+        "report.pdf_render_failed",
+        "report.generation_unavailable",
+        "report.worker_lost",
+    }
+)
 
 
 class ReportFileStorage(Protocol):
@@ -315,6 +326,65 @@ def get_report(
     return _response(_get_report(db, workspace_id=workspace_id, report_id=report_id))
 
 
+def retry_report(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    report_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+) -> AnalysisReportResponse:
+    report = _get_report(db, workspace_id=workspace_id, report_id=report_id)
+    if report.status is not AnalysisReportStatus.FAILED:
+        raise AnalysisReportServiceError(
+            "analysis_report.retry_not_allowed", "Only failed reports can be retried"
+        )
+    if report.error_code not in _RETRYABLE_REPORT_ERRORS:
+        raise AnalysisReportServiceError(
+            "analysis_report.retry_not_allowed", "This report cannot be retried"
+        )
+    previous_error = report.error_code
+    claimed = db.execute(
+        update(AnalysisReport)
+        .where(
+            AnalysisReport.id == report_id,
+            AnalysisReport.workspace_id == workspace_id,
+            AnalysisReport.status == AnalysisReportStatus.FAILED,
+            AnalysisReport.error_code == previous_error,
+        )
+        .values(
+            status=AnalysisReportStatus.QUEUED,
+            error_code=None,
+            started_at=None,
+            finished_at=None,
+        )
+    )
+    if getattr(claimed, "rowcount", 0) != 1:
+        raise AnalysisReportServiceError(
+            "analysis_report.retry_conflict", "Report state changed; refresh and try again"
+        )
+    db.add(
+        OutboxEvent(
+            aggregate_type="analysis_report",
+            aggregate_id=report.id,
+            event_type="analysis.report.requested",
+            payload={"report_id": str(report.id)},
+        )
+    )
+    add_audit_event(
+        db,
+        action="analysis_report.retry_requested",
+        outcome="success",
+        resource_type="analysis_report",
+        resource_id=str(report.id),
+        actor_user_id=actor_user_id,
+        workspace_id=workspace_id,
+        detail=f"previous_error={previous_error}",
+    )
+    db.flush()
+    db.refresh(report)
+    return _response(report)
+
+
 def list_reports(
     db: Session,
     *,
@@ -328,11 +398,7 @@ def list_reports(
     filters = [AnalysisReport.workspace_id == workspace_id]
     if conversation_id is not None:
         filters.append(AnalysisReport.conversation_id == conversation_id)
-    total = db.scalar(
-        select(func.count())
-        .select_from(AnalysisReport)
-        .where(*filters)
-    )
+    total = db.scalar(select(func.count()).select_from(AnalysisReport).where(*filters))
     reports = list(
         db.scalars(
             select(AnalysisReport)

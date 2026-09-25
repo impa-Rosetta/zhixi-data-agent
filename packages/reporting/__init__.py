@@ -173,11 +173,8 @@ def render_markdown(spec: ReportSpecV1) -> str:
 
 
 def render_html(spec: ReportSpecV1) -> str:
-    sections = []
-    for section in spec.sections:
-        payload = html.escape(
-            json.dumps(section.summary, ensure_ascii=False, sort_keys=True, indent=2)
-        )
+    head = (
+        '<meta charset="utf-8">'
         '<meta http-equiv="Content-Security-Policy" '
         'content="default-src &#39;none&#39;; style-src &#39;unsafe-inline&#39;">'
         "<style>"
@@ -190,6 +187,13 @@ def render_html(spec: ReportSpecV1) -> str:
         "padding:14px;margin:14px 0;}"
         "pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fb;padding:12px;}"
         ".evidence{font-size:9pt;color:#52617a;}</style>"
+        f"<title>{html.escape(spec.title)}</title>"
+    )
+    sections = []
+    for section in spec.sections:
+        payload = html.escape(
+            json.dumps(section.summary, ensure_ascii=False, sort_keys=True, indent=2)
+        )
         sections.append(
             "<section>"
             f"<h2>{html.escape(section.title)}</h2>"
@@ -202,11 +206,10 @@ def render_html(spec: ReportSpecV1) -> str:
         )
     return (
         '<!doctype html><html lang="zh-CN"><head>'
-        '<meta charset="utf-8">'
-        f"<title>{html.escape(spec.title)}</title>"
-        "</head><body>"
-        f"<h1>{html.escape(spec.title)}</h1>"
-        f"<p>生成时间：{html.escape(spec.generated_at.isoformat())}</p>"
+        + head
+        + "</head><body>"
+        + f"<h1>{html.escape(spec.title)}</h1>"
+        + f"<p>生成时间：{html.escape(spec.generated_at.isoformat())}</p>"
         + "".join(sections)
         + "</body></html>"
     )

@@ -371,3 +371,10 @@
 - 下载请求沿用当前登录与令牌刷新机制；追问输入框仍保持在会话底部；
 - 前端全量 61 项测试、TypeScript、生产构建和变更范围 ESLint 通过；后端报告接口定向 9 项、全量测试、Ruff 和严格 MyPy 通过；
 - Docker Desktop Linux Engine 当前未运行，真实 MinIO、容器中文 PDF、在线预览和浏览器端到端验收仍未完成，不替换报告中的效果示意图。
+
+## 2026-09-25：M7.7-C2 报告预览与恢复
+
+- 会话报告卡增加真实 HTML 在线预览、失败人工重试和原 Evidence 回链；修复生成 HTML 丢失 CSP 与离线样式的缺陷；
+- Worker 增加 15 分钟陈旧任务扫描、最多 5 次尝试及尝试编号防护；迟到 Worker 不能覆盖新任务；上传失败清理本次已写入对象；
+- 后端 323 项、前端 63 项测试通过，相关 Ruff/MyPy/TypeScript/ESLint 与前端生产构建通过；
+- Docker Desktop 依手册备份已知残留运行目录后仍返回 500；Windows 本机缺少 WeasyPrint 原生库。真实 PDF、MinIO、移动端与端到端验收仍待完成，详见 `docs/acceptance/M7.7-C2-report-recovery-preview-acceptance.md`。

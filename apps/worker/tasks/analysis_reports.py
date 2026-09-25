@@ -15,6 +15,7 @@ from packages.reporting.generation import (
     ReportGenerationError,
     claim_report,
     publish_report,
+    recover_stale_reports,
     render_report,
     reset_or_fail_report,
 )
@@ -38,18 +39,20 @@ def _storage() -> MinioReportObjectStorage:
 )  # type: ignore[untyped-decorator]
 def generate_analysis_report(task: Task, report_id: str) -> None:
     parsed_report_id = uuid.UUID(report_id)
+    claim = None
     try:
         with Session(get_engine()) as db:
-            spec = claim_report(db, parsed_report_id)
-        if spec is None:
+            claim = claim_report(db, parsed_report_id)
+        if claim is None:
             return
-        generated = render_report(spec)
+        generated = render_report(claim.spec)
         with Session(get_engine()) as db:
             publish_report(
                 db,
                 report_id=parsed_report_id,
                 generated=generated,
                 storage=_storage(),
+                expected_attempt_count=claim.attempt_count,
             )
     except Exception as caught:
         exc = (
@@ -58,12 +61,21 @@ def generate_analysis_report(task: Task, report_id: str) -> None:
             else ReportGenerationError("report.generation_unavailable", retryable=True)
         )
         retrying = exc.retryable and task.request.retries < task.max_retries
-        with Session(get_engine()) as db:
-            reset_or_fail_report(
-                db,
-                report_id=parsed_report_id,
-                error_code=exc.code,
-                retrying=retrying,
-            )
-        if retrying:
+        state_changed = False
+        if claim is not None:
+            with Session(get_engine()) as db:
+                state_changed = reset_or_fail_report(
+                    db,
+                    report_id=parsed_report_id,
+                    error_code=exc.code,
+                    retrying=retrying,
+                    expected_attempt_count=claim.attempt_count,
+                )
+        if retrying and state_changed:
             raise task.retry(exc=exc, countdown=2 ** (task.request.retries + 1)) from exc
+
+
+@celery_app.task(name="analysis_reports.recover_stale")  # type: ignore[untyped-decorator]
+def recover_stale_analysis_reports() -> int:
+    with Session(get_engine()) as db:
+        return recover_stale_reports(db)

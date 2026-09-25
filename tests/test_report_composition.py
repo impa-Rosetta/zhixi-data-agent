@@ -160,6 +160,10 @@ def test_html_escapes_untrusted_text_and_markdown_keeps_evidence() -> None:
 
     assert "<script>" not in html
     assert "&lt;script&gt;" in html
+    assert '<meta http-equiv="Content-Security-Policy"' in html
+    assert "default-src &#39;none&#39;" in html
+    assert "<style>" in html
+    assert "Noto Sans CJK SC" in html
     assert "证据定位" in markdown
     assert str(composition.spec.sections[0].source.artifact_id) in markdown
 

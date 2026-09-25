@@ -17,6 +17,7 @@ from apps.api.services.analysis_reports import (
     get_report,
     list_reports,
     read_report_file,
+    retry_report,
 )
 from packages.agent_core.persistence import (
     AnalysisArtifact,
@@ -190,12 +191,8 @@ def test_report_reads_are_workspace_scoped() -> None:
     page = list_reports(db, workspace_id=workspace.id)
     assert page.total == 1
     assert page.items[0].id == created.id
-    assert list_reports(
-        db, workspace_id=workspace.id, conversation_id=conversation.id
-    ).total == 1
-    assert list_reports(
-        db, workspace_id=workspace.id, conversation_id=uuid.uuid4()
-    ).total == 0
+    assert list_reports(db, workspace_id=workspace.id, conversation_id=conversation.id).total == 1
+    assert list_reports(db, workspace_id=workspace.id, conversation_id=uuid.uuid4()).total == 0
     assert get_report(db, workspace_id=workspace.id, report_id=created.id).id == created.id
 
     other_workspace_id = uuid.uuid4()
@@ -230,6 +227,7 @@ def test_report_routes_are_registered() -> None:
     assert "/api/v1/workspaces/{workspace_id}/reports/{report_id}" in paths
     assert "/api/v1/workspaces/{workspace_id}/reports/{report_id}/preview" in paths
     assert "/api/v1/workspaces/{workspace_id}/reports/{report_id}/files/{format_value}" in paths
+    assert "/api/v1/workspaces/{workspace_id}/reports/{report_id}/retry" in paths
 
 
 class _FileStorage:
@@ -362,3 +360,73 @@ def test_report_file_http_requires_membership_and_sets_safe_headers(
             assert client.get(url).status_code == 403
     finally:
         app.dependency_overrides.clear()
+
+
+def test_manual_retry_reuses_frozen_spec_and_emits_one_new_outbox_event() -> None:
+    db, user, workspace, conversation, turn, _ = _trusted_source()
+    created = create_report(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="report-retry-1",
+        payload=_payload(conversation, turn),
+    )
+    report = db.get(AnalysisReport, created.id)
+    assert report is not None
+    original_digest = report.source_digest
+    report.status = AnalysisReportStatus.FAILED
+    report.error_code = "report.storage_unavailable"
+    db.commit()
+
+    retried = retry_report(
+        db,
+        workspace_id=workspace.id,
+        report_id=report.id,
+        actor_user_id=user.id,
+    )
+    db.commit()
+
+    assert retried.status == "queued"
+    assert retried.source_digest == original_digest
+    assert retried.error_code is None
+    assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+    audit = db.scalar(
+        select(AuditEvent).where(AuditEvent.action == "analysis_report.retry_requested")
+    )
+    assert audit is not None
+    assert audit.detail == "previous_error=report.storage_unavailable"
+    with pytest.raises(AnalysisReportServiceError) as error:
+        retry_report(
+            db,
+            workspace_id=workspace.id,
+            report_id=report.id,
+            actor_user_id=user.id,
+        )
+    assert error.value.code == "analysis_report.retry_not_allowed"
+
+
+def test_manual_retry_rejects_permanent_failures() -> None:
+    db, user, workspace, conversation, turn, _ = _trusted_source()
+    created = create_report(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key="report-retry-2",
+        payload=_payload(conversation, turn),
+    )
+    report = db.get(AnalysisReport, created.id)
+    assert report is not None
+    report.status = AnalysisReportStatus.FAILED
+    report.error_code = "report.spec_invalid"
+    db.commit()
+
+    with pytest.raises(AnalysisReportServiceError) as error:
+        retry_report(
+            db,
+            workspace_id=workspace.id,
+            report_id=report.id,
+            actor_user_id=user.id,
+        )
+
+    assert error.value.code == "analysis_report.retry_not_allowed"
+    assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 1

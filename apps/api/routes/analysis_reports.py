@@ -13,6 +13,7 @@ from apps.api.services.analysis_reports import (
     get_report,
     list_reports,
     read_report_file,
+    retry_report,
 )
 from packages.agent_core.persistence import AnalysisReportFormat
 from packages.platform_core.policy import Action
@@ -201,3 +202,25 @@ def detail(
         return get_report(db, workspace_id=workspace_id, report_id=report_id)
     except AnalysisReportServiceError as exc:
         raise _error(exc) from exc
+
+
+@router.post("/{report_id}/retry", response_model=AnalysisReportResponse)
+def retry(
+    workspace_id: uuid.UUID,
+    report_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> AnalysisReportResponse:
+    authorize(db, user=user, workspace_id=workspace_id, action=Action.ANALYSIS_REPORT_RETRY)
+    try:
+        result = retry_report(
+            db,
+            workspace_id=workspace_id,
+            report_id=report_id,
+            actor_user_id=user.id,
+        )
+    except AnalysisReportServiceError as exc:
+        db.rollback()
+        raise _error(exc) from exc
+    db.commit()
+    return result

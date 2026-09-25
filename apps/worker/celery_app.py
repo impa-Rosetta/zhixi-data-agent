@@ -39,6 +39,10 @@ celery_app.conf.update(
             "task": "analysis_conversations.recover_queues",
             "schedule": 30.0,
         },
+        "recover-stale-analysis-reports": {
+            "task": "analysis_reports.recover_stale",
+            "schedule": 60.0,
+        },
     },
 )
 

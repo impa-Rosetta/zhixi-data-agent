@@ -7,13 +7,16 @@ import { ConversationReports } from './ConversationReports'
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   download: vi.fn(),
+  preview: vi.fn(),
+  retry: vi.fn(),
   reports: [] as Array<{
     id: string
     conversation_id: string
     title: string
-    status: 'succeeded'
-    error_code: null
+    status: 'succeeded' | 'failed'
+    error_code: string | null
     created_at: string
+    spec: { sections: Array<{ source: { turn_id: string, evidence_ids: string[] } }> }
   }>,
 }))
 
@@ -27,7 +30,12 @@ vi.mock('./api', () => ({
     mutateAsync: mocks.create,
     isPending: false,
   }),
+  useRetryConversationReport: () => ({
+    mutateAsync: mocks.retry,
+    isPending: false,
+  }),
   downloadReportFile: mocks.download,
+  previewReportHtml: mocks.preview,
 }))
 
 function conversation(trusted: boolean): AnalysisConversationView {
@@ -110,6 +118,8 @@ function conversation(trusted: boolean): AnalysisConversationView {
 beforeEach(() => {
   mocks.create.mockReset().mockResolvedValue({})
   mocks.download.mockReset()
+  mocks.preview.mockReset().mockResolvedValue('<html><body>可信报告</body></html>')
+  mocks.retry.mockReset().mockResolvedValue({})
   mocks.reports = []
 })
 
@@ -137,10 +147,55 @@ test('shows server-confirmed report status and download formats', () => {
     status: 'succeeded',
     error_code: null,
     created_at: '2026-09-25T00:00:00Z',
+    spec: { sections: [{ source: { turn_id: 'turn-1', evidence_ids: ['evidence-1'] } }] },
   }]
   render(<ConversationReports view={conversation(true)} />)
   expect(screen.getByText('已生成')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Markdown' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'HTML' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'PDF' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: '定位证据 1' })).toHaveAttribute('href', '#evidence-evidence-1')
+})
+
+test('renders server HTML only inside a script-blocking preview frame', async () => {
+  mocks.reports = [{
+    id: 'report-1',
+    conversation_id: 'conversation-1',
+    title: '质量报告',
+    status: 'succeeded',
+    error_code: null,
+    created_at: '2026-09-25T00:00:00Z',
+    spec: { sections: [{ source: { turn_id: 'turn-1', evidence_ids: ['evidence-1'] } }] },
+  }]
+  render(<ConversationReports view={conversation(true)} />)
+
+  fireEvent.click(screen.getByRole('button', { name: '在线预览' }))
+
+  const frame = await screen.findByTitle('质量报告预览')
+  expect(mocks.preview).toHaveBeenCalledWith('workspace-1', 'report-1')
+  expect(frame).toHaveAttribute('sandbox', '')
+  expect(frame.getAttribute('srcdoc')).toContain("default-src 'none'")
+  expect(frame.getAttribute('srcdoc')).toContain('可信报告')
+  fireEvent.click(screen.getByRole('button', { name: '关闭预览' }))
+  await waitFor(() => expect(screen.queryByTitle('质量报告预览')).not.toBeInTheDocument())
+})
+
+test('allows retry only for a recoverable report failure', async () => {
+  mocks.reports = [{
+    id: 'report-1',
+    conversation_id: 'conversation-1',
+    title: '质量报告',
+    status: 'failed',
+    error_code: 'report.storage_unavailable',
+    created_at: '2026-09-25T00:00:00Z',
+    spec: { sections: [{ source: { turn_id: 'turn-1', evidence_ids: ['evidence-1'] } }] },
+  }]
+  const { rerender } = render(<ConversationReports view={conversation(true)} />)
+
+  fireEvent.click(screen.getByRole('button', { name: '重新尝试' }))
+  await waitFor(() => expect(mocks.retry).toHaveBeenCalledWith('report-1'))
+
+  mocks.reports = [{ ...mocks.reports[0], error_code: 'report.spec_invalid' }]
+  rerender(<ConversationReports view={conversation(true)} />)
+  expect(screen.queryByRole('button', { name: '重新尝试' })).not.toBeInTheDocument()
 })

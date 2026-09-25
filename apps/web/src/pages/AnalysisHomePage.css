@@ -260,9 +260,16 @@
 .conversation-report-item nav button { padding:6px 9px; color:#244cb4; background:#edf3ff; border:1px solid #cbd9fc; border-radius:7px; font-size:.68rem; cursor:pointer; }
 .conversation-report-item nav button:disabled { opacity:.55; cursor:wait; }
 .conversation-report-item p { margin:8px 0 0; color:#a43a35; font-size:.7rem; }
+.conversation-report-failure { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:9px; }
+.conversation-report-failure button { margin-top:8px; }
+.conversation-report-evidence a { padding:5px 8px; color:#244cb4; background:#f7f9ff; border:1px solid #d6e1fa; border-radius:7px; font-size:.68rem; text-decoration:none; }
+.conversation-report-evidence a:hover,.conversation-report-evidence a:focus-visible { text-decoration:underline; }
+.conversation-report-preview { margin-top:12px; overflow:hidden; background:#fff; border:1px solid #dce4ef; border-radius:9px; }
+.conversation-report-preview iframe { display:block; width:100%; height:min(68vh,620px); min-height:360px; border:0; }
 .conversation-reports .analysis-inline-error { margin:11px 0 0; }
 @media (max-width:560px) {
   .conversation-reports { padding:13px; }
   .conversation-reports-create { align-items:stretch; flex-direction:column; }
   .conversation-reports-create button { align-self:flex-start; }
+  .conversation-report-preview iframe { min-height:300px; }
 }
