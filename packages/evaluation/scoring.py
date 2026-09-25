@@ -57,9 +57,9 @@ def score_case(case: EvaluationCase, observed: ObservedOutcome) -> CaseScore:
     if expected.require_evidence or expected.numbers:
         checks.append(
             CheckScore(
-                "number_evidence",
+                "evidence",
                 observed.validation_passed
-                and bool(observed.evidence_numbers)
+                and observed.evidence_count > 0
                 and all(
                     key in observed.evidence_numbers and observed.evidence_numbers[key] == value
                     for key, value in observed.numbers.items()

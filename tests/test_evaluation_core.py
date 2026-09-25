@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -26,8 +27,8 @@ def _case(**overrides: object) -> EvaluationCase:
             "status": "completed",
             "task_type": "metric_query",
             "metric_ids": ["defect_rate"],
-            "required_tools": ["metric.query"],
-            "allowed_tools": ["metric.query"],
+            "required_tools": ["query.metric"],
+            "allowed_tools": ["query.metric"],
             "numbers": {"defect_rate": "2.4"},
             "absolute_tolerance": "0.01",
             "require_evidence": True,
@@ -42,9 +43,10 @@ def _observation(**overrides: object) -> ObservedOutcome:
         "status": "completed",
         "task_type": "metric_query",
         "metric_ids": ["defect_rate"],
-        "tool_calls": ["metric.query"],
+        "tool_calls": ["query.metric"],
         "numbers": {"defect_rate": "2.405"},
         "evidence_numbers": {"defect_rate": "2.405"},
+        "evidence_count": 1,
         "validation_passed": True,
     }
     data.update(overrides)
@@ -100,7 +102,7 @@ def test_numeric_result_needs_matching_evidence_and_passed_validation() -> None:
     assert score_case(case, _observation()).status == "passed"
     no_evidence = score_case(case, _observation(evidence_numbers={}))
     assert no_evidence.status == "failed"
-    assert {check.name for check in no_evidence.checks if not check.passed} == {"number_evidence"}
+    assert {check.name for check in no_evidence.checks if not check.passed} == {"evidence"}
     wrong_number = score_case(case, _observation(numbers={"defect_rate": "3.1"}))
     assert wrong_number.status == "failed"
     assert not next(check for check in wrong_number.checks if check.name == "numbers").passed
@@ -151,6 +153,35 @@ def test_suite_loader_rejects_duplicate_json_keys_and_oversized_content(tmp_path
     path.write_bytes(b"x" * (2 * 1024 * 1024 + 1))
     with pytest.raises(ValueError, match="size limit"):
         load_suite(path)
+
+
+def test_checked_in_draft_cases_match_synthetic_source_data() -> None:
+    suite = load_suite(
+        Path(__file__).resolve().parents[1]
+        / "evaluations/golden/manufacturing-quality-draft-v0.1.0.json"
+    )
+    assert not suite.published
+    assert len(suite.cases) == 5
+    source = (Path(__file__).resolve().parents[1] / "infra/postgres/source-init.sql").read_text(
+        encoding="utf-8"
+    )
+    rows = re.findall(
+        r"\(\d+,\s*(\d+),\s*(\d+),\s*'(?:passed|failed)',\s*'2026-(0[789])-\d+T[^']+'\)",
+        source,
+    )
+    assert len(rows) == 6
+    for index, month in enumerate(("07", "08", "09")):
+        scoped = [
+            (int(inspected), int(defects))
+            for inspected, defects, row_month in rows
+            if row_month == month
+        ]
+        expected = (
+            Decimal(sum(defects for _, defects in scoped))
+            * 100
+            / Decimal(sum(inspected for inspected, _ in scoped))
+        )
+        assert suite.cases[index].expected.numbers["defect_rate"] == expected
 
 
 def test_summary_keeps_unrun_blocked_and_infrastructure_errors_visible() -> None:

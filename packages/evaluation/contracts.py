@@ -114,6 +114,7 @@ class ObservedOutcome(StrictEvaluationModel):
     tool_calls: tuple[str, ...] = ()
     numbers: dict[str, Decimal] = Field(default_factory=dict)
     evidence_numbers: dict[str, Decimal] = Field(default_factory=dict)
+    evidence_count: int = Field(default=0, ge=0)
     validation_passed: bool = False
     policy_denied: bool = False
     unauthorized_data_accessed: bool = False

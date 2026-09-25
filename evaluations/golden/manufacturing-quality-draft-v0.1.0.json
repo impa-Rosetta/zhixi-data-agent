@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "suite_version": "0.1.0",
+  "synthetic_dataset_id": "synthetic-quality-source-init-v1",
+  "semantic_version": "manufacturing-quality-template-v1",
+  "published": false,
+  "cases": [
+    {
+      "id": "standard-july-defect-rate",
+      "category": "standard",
+      "turns": ["2026年7月的不良率是多少？"],
+      "rationale": "infra/postgres/source-init.sql 中 7 月缺陷 7 件、检验 400 件，不良率为 1.75%。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": ["defect_rate"],
+        "required_tools": ["query.metric"],
+        "allowed_tools": ["semantic.resolve", "query.metric"],
+        "numbers": {"defect_rate": "1.75"},
+        "absolute_tolerance": "0.001",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-august-defect-rate",
+      "category": "standard",
+      "turns": ["2026年8月的不良率是多少？"],
+      "rationale": "合成质检表 8 月缺陷 11 件、检验 400 件，不良率为 2.75%。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": ["defect_rate"],
+        "required_tools": ["query.metric"],
+        "allowed_tools": ["semantic.resolve", "query.metric"],
+        "numbers": {"defect_rate": "2.75"},
+        "absolute_tolerance": "0.001",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-september-defect-rate",
+      "category": "standard",
+      "turns": ["2026年9月的不良率是多少？"],
+      "rationale": "合成质检表 9 月缺陷 12 件、检验 400 件，不良率为 3.00%。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": ["defect_rate"],
+        "required_tools": ["query.metric"],
+        "allowed_tools": ["semantic.resolve", "query.metric"],
+        "numbers": {"defect_rate": "3.00"},
+        "absolute_tolerance": "0.001",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "multiturn-trend-then-monthly",
+      "category": "multi_turn",
+      "turns": ["最近三个月不良率趋势", "按月份展开"],
+      "rationale": "验收记录 M7.6 已确认同一会话按月份展开得到 7 月、8 月、9 月三个可信时间点。",
+      "expected": {
+        "status": "completed",
+        "task_type": "trend",
+        "metric_ids": ["defect_rate"],
+        "required_tools": ["query.metric"],
+        "allowed_tools": ["semantic.resolve", "query.metric", "visualization.compose"],
+        "numbers": {},
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "ambiguity-quality-overview",
+      "category": "ambiguity",
+      "turns": ["看看质量情况"],
+      "rationale": "未指明检验数量、缺陷率或其他指标，不应擅自选择业务口径；需人工核对实际澄清提问。",
+      "expected": {
+        "status": "clarification",
+        "allowed_tools": []
+      }
+    }
+  ]
+}
