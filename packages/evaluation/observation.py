@@ -2,9 +2,44 @@
 
 from __future__ import annotations
 
+from pydantic import ValidationError
+
+from packages.agent_core.contracts import ClarificationRequest
 from packages.evaluation.answer_claims import verify_answer_claims
 from packages.evaluation.contracts import ObservedOutcome
 from packages.shared_contracts.agents import AnalysisRunViewResponse
+
+
+def observe_clarification_run(view: AnalysisRunViewResponse) -> ObservedOutcome:
+    """Only score clarification when its question was actually shown to the user."""
+    if view.run.status != "waiting_for_clarification":
+        raise ValueError("only waiting clarification runs can be observed by this adapter")
+    tool_calls = tuple(item.tool_name for item in view.tool_calls)
+    raw_request = view.run.context.get("clarification")
+    try:
+        request = ClarificationRequest.model_validate(raw_request)
+    except ValidationError:
+        request = None
+    last_message = view.messages[-1] if view.messages else None
+    interaction = (
+        last_message.context_patch.get("interaction") if last_message is not None else None
+    )
+    question_shown = (
+        request is not None
+        and last_message is not None
+        and last_message.role == "assistant"
+        and last_message.content == request.question
+        and isinstance(interaction, dict)
+        and interaction.get("kind") == "clarification"
+    )
+    safe_pause = (
+        not tool_calls and not view.artifacts and not view.evidence and not view.validations
+    )
+    return ObservedOutcome(
+        status="clarification" if question_shown and safe_pause else "failed",
+        tool_calls=tool_calls,
+        evidence_count=len(view.evidence),
+    )
 
 
 def observe_completed_run(view: AnalysisRunViewResponse) -> ObservedOutcome:

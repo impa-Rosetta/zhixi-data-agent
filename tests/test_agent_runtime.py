@@ -1,6 +1,7 @@
 import asyncio
 import json
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import create_engine, select
@@ -24,6 +25,7 @@ from packages.connectors.metadata import (
 )
 from packages.evaluation import (
     EvaluationCase,
+    observe_clarification_run,
     observe_completed_run,
     score_case,
     verify_answer_claims,
@@ -49,6 +51,7 @@ from packages.semantic_model.models import (
     SemanticVersionStatus,
 )
 from packages.shared_contracts.agents import (
+    AnalysisToolCallResponse,
     AppendAnalysisMessageRequest,
     CreateAnalysisRunRequest,
 )
@@ -212,6 +215,58 @@ def test_runtime_pauses_low_confidence_and_is_idempotent() -> None:
     assert waiting_view.messages[-1].content == "你希望分析哪个指标？"
     assert waiting_view.messages[-1].context_patch["interaction"]["kind"] == "clarification"
     assert "agent.clarification_required" not in waiting_view.messages[-1].content
+    clarification_case = EvaluationCase.model_validate(
+        {
+            "id": "clarification-metric-required",
+            "category": "ambiguity",
+            "turns": ["看看那个比例"],
+            "rationale": "未指定指标时应向用户实际提出澄清问题",
+            "expected": {"status": "clarification", "allowed_tools": []},
+        }
+    )
+    observed = observe_clarification_run(waiting_view)
+    assert observed.status == "clarification"
+    assert observed.tool_calls == ()
+    assert score_case(clarification_case, observed).status == "passed"
+    altered_message = waiting_view.messages[-1].model_copy(update={"content": "请稍等"})
+    altered_view = waiting_view.model_copy(
+        update={"messages": [*waiting_view.messages[:-1], altered_message]}
+    )
+    assert observe_clarification_run(altered_view).status == "failed"
+    assert (
+        score_case(clarification_case, observe_clarification_run(altered_view)).status == "failed"
+    )
+    wrong_kind = waiting_view.messages[-1].model_copy(
+        update={"context_patch": {"interaction": {"kind": "answer"}}}
+    )
+    altered_view = waiting_view.model_copy(
+        update={"messages": [*waiting_view.messages[:-1], wrong_kind]}
+    )
+    assert observe_clarification_run(altered_view).status == "failed"
+    no_request = waiting_view.run.model_copy(update={"context": {}})
+    altered_view = waiting_view.model_copy(update={"run": no_request})
+    assert observe_clarification_run(altered_view).status == "failed"
+    unexpected_tool = waiting_view.model_copy(
+        update={
+            "tool_calls": [
+                AnalysisToolCallResponse(
+                    id=uuid.uuid4(),
+                    step_id=uuid.uuid4(),
+                    tool_name="query.metric",
+                    tool_version="1.0.0",
+                    argument_digest="a" * 64,
+                    status="succeeded",
+                    result_summary={},
+                    error_code=None,
+                    created_at=datetime.now(UTC),
+                )
+            ]
+        }
+    )
+    observed_tool = observe_clarification_run(unexpected_tool)
+    assert observed_tool.status == "failed"
+    assert observed_tool.tool_calls == ("query.metric",)
+    assert score_case(clarification_case, observed_tool).status == "failed"
     assert len(gateway.calls) == 1
     append_message(
         db,
