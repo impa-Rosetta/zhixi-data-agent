@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 import { AnalysisResultPanel } from './AnalysisResultPanel'
 import { nodeLabel, runStatusLabel } from './presentation'
@@ -11,9 +11,10 @@ type Props = {
   error: string | null
   onSubmit: (message: string, suggestionId?: string) => Promise<void>
   onCancel?: (turnId: string) => Promise<void>
+  reportPanel?: ReactNode
 }
 
-export function ContinuousConversation({ view, userName, busy, error, onSubmit, onCancel }: Props) {
+export function ContinuousConversation({ view, userName, busy, error, onSubmit, onCancel, reportPanel }: Props) {
   const [message, setMessage] = useState('')
   const streamRef = useRef<HTMLElement>(null)
   const latest = view?.turns.at(-1)
@@ -121,6 +122,7 @@ export function ContinuousConversation({ view, userName, busy, error, onSubmit, 
             )}
           </section>
         ))}
+        {reportPanel}
       </section>
       <form className="analysis-composer analysis-persistent-composer" onSubmit={submit}>
         <label htmlFor="conversation-message">

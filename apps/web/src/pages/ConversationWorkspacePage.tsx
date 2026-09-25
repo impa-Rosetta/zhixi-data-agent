@@ -10,6 +10,7 @@ import {
 } from '../features/analysisRuns/conversationApi'
 import { useRealtimeAnalysisConversation } from '../features/analysisRuns/useRealtimeAnalysisConversation'
 import { useAuth } from '../features/auth/context'
+import { ConversationReports } from '../features/reports/ConversationReports'
 import { ApiError } from '../lib/api/client'
 import './AnalysisHomePage.css'
 
@@ -123,6 +124,9 @@ export function ConversationWorkspacePage() {
           ) : (
             <ContinuousConversation
               view={view.data}
+              reportPanel={view.data
+                ? <ConversationReports key={view.data.conversation.id} view={view.data} />
+                : undefined}
               userName={user?.display_name}
               busy={commands.create.isPending || commands.message.isPending || commands.cancel.isPending}
               error={error}

@@ -151,11 +151,18 @@ def index(
     workspace_id: uuid.UUID,
     db: DbSession,
     user: CurrentUser,
+    conversation_id: uuid.UUID | None = None,
     limit: int = Query(default=30, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> AnalysisReportPage:
     authorize(db, user=user, workspace_id=workspace_id, action=Action.ANALYSIS_REPORT_READ)
-    return list_reports(db, workspace_id=workspace_id, limit=limit, offset=offset)
+    return list_reports(
+        db,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("", response_model=AnalysisReportResponse, status_code=status.HTTP_201_CREATED)

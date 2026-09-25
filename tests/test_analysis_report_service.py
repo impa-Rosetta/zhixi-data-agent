@@ -190,6 +190,12 @@ def test_report_reads_are_workspace_scoped() -> None:
     page = list_reports(db, workspace_id=workspace.id)
     assert page.total == 1
     assert page.items[0].id == created.id
+    assert list_reports(
+        db, workspace_id=workspace.id, conversation_id=conversation.id
+    ).total == 1
+    assert list_reports(
+        db, workspace_id=workspace.id, conversation_id=uuid.uuid4()
+    ).total == 0
     assert get_report(db, workspace_id=workspace.id, report_id=created.id).id == created.id
 
     other_workspace_id = uuid.uuid4()

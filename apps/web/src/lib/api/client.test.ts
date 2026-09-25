@@ -91,3 +91,26 @@ test('opens an authenticated event stream without consuming the response body', 
   expect(new Headers(request?.headers).get('Accept')).toBe('text/event-stream')
   await expect(response.text()).resolves.toContain('id: 1')
 })
+
+test('downloads a protected PDF as a blob with the access token', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    new Response('%PDF-1.7', {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf' },
+    }),
+  )
+  const client = new ApiClient()
+  client.setTokens({
+    access_token: 'report-access',
+    refresh_token: 'report-refresh',
+    token_type: 'bearer',
+    expires_in: 900,
+  })
+
+  const file = await client.requestBlob('/api/v1/workspaces/w/reports/r/files/pdf')
+
+  expect(file).toBeInstanceOf(Blob)
+  await expect(file.text()).resolves.toBe('%PDF-1.7')
+  expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization'))
+    .toBe('Bearer report-access')
+})

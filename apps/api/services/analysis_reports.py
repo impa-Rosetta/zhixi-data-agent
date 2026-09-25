@@ -319,20 +319,24 @@ def list_reports(
     db: Session,
     *,
     workspace_id: uuid.UUID,
+    conversation_id: uuid.UUID | None = None,
     limit: int = 30,
     offset: int = 0,
 ) -> AnalysisReportPage:
     bounded_limit = max(1, min(limit, 100))
     bounded_offset = max(0, offset)
+    filters = [AnalysisReport.workspace_id == workspace_id]
+    if conversation_id is not None:
+        filters.append(AnalysisReport.conversation_id == conversation_id)
     total = db.scalar(
         select(func.count())
         .select_from(AnalysisReport)
-        .where(AnalysisReport.workspace_id == workspace_id)
+        .where(*filters)
     )
     reports = list(
         db.scalars(
             select(AnalysisReport)
-            .where(AnalysisReport.workspace_id == workspace_id)
+            .where(*filters)
             .order_by(AnalysisReport.created_at.desc(), AnalysisReport.id.desc())
             .offset(bounded_offset)
             .limit(bounded_limit)

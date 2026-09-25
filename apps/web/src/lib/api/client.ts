@@ -104,6 +104,18 @@ export class ApiClient {
     return response
   }
 
+  async requestBlob(path: string, retry = true): Promise<Blob> {
+    const headers = new Headers()
+    if (this.accessToken) headers.set('Authorization', `Bearer ${this.accessToken}`)
+    const response = await this.fetchResponse(path, { headers })
+    if (response.status === 401 && retry && this.hasRefreshToken()) {
+      await this.refresh()
+      return this.requestBlob(path, false)
+    }
+    if (!response.ok) throw await this.responseError(response)
+    return response.blob()
+  }
+
   private async fetchResponse(path: string, init: RequestInit): Promise<Response> {
     try {
       return await fetch(`${apiBaseUrl}${path}`, init)
