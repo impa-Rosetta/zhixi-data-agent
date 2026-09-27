@@ -49,6 +49,9 @@ def test_create_freezes_versions_and_enqueues_once() -> None:
     db.commit()
     assert again.id == run.id
     assert run.suite_digest == suite.content_digest
+    from packages.evaluation.postgres_draft_adapter import ADAPTER_VERSION
+
+    assert run.tool_version == ADAPTER_VERSION
     assert db.scalar(select(func.count()).select_from(EvaluationCaseResult)) == 9
     assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 1
     with pytest.raises(EvaluationLifecycleError, match="idempotency_conflict"):
@@ -60,6 +63,25 @@ def test_create_freezes_versions_and_enqueues_once() -> None:
             suite=suite,
             max_seconds=60,
         )
+    db.close()
+
+
+@pytest.mark.parametrize("field", ["model_version", "tool_version", "prompt_version"])
+def test_runtime_drift_is_rejected_before_claiming_any_case(field) -> None:
+    db, run, suite = _created()
+    setattr(run, field, "older-runtime")
+    db.commit()
+    with pytest.raises(EvaluationLifecycleError, match="runtime_changed"):
+        claim_run(db, run.id, suite)
+    assert run.status == "queued" and run.attempt_count == 0
+    assert (
+        db.scalar(
+            select(func.count())
+            .select_from(EvaluationCaseResult)
+            .where(EvaluationCaseResult.attempt_count != 0)
+        )
+        == 0
+    )
     db.close()
 
 

@@ -33,6 +33,7 @@ from packages.evaluation.contracts import EvaluationCase, ObservedOutcome
 from packages.evaluation.draft_adapter import draft_case_factory
 from packages.evaluation.observation import observe_completed_run
 from packages.evaluation.runner import OfflineCaseExecution, OfflineCaseSession
+from packages.evaluation.versions import OFFLINE_TOOL_VERSION
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
 from packages.platform_core.catalog_store import object_counts, replace_snapshot_document
 from packages.platform_core.database import Base
@@ -62,7 +63,7 @@ from packages.shared_contracts.agents import (
 )
 from packages.shared_contracts.semantic_models import PhysicalMapping
 
-ADAPTER_VERSION = "draft-postgres-conversation-clarification-v3"
+ADAPTER_VERSION = OFFLINE_TOOL_VERSION
 ConversationPhase = Literal["trend", "refine", "explain", "social"]
 
 

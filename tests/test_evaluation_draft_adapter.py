@@ -27,7 +27,7 @@ def test_new_model_anomaly_draft_preserves_frozen_previous_cases() -> None:
 
     previous = registered_suite("0.1.6")
     current = registered_suite("0.1.7")
-    assert SUITE_VERSIONS[0] == "0.1.7"
+    assert "0.1.7" in SUITE_VERSIONS
     assert current.cases[: len(previous.cases)] == previous.cases
     assert len(current.cases) == 37 and not current.published
     assert sum(case.category == "anomaly" for case in current.cases) == 6

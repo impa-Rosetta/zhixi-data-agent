@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session
 from packages.evaluation.contracts import EvaluationSuite
 from packages.evaluation.persistence import EvaluationCaseResult, EvaluationRun
 from packages.evaluation.scoring import CaseScore
+from packages.evaluation.versions import (
+    OFFLINE_MODEL_VERSION,
+    OFFLINE_PROMPT_VERSION,
+    OFFLINE_TOOL_VERSION,
+)
 from packages.platform_core.models import AuditEvent, OutboxEvent
 
 SAFE_ERRORS = frozenset(
@@ -21,6 +26,7 @@ SAFE_ERRORS = frozenset(
         "evaluation.fixture_unavailable",
         "evaluation.cleanup_failed",
         "evaluation.suite_changed",
+        "evaluation.runtime_changed",
         "evaluation.case_isolation_failed",
         "evaluation.cancelled",
         "evaluation.budget_exceeded",
@@ -75,9 +81,9 @@ def create_offline_run(
         suite_digest=suite.content_digest,
         dataset_id=suite.synthetic_dataset_id,
         semantic_version=suite.semantic_version,
-        model_version="offline-fixed-v1",
-        tool_version="draft-postgres-anomaly-security-v2",
-        prompt_version="draft-fixed-v1",
+        model_version=OFFLINE_MODEL_VERSION,
+        tool_version=OFFLINE_TOOL_VERSION,
+        prompt_version=OFFLINE_PROMPT_VERSION,
         budget={"max_seconds": max_seconds},
         summary={},
     )
@@ -135,6 +141,12 @@ def claim_run(db: Session, run_id: uuid.UUID, suite: EvaluationSuite) -> Evaluat
         raise EvaluationLifecycleError("evaluation.live_not_enabled")
     if run.suite_digest != suite.content_digest:
         raise EvaluationLifecycleError("evaluation.suite_changed")
+    if (run.model_version, run.tool_version, run.prompt_version) != (
+        OFFLINE_MODEL_VERSION,
+        OFFLINE_TOOL_VERSION,
+        OFFLINE_PROMPT_VERSION,
+    ):
+        raise EvaluationLifecycleError("evaluation.runtime_changed")
     changed = db.execute(
         update(EvaluationRun)
         .where(

@@ -31,7 +31,17 @@ def execute_evaluation(run_id: str) -> None:
 
     try:
         execute_offline_run(get_engine(), parsed, registered_suite(version), postgres_case_factory)
-    except (EvaluationLifecycleError, ValueError):
+    except EvaluationLifecycleError as exc:
+        with Session(get_engine()) as db:
+            fail_queued_run(
+                db,
+                parsed,
+                "evaluation.runtime_changed"
+                if str(exc) == "evaluation.runtime_changed"
+                else "evaluation.suite_changed",
+            )
+            db.commit()
+    except ValueError:
         with Session(get_engine()) as db:
             fail_queued_run(db, parsed, "evaluation.suite_changed")
             db.commit()

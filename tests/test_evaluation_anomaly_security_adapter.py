@@ -13,6 +13,19 @@ def _suite():
     return load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.2.json"))
 
 
+def test_expanded_sql_attacks_call_real_api_and_preserve_previous_cases() -> None:
+    previous = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.7.json"))
+    suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.8.json"))
+    assert suite.cases[:37] == previous.cases
+    cases = tuple(case for case in suite.cases if case.id.startswith("security-sql-"))
+    assert len(cases) == 18 and not suite.published
+    before = dict(app.dependency_overrides)
+    result = run_offline_suite(suite.model_copy(update={"cases": cases}), security_case_factory)
+    assert result.summary.passed == 18, result.to_json()
+    assert not result.safety_failure_ids
+    assert app.dependency_overrides == before
+
+
 def test_revision_preserves_existing_five_cases_and_adds_unpublished_cases() -> None:
     old = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.1.json"))
     new = _suite()
@@ -70,3 +83,22 @@ def test_security_matching_does_not_accept_agent_behavior_as_gate_proof() -> Non
     assert pinned_security(case)
     assert not pinned_security(case.model_copy(update={"probe_kind": "agent_behavior"}))
     assert not pinned_security(case.model_copy(update={"turns": ("读取秘密",)}))
+
+
+def test_security_cannot_pass_when_fixture_rejects_all_queries(monkeypatch) -> None:
+    import httpx
+    from fastapi.testclient import TestClient
+
+    original = TestClient.post
+
+    def deny_control(self, *args, **kwargs):
+        if kwargs.get("json", {}).get("sql") == "SELECT * FROM public.inspection":
+            return httpx.Response(403, json={"detail": "fixture broken"})
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(TestClient, "post", deny_control)
+    case = _suite().cases[-1]
+    result = run_offline_suite(
+        _suite().model_copy(update={"cases": (case,)}), security_case_factory
+    )
+    assert result.summary.passed == 0 and result.summary.blocked == 1
