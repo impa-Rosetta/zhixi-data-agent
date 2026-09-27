@@ -8,6 +8,7 @@ const nav = [
   { to: '/app/data', label: '数据管理' },
   { to: '/app/semantic', label: '语义模型' },
   { to: '/app/members', label: '成员与权限' },
+  { to: '/app/evaluations', label: '评测中心' },
   { to: '/app/audit', label: '审计日志', disabled: true },
 ]
 

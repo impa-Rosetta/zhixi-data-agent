@@ -1,0 +1,136 @@
+import uuid
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+from test_evaluation_persistence import _database
+
+from apps.api.dependencies import get_current_user
+from apps.api.main import app
+from apps.api.routes import evaluations as routes
+from packages.evaluation.persistence import EvaluationCaseResult, EvaluationRun
+from packages.platform_core.database import get_db
+from packages.platform_core.models import Membership, OutboxEvent, User, WorkspaceRole
+from packages.platform_core.settings import Settings
+
+
+@pytest.fixture
+def context(monkeypatch):
+    db, fixture = _database()
+    user = db.get(User, fixture.created_by_user_id)
+    membership = Membership(
+        user_id=user.id, workspace_id=fixture.workspace_id, role=WorkspaceRole.WORKSPACE_ADMIN
+    )
+    db.add(membership)
+    db.commit()
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: user
+    monkeypatch.setattr(
+        routes,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            evaluation_offline_enabled=True,
+        ),
+    )
+    try:
+        with TestClient(app) as client:
+            yield client, db, fixture, membership
+    finally:
+        app.dependency_overrides.clear()
+        db.close()
+
+
+def test_api_create_is_idempotent_and_freezes_draft_identity(context) -> None:
+    client, db, fixture, _ = context
+    url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations"
+    payload = {"suite_version": "0.1.2", "track": "offline", "max_seconds": 300}
+    headers = {"Idempotency-Key": "evaluation-api-create"}
+    first = client.post(url, json=payload, headers=headers)
+    assert first.status_code == 201
+    second = client.post(url, json=payload, headers=headers)
+    assert second.json()["id"] == first.json()["id"]
+    assert first.json()["calls_used"] == first.json()["tokens_used"] == 0
+    assert first.json()["model_version"] == "offline-fixed-v1"
+    cases = client.get(f"{url}/{first.json()['id']}/cases")
+    assert cases.json()["total"] == 9
+    assert "turns" not in cases.text and "password" not in cases.text
+    assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+    assert db.scalar(select(func.count()).select_from(EvaluationCaseResult)) == 9
+
+
+@pytest.mark.parametrize(
+    "role,read,manage",
+    [
+        (WorkspaceRole.SYSTEM_ADMIN, 200, 201),
+        (WorkspaceRole.WORKSPACE_ADMIN, 200, 201),
+        (WorkspaceRole.AUDITOR, 200, 403),
+        (WorkspaceRole.DATA_ADMIN, 403, 403),
+        (WorkspaceRole.ANALYST, 403, 403),
+    ],
+)
+def test_evaluation_role_matrix(context, role, read, manage) -> None:
+    client, db, fixture, membership = context
+    membership.role = role
+    db.commit()
+    url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations"
+    assert client.get(f"{url}/suites").status_code == read
+    assert (
+        client.post(
+            url, json={"suite_version": "0.1.2"}, headers={"Idempotency-Key": "matrix"}
+        ).status_code
+        == manage
+    )
+
+
+def test_paid_track_and_client_paths_are_rejected(context) -> None:
+    client, _, fixture, _ = context
+    url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations"
+    headers = {"Idempotency-Key": "invalid"}
+    assert (
+        client.post(
+            url, json={"suite_version": "0.1.2", "track": "live"}, headers=headers
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(url, json={"suite_version": "../../secret"}, headers=headers).status_code == 422
+    )
+    assert (
+        client.post(
+            url, json={"suite_version": "0.1.2", "provider_key": "fixture"}, headers=headers
+        ).status_code
+        == 422
+    )
+    assert client.post(url, json={"suite_version": "9.9.9"}, headers=headers).status_code == 422
+
+
+def test_cross_workspace_and_revocation_are_denied(context) -> None:
+    client, db, fixture, membership = context
+    url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations"
+    assert (
+        client.get(f"/api/v1/workspaces/{uuid.uuid4()}/evaluations/{fixture.id}").status_code == 403
+    )
+    db.delete(membership)
+    db.commit()
+    assert client.get(url).status_code == 403
+    assert client.get(f"{url}/{fixture.id}").status_code == 403
+
+
+def test_disabled_offline_adapter_does_not_enqueue(context, monkeypatch) -> None:
+    client, db, fixture, _ = context
+    monkeypatch.setattr(routes, "get_settings", lambda: Settings(_env_file=None))
+    url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations"
+    result = client.post(
+        url, json={"suite_version": "0.1.2"}, headers={"Idempotency-Key": "disabled"}
+    )
+    assert result.status_code == 503
+    assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 0
+
+
+def test_cancel_is_authorized_and_terminal(context) -> None:
+    client, db, fixture, _ = context
+    url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations/{fixture.id}/cancel"
+    assert client.post(url).status_code == 204
+    assert client.post(url).status_code == 409
+    assert db.get(EvaluationRun, fixture.id).status == "cancelled"

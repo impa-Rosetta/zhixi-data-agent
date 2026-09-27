@@ -9,6 +9,7 @@ from apps.api.routes.analysis_reports import router as analysis_reports_router
 from apps.api.routes.analysis_runs import router as analysis_runs_router
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.data_sources import router as data_sources_router
+from apps.api.routes.evaluations import router as evaluations_router
 from apps.api.routes.health import router as health_router
 from apps.api.routes.queries import router as queries_router
 from apps.api.routes.semantic_models import router as semantic_models_router
@@ -50,3 +51,4 @@ app.include_router(queries_router)
 app.include_router(analysis_conversations_router)
 app.include_router(analysis_runs_router)
 app.include_router(analysis_reports_router)
+app.include_router(evaluations_router)

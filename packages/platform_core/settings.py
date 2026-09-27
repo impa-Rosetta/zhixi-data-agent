@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     deepseek_timeout_seconds: float = 45.0
     deepseek_max_attempts: int = 3
     agent_confidence_threshold: float = 0.72
+    evaluation_offline_enabled: bool = False
 
     @field_validator("app_secret_key")
     @classmethod

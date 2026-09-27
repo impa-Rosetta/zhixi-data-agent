@@ -4,6 +4,9 @@
 .superpowers
 .env
 .venv
+.tmp
+tmp
+output
 .pytest_cache
 .ruff_cache
 .mypy_cache

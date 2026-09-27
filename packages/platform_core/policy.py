@@ -20,6 +20,8 @@ class Action(enum.StrEnum):
     ANALYSIS_REPORT_DOWNLOAD = "analysis.report.download"
     ANALYSIS_REPORT_RETRY = "analysis.report.retry"
     AUDIT_READ = "audit.read"
+    EVALUATION_READ = "evaluation.read"
+    EVALUATION_MANAGE = "evaluation.manage"
 
 
 _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
@@ -57,6 +59,7 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
             Action.CATALOG_READ,
             Action.SEMANTIC_READ,
             Action.AUDIT_READ,
+            Action.EVALUATION_READ,
             Action.ANALYSIS_REPORT_READ,
             Action.ANALYSIS_REPORT_DOWNLOAD,
         }

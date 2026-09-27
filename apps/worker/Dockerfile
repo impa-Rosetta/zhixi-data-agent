@@ -16,5 +16,6 @@ RUN groupadd --system zhixi && useradd --system --gid zhixi --home-dir /app zhix
 RUN mkdir -p /tmp/zhixi-cache && chown zhixi:zhixi /tmp/zhixi-cache && chmod 700 /tmp/zhixi-cache
 COPY --chown=zhixi:zhixi apps ./apps
 COPY --chown=zhixi:zhixi packages ./packages
+COPY --chown=zhixi:zhixi evaluations ./evaluations
 USER zhixi
 CMD ["celery", "-A", "apps.worker.celery_app:celery_app", "worker", "--loglevel=INFO", "--hostname=worker@%h", "--concurrency=2"]

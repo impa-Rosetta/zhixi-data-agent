@@ -9,6 +9,7 @@ celery_app = Celery(
     backend=settings.redis_url,
     include=[
         "apps.worker.tasks.analysis_reports",
+        "apps.worker.tasks.evaluations",
         "apps.worker.tasks.analysis_runs",
         "apps.worker.tasks.data_sources",
         "apps.worker.tasks.outbox",
@@ -23,6 +24,10 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     beat_schedule={
+        "recover-stale-evaluations": {
+            "task": "evaluations.recover_stale",
+            "schedule": 60.0,
+        },
         "dispatch-transactional-outbox": {
             "task": "outbox.dispatch",
             "schedule": 5.0,

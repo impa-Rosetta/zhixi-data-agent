@@ -10,6 +10,7 @@ RUN groupadd --system zhixi && useradd --system --gid zhixi --home-dir /app zhix
 COPY --chown=zhixi:zhixi alembic.ini ./
 COPY --chown=zhixi:zhixi apps ./apps
 COPY --chown=zhixi:zhixi packages ./packages
+COPY --chown=zhixi:zhixi evaluations ./evaluations
 COPY --chown=zhixi:zhixi infra/migrations ./infra/migrations
 USER zhixi
 EXPOSE 8000

@@ -8,6 +8,7 @@ import { ConversationWorkspacePage } from './pages/ConversationWorkspacePage'
 import { DataSourceDetailPage } from './pages/DataSourceDetailPage'
 import { DataSourcesPage } from './pages/DataSourcesPage'
 import { InvitePage } from './pages/InvitePage'
+import { EvaluationsPage } from './pages/EvaluationsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MembersPage } from './pages/MembersPage'
 import { QueryLabPage } from './pages/QueryLabPage'
@@ -37,6 +38,7 @@ export function App() {
         <Route path="semantic" element={<SemanticModelsPage />} />
         <Route path="queries" element={<QueryLabPage />} />
         <Route path="members" element={<MembersPage />} />
+        <Route path="evaluations" element={<EvaluationsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

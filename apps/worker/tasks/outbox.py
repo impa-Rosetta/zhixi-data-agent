@@ -8,6 +8,7 @@ from packages.platform_core.database import get_engine
 from packages.platform_core.models import OutboxEvent
 
 _TASK_BY_EVENT = {
+    "evaluation.run.requested": ("evaluations.execute", "evaluation_run_id"),
     "analysis.run.requested": ("analysis_runs.execute", "run_id"),
     "analysis.report.requested": ("analysis_reports.generate", "report_id"),
     "data_source.connection_test.requested": ("data_sources.test_connection", "job_id"),
