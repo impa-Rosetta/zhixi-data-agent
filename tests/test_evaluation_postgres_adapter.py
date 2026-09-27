@@ -36,6 +36,53 @@ def test_month_inputs_are_pinned_not_derived_from_expected_numbers() -> None:
     assert pinned_month(case.model_copy(update={"category": "security"})) is None
 
 
+def test_completion_rate_suite_preserves_frozen_cases_and_pins_business_inputs() -> None:
+    previous = registered_suite("0.1.13")
+    suite = registered_suite("0.1.14")
+    assert suite.cases[:80] == previous.cases
+    assert len(suite.cases) == 88 and not suite.published
+    cases = suite.cases[80:]
+    assert sum(case.category == "standard" for case in cases) == 6
+    assert sum(case.category == "multi_turn" for case in cases) == 2
+    for case in cases:
+        if case.category == "standard":
+            assert pinned_month(case) and pinned_metric(case) in {"计划达成率", "达成率"}
+            changed = case.model_copy(
+                update={"expected": case.expected.model_copy(update={"numbers": {}})}
+            )
+            assert pinned_month(changed) == pinned_month(case)
+            assert pinned_metric(changed) == pinned_metric(case)
+            assert not pinned_metric(case.model_copy(update={"turns": ("伪造输入",)}))
+        else:
+            assert pinned_multiturn(case)
+            assert not pinned_multiturn(
+                case.model_copy(update={"turns": tuple(reversed(case.turns))})
+            )
+
+
+@pytest.mark.parametrize("corruption", [None, "scale", "stale", "column"])
+def test_completion_rate_monthly_oracle_checks_percentage_scale_and_source_rows(corruption) -> None:
+    summary = {
+        "columns": ["production_time", "plan_completion_rate"],
+        "rows": [
+            [f"2026-{month}-01T00:00:00+00:00", value]
+            for month, value in (("07", "97.2"), ("08", "96.1"), ("09", "94.7"))
+        ],
+        "truncated": False,
+    }
+    if corruption == "scale":
+        summary["rows"][0][1] = "0.972"
+    elif corruption == "stale":
+        summary["rows"][0][0] = "2026-06-01T00:00:00+00:00"
+    elif corruption == "column":
+        summary["columns"][1] = "production_quantity"
+    view = cast(
+        AnalysisRunViewResponse,
+        SimpleNamespace(artifacts=[SimpleNamespace(artifact_type="query_result", summary=summary)]),
+    )
+    assert verify_monthly_result(view, "plan_completion_rate") is (corruption is None)
+
+
 def test_numeric_boundary_source_rows_are_independent_and_inputs_pinned() -> None:
     from packages.evaluation.postgres_draft_adapter import pinned_numeric_boundary
 

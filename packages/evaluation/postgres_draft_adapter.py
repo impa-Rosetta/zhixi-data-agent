@@ -158,6 +158,22 @@ MULTITURN_CASES.update(
 FIXTURE_URL = (
     "postgresql+psycopg://source_admin:source-admin-local-only@source-evaluation:5432/factory_demo"
 )
+MULTITURN_CASES.update(
+    {
+        "multiturn-completion-rate-monthly": MultiturnSpec(
+            ("最近三个月计划达成率趋势", "按月份展开"),
+            "计划达成率",
+            "plan_completion_rate",
+            ("trend", "refine"),
+        ),
+        "multiturn-completion-rate-explain": MultiturnSpec(
+            ("最近三个月计划达成率趋势", "解释一下"),
+            "计划达成率",
+            "plan_completion_rate",
+            ("trend", "explain"),
+        ),
+    }
+)
 MONTH_CASES = {
     "standard-july-defect-rate": ("2026年7月的不良率是多少？", "2026年7月", "不良率"),
     "standard-august-defect-rate": ("2026年8月的不良率是多少？", "2026年8月", "不良率"),
@@ -217,6 +233,19 @@ MONTH_CASES = {
     ),
     "standard-2026-sep-planned-quantity": ("2026年9月的计划数量是多少？", "2026年9月", "计划数量"),
 }
+MONTH_CASES.update(
+    {
+        f"standard-{key}-completion-rate": (f"{month}的{label}是多少？", month, label)
+        for key, month, label in (
+            ("2025-oct", "2025年10月", "计划达成率"),
+            ("2025-dec", "2025年12月", "达成率"),
+            ("2026-jan", "2026年1月", "计划达成率"),
+            ("2026-mar", "2026年3月", "达成率"),
+            ("2026-jul", "2026年7月", "计划达成率"),
+            ("2026-sep", "2026年9月", "达成率"),
+        )
+    }
+)
 ANOMALY_CASES = {
     "anomaly-no-matching-month": ("2000年1月的不良率是多少？", "2000年1月"),
     "anomaly-zero-denominator": ("1999年1月的不良率是多少？", "1999年1月"),
@@ -342,6 +371,7 @@ def verify_monthly_result(
         "defect_rate": ("inspection_time", ("1.75", "2.75", "3.00")),
         "inspected_quantity": ("inspection_time", ("400", "400", "400")),
         "production_quantity": ("production_time", ("972", "961", "947")),
+        "plan_completion_rate": ("production_time", ("97.2", "96.1", "94.7")),
     }
     oracle = oracles.get(metric_key)
     if oracle is None:
