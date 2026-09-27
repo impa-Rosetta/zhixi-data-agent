@@ -33,7 +33,8 @@ class EvaluationRun(Base):
             name="ck_evaluation_run_status",
         ),
         CheckConstraint(
-            "attempt_count >= 0 AND calls_used >= 0 AND tokens_used >= 0",
+            "attempt_count >= 0 AND calls_used >= 0 AND tokens_used >= 0 "
+            "AND calls_reserved >= 0 AND tokens_reserved >= 0",
             name="ck_evaluation_run_nonnegative",
         ),
         Index("ix_evaluation_run_workspace_created", "workspace_id", "created_at"),
@@ -59,6 +60,8 @@ class EvaluationRun(Base):
     summary: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     calls_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     tokens_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    calls_reserved: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    tokens_reserved: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     error_code: Mapped[str | None] = mapped_column(String(100))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -103,4 +106,38 @@ class EvaluationCaseResult(Base):
     run_references: Mapped[list[str]] = mapped_column(JSON, default=list)
     error_code: Mapped[str | None] = mapped_column(String(100))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EvaluationModelCall(Base):
+    """A durable receipt, not a cache of provider requests or responses."""
+
+    __tablename__ = "evaluation_model_calls"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "evaluation_run_id"],
+            ["evaluation_runs.workspace_id", "evaluation_runs.id"],
+            ondelete="CASCADE",
+            name="fk_evaluation_call_run_workspace",
+        ),
+        UniqueConstraint("evaluation_run_id", "call_key", name="uq_evaluation_call_key"),
+        CheckConstraint(
+            "status IN ('sent','settled','usage_uncertain')", name="ck_evaluation_call_status"
+        ),
+        CheckConstraint(
+            "reserved_tokens > 0 AND (actual_tokens IS NULL OR actual_tokens >= 0)",
+            name="ck_evaluation_call_tokens",
+        ),
+        Index("ix_evaluation_call_workspace_run", "workspace_id", "evaluation_run_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    evaluation_run_id: Mapped[uuid.UUID] = mapped_column()
+    call_key: Mapped[str] = mapped_column(String(100))
+    request_digest: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="sent")
+    reserved_tokens: Mapped[int] = mapped_column(Integer)
+    actual_tokens: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

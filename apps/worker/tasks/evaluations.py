@@ -39,7 +39,9 @@ def execute_evaluation(run_id: str) -> None:
 
 @celery_app.task(name="evaluations.recover_stale")  # type: ignore[untyped-decorator]
 def recover_stale_evaluations() -> int:
+    from packages.evaluation.model_budget import recover_uncertain_calls
+
     with Session(get_engine()) as db:
         recovered = recover_offline_runs(db)
         db.commit()
-        return recovered
+    return recovered + recover_uncertain_calls(get_engine())
