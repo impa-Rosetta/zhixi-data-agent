@@ -179,6 +179,38 @@ def test_create_report_request_rejects_duplicate_turns() -> None:
         )
 
 
+def test_html_query_results_are_escaped_tables_with_evidence() -> None:
+    source = _source(summary={
+        "columns": ["月份", "不良率"],
+        "rows": [["<script>月份</script>", None], ["9月", 0]],
+        "note": "<img src=x>",
+    })
+    document = render_html(compose_report_spec(**source).spec)
+    assert "<table>" in document
+    assert "<th scope=\"col\">月份</th>" in document
+    assert "&lt;script&gt;月份&lt;/script&gt;" in document
+    assert "<td>无数据</td>" in document
+    assert "<td>0</td>" in document
+    assert "&lt;img src=x&gt;" in document
+    assert "证据定位" in document
+    assert "table-header-group" in document
+
+
+def test_html_malformed_table_retains_original_payload() -> None:
+    document = render_html(compose_report_spec(**_source(summary={
+        "columns": ["月份", "不良率"], "rows": [["9月"]],
+    })).spec)
+    assert "<table>" not in document
+    assert "<pre>" in document
+
+
+def test_html_empty_query_result_is_explicit() -> None:
+    document = render_html(compose_report_spec(**_source(summary={
+        "columns": ["月份"], "rows": [],
+    })).spec)
+    assert "没有符合条件的数据" in document
+
+
 def test_create_report_request_rejects_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         CreateAnalysisReportRequest.model_validate(

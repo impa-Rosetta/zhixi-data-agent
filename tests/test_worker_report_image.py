@@ -17,3 +17,11 @@ def test_report_image_keeps_chinese_fonts_native_dependencies_and_nonroot_user()
         assert dependency in dockerfile
     assert "USER zhixi" in dockerfile
     assert "COPY . " not in dockerfile
+
+
+def test_worker_has_private_writable_font_cache() -> None:
+    dockerfile = Path("apps/worker/Dockerfile").read_text(encoding="utf-8")
+    assert "XDG_CACHE_HOME=/tmp/zhixi-cache" in dockerfile
+    assert "mkdir -p /tmp/zhixi-cache" in dockerfile
+    assert "chown zhixi:zhixi /tmp/zhixi-cache" in dockerfile
+    assert "chmod 700 /tmp/zhixi-cache" in dockerfile

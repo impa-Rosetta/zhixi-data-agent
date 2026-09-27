@@ -172,6 +172,41 @@ def render_markdown(spec: ReportSpecV1) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _summary_html(section: ReportSection) -> str:
+    columns = section.summary.get("columns")
+    rows = section.summary.get("rows")
+    if (
+        section.kind == "data"
+        and isinstance(columns, list)
+        and columns
+        and all(isinstance(column, str) for column in columns)
+        and isinstance(rows, list)
+        and all(isinstance(row, list) and len(row) == len(columns) for row in rows)
+    ):
+        headers = "".join(f'<th scope="col">{html.escape(str(c))}</th>' for c in columns)
+        body = "".join(
+            "<tr>"
+            + "".join(
+                "<td>" + html.escape("无数据" if cell is None else str(cell)) + "</td>"
+                for cell in row
+            )
+            + "</tr>"
+            for row in rows
+        )
+        table = f"<table><thead><tr>{headers}</tr></thead><tbody>{body}</tbody></table>"
+        if not rows:
+            table += "<p>没有符合条件的数据。</p>"
+        extra = {k: v for k, v in section.summary.items() if k not in {"columns", "rows"}}
+        if extra:
+            table += "<pre>" + html.escape(
+                json.dumps(extra, ensure_ascii=False, sort_keys=True, indent=2)
+            ) + "</pre>"
+        return table
+    return "<pre>" + html.escape(
+        json.dumps(section.summary, ensure_ascii=False, sort_keys=True, indent=2)
+    ) + "</pre>"
+
+
 def render_html(spec: ReportSpecV1) -> str:
     head = (
         '<meta charset="utf-8">'
@@ -183,22 +218,24 @@ def render_html(spec: ReportSpecV1) -> str:
         "color:#17213a;line-height:1.65;font-size:11pt;}"
         "h1{font-size:24pt;color:#243fbd;border-bottom:2px solid #dfe5ff;padding-bottom:12px;}"
         "h2{font-size:15pt;margin-top:24px;color:#243fbd;}"
-        "section{break-inside:avoid;border:1px solid #dfe5ee;border-radius:8px;"
+        "section{border:1px solid #dfe5ee;border-radius:8px;"
         "padding:14px;margin:14px 0;}"
         "pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7fb;padding:12px;}"
-        ".evidence{font-size:9pt;color:#52617a;}</style>"
+        "table{width:100%;border-collapse:collapse;table-layout:fixed;}"
+        "thead{display:table-header-group;}tr{break-inside:avoid;}"
+        "th,td{border:1px solid #dfe5ee;padding:8px;text-align:left;overflow-wrap:anywhere;}"
+        "th{background:#eef2ff;}h2{break-after:avoid;}"
+        ".evidence{font-size:9pt;color:#52617a;overflow-wrap:anywhere;}</style>"
         f"<title>{html.escape(spec.title)}</title>"
     )
     sections = []
     for section in spec.sections:
-        payload = html.escape(
-            json.dumps(section.summary, ensure_ascii=False, sort_keys=True, indent=2)
-        )
+        payload = _summary_html(section)
         sections.append(
             "<section>"
             f"<h2>{html.escape(section.title)}</h2>"
-            f"<pre>{payload}</pre>"
-            '<p class="evidence">'
+            + payload
+            + '<p class="evidence">'
             f"证据定位：Turn {section.source.turn_id} / "
             f"Artifact {section.source.artifact_id}"
             "</p>"
