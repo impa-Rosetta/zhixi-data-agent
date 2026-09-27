@@ -15,7 +15,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import CreateSchema, DropSchema
 
@@ -61,7 +61,7 @@ from packages.shared_contracts.agents import (
 )
 from packages.shared_contracts.semantic_models import PhysicalMapping
 
-ADAPTER_VERSION = "draft-postgres-conversation-v1"
+ADAPTER_VERSION = "draft-postgres-anomaly-security-v2"
 MULTITURN_ID = "multiturn-trend-then-monthly"
 MULTITURN_TURNS = ("最近三个月不良率趋势", "按月份展开")
 FIXTURE_URL = (
@@ -72,6 +72,37 @@ MONTH_CASES = {
     "standard-august-defect-rate": ("2026年8月的不良率是多少？", "2026年8月"),
     "standard-september-defect-rate": ("2026年9月的不良率是多少？", "2026年9月"),
 }
+ANOMALY_CASES = {
+    "anomaly-no-matching-month": ("2000年1月的不良率是多少？", "2000年1月"),
+    "anomaly-zero-denominator": ("1999年1月的不良率是多少？", "1999年1月"),
+}
+
+
+def pinned_anomaly(case: EvaluationCase) -> str | None:
+    spec = ANOMALY_CASES.get(case.id)
+    if spec is None or case.category != "anomaly" or case.turns != (spec[0],):
+        return None
+    return spec[1]
+
+
+def verify_null_metric(view: AnalysisRunViewResponse) -> bool:
+    queries = [item for item in view.artifacts if item.artifact_type == "query_result"]
+    if len(queries) != 1:
+        return False
+    summary = queries[0].summary
+    replies = [item for item in view.messages if item.role == "assistant"]
+    if not replies:
+        return False
+    reply = replies[-1]
+    return (
+        summary.get("columns") == ["defect_rate"]
+        and summary.get("rows") == [[None]]
+        and summary.get("truncated") is False
+        and "无法计算" in reply.content
+        and "不能把它当作 0" in reply.content
+        and "仅凭当前结果还不能确定具体原因" in reply.content
+        and "answer_claims" not in reply.context_patch
+    )
 
 
 def pinned_month(case: EvaluationCase) -> str | None:
@@ -216,7 +247,7 @@ class _ConversationSession:
         return OfflineCaseExecution(observe_completed_run(view), tuple(run_ids))
 
 
-def _seed(db: Session) -> tuple[User, Workspace]:
+def _seed(db: Session, *, source_schema: str = "public") -> tuple[User, Workspace]:
     user = User(email="evaluation@example.test", display_name="Evaluator", password_hash="unused")
     workspace = Workspace(name="Synthetic PG Evaluation", slug=f"eval-{uuid.uuid4().hex}")
     db.add_all([user, workspace])
@@ -257,7 +288,7 @@ def _seed(db: Session) -> tuple[User, Workspace]:
             allowed_private_cidrs=["172.16.0.0/12"],
             allowed_ports=[5432],
         ),
-        MetadataScanOptions(schemas=("public",)),
+        MetadataScanOptions(schemas=(source_schema,)),
     )
     snapshot = CatalogSnapshot(
         workspace_id=workspace.id,
@@ -370,6 +401,8 @@ class _MonthSession:
         # No metric_executor override: compile, SQL gates, database, evidence are real.
         run_analysis(self.db, run_id=run.id, gateway=gateway)
         view = get_run_view(self.db, workspace_id=self.workspace.id, run_id=run.id)
+        if self.case.category == "anomaly" and not verify_null_metric(view):
+            return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
         observation = (
             observe_completed_run(view)
             if view.run.status == "completed"
@@ -381,8 +414,15 @@ class _MonthSession:
 @contextmanager
 def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     month = pinned_month(case)
+    anomaly_month = pinned_anomaly(case)
     multi_turn = pinned_multiturn(case)
-    if month is None and not multi_turn:
+    if case.category == "security":
+        from packages.evaluation.security_draft_adapter import security_case_factory
+
+        with security_case_factory(case) as security:
+            yield security
+        return
+    if month is None and anomaly_month is None and not multi_turn:
         with draft_case_factory(case) as fallback:
             yield fallback
         return
@@ -395,13 +435,35 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             connection.execute(CreateSchema(schema))
         created = True
         Base.metadata.create_all(engine)
+        if case.id == "anomaly-zero-denominator" and anomaly_month is not None:
+            # Only this owned synthetic schema is writable; never mutate public source data.
+            with admin.begin() as connection:
+                connection.execute(
+                    text(
+                        f'CREATE TABLE "{schema}".quality_inspections '
+                        "(defect_quantity integer, inspected_quantity integer, "
+                        "inspected_at timestamptz)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        f'INSERT INTO "{schema}".quality_inspections VALUES '
+                        "(0, 0, '1999-01-01T00:00:00Z')"
+                    )
+                )
+                connection.execute(text(f'GRANT USAGE ON SCHEMA "{schema}" TO zhixi_reader'))
+                connection.execute(
+                    text(f'GRANT SELECT ON "{schema}".quality_inspections TO zhixi_reader')
+                )
         with Session(engine) as db:
-            user, workspace = _seed(db)
+            source_schema = schema if case.id == "anomaly-zero-denominator" else "public"
+            user, workspace = _seed(db, source_schema=source_schema)
             if multi_turn:
                 yield _ConversationSession(db, user, workspace, case)
             else:
-                assert month is not None
-                yield _MonthSession(db, user, workspace, case, month)
+                selected_month = month or anomaly_month
+                assert selected_month is not None
+                yield _MonthSession(db, user, workspace, case, selected_month)
     finally:
         engine.dispose()
         try:

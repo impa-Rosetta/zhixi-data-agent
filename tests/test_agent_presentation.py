@@ -174,3 +174,29 @@ def test_single_point_trend_does_not_claim_hidden_metric_value() -> None:
     )
 
     assert "answer_claims" not in response.context_patch
+
+
+def test_null_metric_explains_uncertainty_without_claiming_zero_or_specific_cause() -> None:
+    response = query_presentation(
+        Intent(task_type="metric_query", goal="不良率是多少", metrics=("不良率",), confidence=0.99),
+        {"columns": ["defect_rate"], "rows": [[None]], "row_count": 1},
+        source_artifact_id=uuid.uuid4(),
+        evidence_id=uuid.uuid4(),
+        validation_id=uuid.uuid4(),
+    )
+    assert "无法计算" in response.content
+    assert "可能" in response.content
+    assert "不能把它当作 0" in response.content
+    assert "为空值" not in response.content
+    assert "answer_claims" not in response.context_patch
+
+
+def test_real_zero_remains_a_valid_number_and_empty_rows_are_not_zero() -> None:
+    intent = Intent(
+        task_type="metric_query", goal="不良率是多少", metrics=("不良率",), confidence=0.99
+    )
+    assert query_presentation(intent, {"columns": ["defect_rate"], "rows": [[0]]}).content == (
+        "不良率为 0。"
+    )
+    empty = query_presentation(intent, {"columns": ["defect_rate"], "rows": []})
+    assert "没有找到数据" in empty.content

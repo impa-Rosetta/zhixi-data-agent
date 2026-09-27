@@ -127,8 +127,20 @@ def query_presentation(
             "你可以补充更多月份的数据，扩大时间范围，或改为查看本期不同产线或产品的分布。"
         )
     elif len(safe_rows) == 1 and isinstance(safe_rows[0], list) and len(safe_rows[0]) == 1:
-        content = f"{metric}为 {_format_value(safe_rows[0][0])}。"
-        if len(safe_columns) == 1 and isinstance(safe_columns[0], str):
+        if safe_rows[0][0] is None:
+            content = (
+                f"当前结果无法计算{metric}，不能把它当作 0。"
+                "可能是筛选范围内没有有效数据，或计算所需的分母为零或缺失；"
+                "仅凭当前结果还不能确定具体原因。你可以扩大时间范围，"
+                "或查看检验数量等基础指标，进一步确认数据情况。"
+            )
+        else:
+            content = f"{metric}为 {_format_value(safe_rows[0][0])}。"
+        if (
+            safe_rows[0][0] is not None
+            and len(safe_columns) == 1
+            and isinstance(safe_columns[0], str)
+        ):
             displayed_values.append((safe_columns[0], safe_rows[0][0]))
     elif not safe_rows:
         content = f"我完成了{metric}的查询，但在当前授权范围和筛选条件下没有找到数据。"

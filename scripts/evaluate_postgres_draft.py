@@ -12,7 +12,7 @@ from packages.evaluation.postgres_draft_adapter import ADAPTER_VERSION, postgres
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite-version", choices=("0.1.0", "0.1.1"), default="0.1.1")
+    parser.add_argument("--suite-version", choices=("0.1.0", "0.1.1", "0.1.2"), default="0.1.2")
     parser.add_argument("--output", type=Path, help="New report path, never overwritten")
     args = parser.parse_args()
     if args.output is not None and args.output.exists():
@@ -26,7 +26,7 @@ def main() -> int:
     payload.update(
         adapter_version=ADAPTER_VERSION,
         suite_published=suite.published,
-        runtime_profile="isolated-postgresql-fixed-gateway-real-query-executor",
+        runtime_profile="isolated-postgresql-and-sqlite-api-fixed-gateway-real-query-executor",
     )
     content = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2)
     if args.output is not None:
