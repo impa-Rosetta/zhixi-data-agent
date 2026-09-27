@@ -1,0 +1,88 @@
+{
+  "adapter_version": "draft-clarification-v1",
+  "blocked_case_ids": [
+    "multiturn-trend-then-monthly",
+    "standard-august-defect-rate",
+    "standard-july-defect-rate",
+    "standard-september-defect-rate"
+  ],
+  "category_summaries": {
+    "ambiguity": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 1,
+      "total": 1
+    },
+    "multi_turn": {
+      "all_case_pass_rate": "0",
+      "blocked": 1,
+      "coverage_rate": "0",
+      "evaluated_pass_rate": null,
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 0,
+      "total": 1
+    },
+    "standard": {
+      "all_case_pass_rate": "0",
+      "blocked": 3,
+      "coverage_rate": "0",
+      "evaluated_pass_rate": null,
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 0,
+      "total": 3
+    }
+  },
+  "run_id": "9fa2e430-0eab-4651-87ef-1037932d3df3",
+  "run_references": {
+    "ambiguity-quality-overview": [
+      "295f857c-6be5-4f24-be0d-9696c8090b3a"
+    ]
+  },
+  "runtime_profile": "isolated-sqlite-fixed-fakegateway-no-metric-executor",
+  "safety_failure_ids": [],
+  "safety_summaries": {},
+  "scores": [
+    {
+      "case_id": "ambiguity-quality-overview",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    }
+  ],
+  "semantic_version": "manufacturing-quality-template-v1",
+  "stopped_reason": null,
+  "suite_digest": "9baac363f2672404a589db76a333471436a6448635f052dc9c38787eef6cf2c9",
+  "suite_published": false,
+  "suite_version": "0.1.0",
+  "summary": {
+    "all_case_pass_rate": "0.2",
+    "blocked": 4,
+    "coverage_rate": "0.2",
+    "evaluated_pass_rate": "1",
+    "failed": 0,
+    "infra_error": 0,
+    "not_run": 0,
+    "passed": 1,
+    "total": 5
+  },
+  "synthetic_dataset_id": "synthetic-quality-source-init-v1",
+  "track": "offline"
+}
