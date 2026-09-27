@@ -1,0 +1,232 @@
+{
+  "adapter_version": "draft-postgres-conversation-v1",
+  "blocked_case_ids": [],
+  "category_summaries": {
+    "ambiguity": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 1,
+      "total": 1
+    },
+    "multi_turn": {
+      "all_case_pass_rate": "0",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "0",
+      "failed": 1,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 0,
+      "total": 1
+    },
+    "standard": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 3,
+      "total": 3
+    }
+  },
+  "run_id": "a7796484-46ca-47b3-8531-424067ec834e",
+  "run_references": {
+    "ambiguity-quality-overview": [
+      "1c22a534-848c-4ab1-9190-2273d6f6379d"
+    ],
+    "multiturn-trend-then-monthly": [
+      "2b1bde72-3850-49f4-8b59-9269fe840937",
+      "60f73271-b0c0-42e0-89e1-9558437efbad"
+    ],
+    "standard-august-defect-rate": [
+      "8d9c183d-c505-48f7-a6c7-98cb16387b93"
+    ],
+    "standard-july-defect-rate": [
+      "d0c57926-5124-46b2-8c86-e22aa314d104"
+    ],
+    "standard-september-defect-rate": [
+      "b4062025-fa6f-41bc-852a-1fd7b23962b6"
+    ]
+  },
+  "runtime_profile": "isolated-postgresql-fixed-gateway-real-query-executor",
+  "safety_failure_ids": [],
+  "safety_summaries": {},
+  "scores": [
+    {
+      "case_id": "standard-july-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-august-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-september-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-trend-then-monthly",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": false
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "failed"
+    },
+    {
+      "case_id": "ambiguity-quality-overview",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    }
+  ],
+  "semantic_version": "manufacturing-quality-template-v1",
+  "stopped_reason": null,
+  "suite_digest": "9baac363f2672404a589db76a333471436a6448635f052dc9c38787eef6cf2c9",
+  "suite_published": false,
+  "suite_version": "0.1.0",
+  "summary": {
+    "all_case_pass_rate": "0.8",
+    "blocked": 0,
+    "coverage_rate": "1",
+    "evaluated_pass_rate": "0.8",
+    "failed": 1,
+    "infra_error": 0,
+    "not_run": 0,
+    "passed": 4,
+    "total": 5
+  },
+  "synthetic_dataset_id": "synthetic-quality-source-init-v1",
+  "track": "offline"
+}
