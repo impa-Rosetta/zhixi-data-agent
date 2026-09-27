@@ -1,7 +1,8 @@
 import { init } from 'echarts/core'
 import { expect, test } from 'vitest'
 
-import { createSafeOption } from './AnalysisChart'
+import { createSafeOption } from './chartOptions'
+import './AnalysisChart'
 
 test('renders trusted dataset rows into the SVG chart', () => {
   const option = createSafeOption(

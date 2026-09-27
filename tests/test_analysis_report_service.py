@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import Engine, create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -47,7 +47,7 @@ from packages.platform_core.models import (
 from packages.shared_contracts.reports import CreateAnalysisReportRequest
 
 
-def _trusted_source() -> tuple[
+def _trusted_source(engine_override: Engine | None = None) -> tuple[
     Session,
     User,
     Workspace,
@@ -55,7 +55,7 @@ def _trusted_source() -> tuple[
     AnalysisTurn,
     AnalysisValidation,
 ]:
-    engine = create_engine(
+    engine = engine_override or create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
