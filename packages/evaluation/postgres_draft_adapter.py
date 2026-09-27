@@ -224,6 +224,38 @@ ANOMALY_CASES = {
 MISSING_COLUMN_ID = "anomaly-source-column-disappeared"
 MISSING_COLUMN_TURN = "2026年9月的不良率是多少？"
 
+# Independent source fixtures: never build rows from a case's expected numbers.
+NUMERIC_BOUNDARIES: dict[str, tuple[tuple[int, int, str], ...]] = {
+    "zero-defects": ((0, 400, "2026-09-05T09:00:00Z"),),
+    "all-defective": ((400, 400, "2026-09-05T09:00:00Z"),),
+    "tiny-rate": ((1, 100000000, "2026-09-05T09:00:00Z"),),
+    "large-volume": ((1000000000000, 4000000000000, "2026-09-05T09:00:00Z"),),
+    "weighted-batches": (
+        (1, 10, "2026-09-05T09:00:00Z"),
+        (9, 990, "2026-09-06T09:00:00Z"),
+    ),
+    "same-timestamp-batches": (
+        (7, 100, "2026-09-05T09:00:00Z"),
+        (3, 100, "2026-09-05T09:00:00Z"),
+    ),
+    "exclusive-month-end": (
+        (4, 100, "2026-09-01T00:00:00Z"),
+        (1, 100, "2026-09-30T23:59:59Z"),
+        (900, 1000, "2026-10-01T00:00:00Z"),
+    ),
+}
+
+
+def pinned_numeric_boundary(case: EvaluationCase) -> tuple[tuple[int, int, str], ...] | None:
+    key = case.id.removeprefix("anomaly-numeric-")
+    if (
+        case.id.startswith("anomaly-numeric-")
+        and case.category == "anomaly"
+        and case.turns == ("2026年9月的不良率是多少？",)
+    ):
+        return NUMERIC_BOUNDARIES.get(key)
+    return None
+
 
 def pinned_anomaly(case: EvaluationCase) -> str | None:
     spec = ANOMALY_CASES.get(case.id)
@@ -750,7 +782,11 @@ class _MonthSession:
                 ),
                 (run.id,),
             )
-        if self.case.category == "anomaly" and not verify_null_metric(view):
+        if (
+            self.case.category == "anomaly"
+            and pinned_numeric_boundary(self.case) is None
+            and not verify_null_metric(view)
+        ):
             return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
         observation = (
             observe_completed_run(view)
@@ -767,13 +803,20 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     anomaly_month = pinned_anomaly(case)
     missing_column = pinned_missing_column(case)
     multi_turn = pinned_multiturn(case)
+    numeric_boundary = pinned_numeric_boundary(case)
     if case.category == "security":
         from packages.evaluation.security_draft_adapter import security_case_factory
 
         with security_case_factory(case) as security:
             yield security
         return
-    if month is None and anomaly_month is None and not missing_column and not multi_turn:
+    if (
+        month is None
+        and anomaly_month is None
+        and not missing_column
+        and not multi_turn
+        and numeric_boundary is None
+    ):
         with draft_case_factory(case) as fallback:
             yield fallback
         return
@@ -786,17 +829,32 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             connection.execute(CreateSchema(schema))
         created = True
         Base.metadata.create_all(engine)
-        if (case.id == "anomaly-zero-denominator" and anomaly_month is not None) or missing_column:
+        if (
+            (case.id == "anomaly-zero-denominator" and anomaly_month is not None)
+            or missing_column
+            or numeric_boundary is not None
+        ):
             # Only this owned synthetic schema is writable; never mutate public source data.
             with admin.begin() as connection:
                 connection.execute(
                     text(
                         f'CREATE TABLE "{schema}".quality_inspections '
-                        "(defect_quantity integer, inspected_quantity integer, "
+                        "(defect_quantity bigint, inspected_quantity bigint, "
                         "inspected_at timestamptz)"
                     )
                 )
-                if not missing_column:
+                if numeric_boundary is not None:
+                    connection.execute(
+                        text(
+                            f'INSERT INTO "{schema}".quality_inspections '
+                            "VALUES (:defect, :inspected, :at)"
+                        ),
+                        [
+                            {"defect": defect, "inspected": inspected, "at": at}
+                            for defect, inspected, at in numeric_boundary
+                        ],
+                    )
+                elif not missing_column:
                     connection.execute(
                         text(
                             f'INSERT INTO "{schema}".quality_inspections VALUES '
@@ -816,7 +874,13 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                 )
         with Session(engine) as db:
             source_schema = (
-                schema if case.id == "anomaly-zero-denominator" or missing_column else "public"
+                schema
+                if (
+                    case.id == "anomaly-zero-denominator"
+                    or missing_column
+                    or numeric_boundary is not None
+                )
+                else "public"
             )
             user, workspace = _seed(db, source_schema=source_schema)
             if missing_column:
@@ -831,7 +895,11 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             if multi_turn:
                 yield _ConversationSession(db, user, workspace, case)
             else:
-                selected_month = month or anomaly_month or ("2026年9月" if missing_column else None)
+                selected_month = (
+                    month
+                    or anomaly_month
+                    or ("2026年9月" if missing_column or numeric_boundary is not None else None)
+                )
                 assert selected_month is not None
                 yield _MonthSession(
                     db,

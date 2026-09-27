@@ -6,6 +6,7 @@ from packages.evaluation.contracts import EvaluationSuite
 from packages.evaluation.suite_io import load_suite
 
 SUITE_VERSIONS = (
+    "0.1.12",
     "0.1.11",
     "0.1.10",
     "0.1.9",

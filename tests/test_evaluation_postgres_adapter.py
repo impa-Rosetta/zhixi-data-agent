@@ -36,6 +36,25 @@ def test_month_inputs_are_pinned_not_derived_from_expected_numbers() -> None:
     assert pinned_month(case.model_copy(update={"category": "security"})) is None
 
 
+def test_numeric_boundary_source_rows_are_independent_and_inputs_pinned() -> None:
+    from packages.evaluation.postgres_draft_adapter import pinned_numeric_boundary
+
+    previous = registered_suite("0.1.11")
+    suite = registered_suite("0.1.12")
+    assert suite.cases[:69] == previous.cases
+    assert len(suite.cases) == 76 and not suite.published
+    assert sum(case.category == "anomaly" for case in suite.cases) == 20
+    for case in suite.cases[69:]:
+        rows = pinned_numeric_boundary(case)
+        assert rows
+        changed = case.model_copy(
+            update={"expected": case.expected.model_copy(update={"numbers": {}})}
+        )
+        assert pinned_numeric_boundary(changed) == rows
+        assert not pinned_numeric_boundary(case.model_copy(update={"turns": ("伪造输入",)}))
+        assert not pinned_numeric_boundary(case.model_copy(update={"category": "standard"}))
+
+
 def test_condition_change_draft_preserves_previous_cases_and_pins_all_turns() -> None:
     previous = registered_suite("0.1.9")
     current = registered_suite("0.1.10")
