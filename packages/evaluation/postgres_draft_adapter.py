@@ -31,6 +31,11 @@ from packages.connectors.metadata import MetadataScanOptions
 from packages.connectors.postgresql import PostgreSQLConnector
 from packages.evaluation.contracts import EvaluationCase, ObservedOutcome
 from packages.evaluation.draft_adapter import draft_case_factory
+from packages.evaluation.equipment_metric_fixture import (
+    EXTRA_EQUIPMENT_MAPPINGS,
+    create_equipment_fixture,
+    pinned_equipment_metric,
+)
 from packages.evaluation.observation import observe_completed_run
 from packages.evaluation.production_boundary_fixture import (
     create_production_fixture,
@@ -774,7 +779,7 @@ class _MonthSession:
         user: User,
         workspace: Workspace,
         case: EvaluationCase,
-        month: str,
+        month: str | None,
         metric_name: str,
     ) -> None:
         self.db, self.user, self.workspace, self.case, self.month, self.metric_name = (
@@ -860,6 +865,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     numeric_boundary = pinned_numeric_boundary(case)
     production_boundary = pinned_production_boundary(case)
     quality_metric = pinned_quality_metric(case)
+    equipment_metric = pinned_equipment_metric(case)
     if case.category == "security":
         from packages.evaluation.security_draft_adapter import security_case_factory
 
@@ -874,6 +880,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
         and numeric_boundary is None
         and production_boundary is None
         and quality_metric is None
+        and equipment_metric is None
     ):
         with draft_case_factory(case) as fallback:
             yield fallback
@@ -890,6 +897,9 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
         if quality_metric is not None:
             with admin.begin() as connection:
                 create_quality_fixture(connection, schema, quality_metric)
+        if equipment_metric is not None:
+            with admin.begin() as connection:
+                create_equipment_fixture(connection, schema, equipment_metric)
         if (
             (case.id == "anomaly-zero-denominator" and anomaly_month is not None)
             or missing_column
@@ -945,6 +955,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                     or numeric_boundary is not None
                     or production_boundary is not None
                     or quality_metric is not None
+                    or equipment_metric is not None
                 )
                 else "public"
             )
@@ -952,7 +963,13 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                 db,
                 source_schema=source_schema,
                 production_mapping=production_boundary is not None,
-                extra_mappings=EXTRA_QUALITY_MAPPINGS if quality_metric is not None else (),
+                extra_mappings=(
+                    EXTRA_QUALITY_MAPPINGS
+                    if quality_metric is not None
+                    else EXTRA_EQUIPMENT_MAPPINGS
+                    if equipment_metric is not None
+                    else ()
+                ),
             )
             if missing_column:
                 # The published snapshot still references the field; change only this owned fixture.
@@ -963,7 +980,9 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                             "DROP COLUMN defect_quantity"
                         )
                     )
-            if quality_metric is not None:
+            if equipment_metric is not None:
+                yield _MonthSession(db, user, workspace, case, None, equipment_metric.metric_name)
+            elif quality_metric is not None:
                 yield _MonthSession(
                     db, user, workspace, case, quality_metric.time_range, quality_metric.metric_name
                 )
