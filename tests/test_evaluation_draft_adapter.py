@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from packages.evaluation import load_suite, run_offline_suite
-from packages.evaluation.draft_adapter import draft_case_factory
+from packages.evaluation.draft_adapter import draft_case_factory, pinned_ambiguity
 
 
 def test_first_golden_draft_executes_clarification_and_blocks_unavailable_data_cases() -> None:
@@ -54,10 +54,26 @@ def test_cli_partial_coverage_returns_nonzero_and_never_overwrites_report(
     assert payload["summary"]["passed"] == 1
     assert payload["summary"]["blocked"] == 4
     assert payload["summary"]["coverage_rate"] == "0.2"
-    assert payload["adapter_version"] == "draft-clarification-v1"
+    assert payload["adapter_version"] == "draft-clarification-v2"
     assert "runtime_profile" in payload
     original = target.read_bytes()
     with pytest.raises(FileExistsError):
         main()
     assert target.read_bytes() == original
     capsys.readouterr()
+
+
+def test_ambiguity_draft_distinguishes_missing_metric_from_missing_period() -> None:
+    suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.6.json"))
+    cases = tuple(
+        case
+        for case in suite.cases
+        if case.id in {"ambiguity-production-overview", "ambiguity-comparison-period"}
+    )
+    assert len(cases) == 2
+    for case in cases:
+        assert pinned_ambiguity(case) is not None
+        assert pinned_ambiguity(case.model_copy(update={"turns": ("伪造输入",)})) is None
+    result = run_offline_suite(suite.model_copy(update={"cases": cases}), draft_case_factory)
+    assert result.summary.passed == 2
+    assert result.summary.failed == result.summary.blocked == 0

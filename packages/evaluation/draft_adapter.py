@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from apps.api.services.analysis_runs import create_run, get_run_view
 from apps.worker.analysis_runtime import run_analysis
-from packages.evaluation.contracts import EvaluationCase
+from packages.evaluation.contracts import EvaluationCase, ObservedOutcome
 from packages.evaluation.observation import observe_clarification_run
 from packages.evaluation.runner import (
     OfflineCaseExecution,
@@ -25,9 +25,24 @@ from packages.platform_core.database import Base
 from packages.platform_core.models import User, Workspace
 from packages.shared_contracts.agents import CreateAnalysisRunRequest
 
-ADAPTER_VERSION = "draft-clarification-v1"
-SUPPORTED_CASE_ID = "ambiguity-quality-overview"
-SUPPORTED_TURNS = ("看看质量情况",)
+ADAPTER_VERSION = "draft-clarification-v2"
+AMBIGUITY_CASES = {
+    "ambiguity-quality-overview": ("看看质量情况", "metric_query", (), "metric_required"),
+    "ambiguity-production-overview": ("看看生产情况", "metric_query", (), "metric_required"),
+    "ambiguity-comparison-period": (
+        "对比一下不良率",
+        "comparison",
+        ("不良率",),
+        "comparison_period_required",
+    ),
+}
+
+
+def pinned_ambiguity(case: EvaluationCase) -> tuple[str, str, tuple[str, ...], str] | None:
+    spec = AMBIGUITY_CASES.get(case.id)
+    if spec is None or case.category != "ambiguity" or case.turns != (spec[0],):
+        return None
+    return spec
 
 
 class _UnavailableSession:
@@ -40,6 +55,10 @@ class _ClarificationSession:
         self.db, self.user, self.workspace, self.case = db, user, workspace, case
 
     def execute(self) -> OfflineCaseExecution:
+        spec = pinned_ambiguity(self.case)
+        if spec is None:
+            raise OfflineExecutionError("evaluation.precondition_failed", blocked=True)
+        question, task_type, metrics, expected_reason = spec
         run = create_run(
             self.db,
             workspace_id=self.workspace.id,
@@ -56,9 +75,9 @@ class _ClarificationSession:
                     json.dumps(
                         {
                             "domain": "manufacturing_quality",
-                            "task_type": "metric_query",
-                            "goal": "看看质量情况",
-                            "metrics": [],
+                            "task_type": task_type,
+                            "goal": question,
+                            "metrics": list(metrics),
                             "confidence": 0.4,
                         },
                         ensure_ascii=False,
@@ -73,20 +92,20 @@ class _ClarificationSession:
         run_analysis(self.db, run_id=run.id, gateway=gateway)
         view = get_run_view(self.db, workspace_id=self.workspace.id, run_id=run.id)
         if view.run.status != "waiting_for_clarification":
-            from packages.evaluation.contracts import ObservedOutcome
-
+            return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
+        clarification = view.run.context.get("clarification")
+        if (
+            not isinstance(clarification, dict)
+            or clarification.get("reason_code") != expected_reason
+        ):
             return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
         return OfflineCaseExecution(observe_clarification_run(view), (run.id,))
 
 
 @contextmanager
 def draft_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
-    """Only the pinned ambiguity case is ready; numeric cases need real query fixtures."""
-    if (
-        case.id != SUPPORTED_CASE_ID
-        or case.turns != SUPPORTED_TURNS
-        or case.category != "ambiguity"
-    ):
+    """Only pinned ambiguity cases are ready; numeric cases need real query fixtures."""
+    if pinned_ambiguity(case) is None:
         yield _UnavailableSession()
         return
     engine = create_engine(

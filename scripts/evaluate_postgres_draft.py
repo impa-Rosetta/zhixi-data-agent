@@ -14,8 +14,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--suite-version",
-        choices=("0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5"),
-        default="0.1.5",
+        choices=("0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4", "0.1.5", "0.1.6"),
+        default="0.1.6",
     )
     parser.add_argument("--output", type=Path, help="New report path, never overwritten")
     args = parser.parse_args()

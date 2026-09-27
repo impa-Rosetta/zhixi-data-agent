@@ -13,8 +13,10 @@ from packages.evaluation.postgres_draft_adapter import (
     pinned_missing_column,
     pinned_month,
     pinned_multiturn,
+    verify_explanation,
     verify_missing_column_failure,
     verify_monthly_result,
+    verify_social_interruption,
 )
 from packages.evaluation.registry import SUITE_VERSIONS, registered_suite
 from packages.shared_contracts.agents import AnalysisRunViewResponse
@@ -90,7 +92,7 @@ def test_production_order_cases_extend_draft_without_changing_oracles() -> None:
 
     old = registered_suite("0.1.4")
     new = registered_suite("0.1.5")
-    assert SUITE_VERSIONS[0] == "0.1.5"
+    assert "0.1.5" in SUITE_VERSIONS
     assert new == EvaluationSuite.model_validate(build_suite())
     assert not old.published and not new.published
     assert new.cases[: len(old.cases)] == old.cases
@@ -106,6 +108,26 @@ def test_production_order_cases_extend_draft_without_changing_oracles() -> None:
         assert pinned_metric(case) == case.turns[0].split("的", 1)[1].split("是多少", 1)[0]
         assert pinned_metric(case.model_copy(update={"turns": ("伪造输入",)})) is None
         assert pinned_month(case.model_copy(update={"category": "security"})) is None
+
+
+def test_conversation_draft_is_immutable_and_pins_full_turn_sequence() -> None:
+    from scripts.build_m8_suite_v016 import build_suite
+
+    old = registered_suite("0.1.5")
+    new = registered_suite("0.1.6")
+    assert SUITE_VERSIONS[0] == "0.1.6"
+    assert new == EvaluationSuite.model_validate(build_suite())
+    assert not old.published and not new.published
+    assert new.cases[: len(old.cases)] == old.cases
+    assert len(new.cases) == 34
+    assert sum(case.category == "multi_turn" for case in new.cases) == 5
+    assert sum(case.category == "ambiguity" for case in new.cases) == 3
+    for case in new.cases[len(old.cases) :]:
+        if case.category != "multi_turn":
+            continue
+        assert pinned_multiturn(case)
+        assert not pinned_multiturn(case.model_copy(update={"turns": tuple(reversed(case.turns))}))
+        assert not pinned_multiturn(case.model_copy(update={"category": "standard"}))
 
 
 def test_missing_column_requires_real_failure_without_fabricated_result() -> None:
@@ -131,6 +153,76 @@ def test_missing_column_requires_real_failure_without_fabricated_result() -> Non
     reply.context_patch = {}
     view.run.status = "completed"
     assert not verify_missing_column_failure(view)
+
+
+def test_explanation_requires_matching_prior_artifact_and_evidence() -> None:
+    run_id, artifact_id, evidence_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    source = cast(
+        AnalysisRunViewResponse,
+        SimpleNamespace(
+            run=SimpleNamespace(id=run_id),
+            artifacts=[SimpleNamespace(id=artifact_id, artifact_type="chart_spec")],
+            evidence=[SimpleNamespace(id=evidence_id, artifact_id=artifact_id)],
+            validations=[SimpleNamespace(outcome="passed")],
+        ),
+    )
+    reference = {
+        "source_run_id": str(run_id),
+        "source_artifact_id": str(artifact_id),
+        "source_evidence_id": str(evidence_id),
+    }
+    view = cast(
+        AnalysisRunViewResponse,
+        SimpleNamespace(
+            run=SimpleNamespace(
+                status="completed",
+                context={"follow_up_relation": "explain", "previous_run_id": str(run_id)},
+            ),
+            evidence=[
+                SimpleNamespace(evidence_type="verified_result_reference", reference=reference)
+            ],
+            tool_calls=[SimpleNamespace(tool_name="analysis.describe")],
+            artifacts=[],
+            validations=[
+                SimpleNamespace(validation_type="verified_result_reference", outcome="passed")
+            ],
+            messages=[
+                SimpleNamespace(
+                    role="assistant",
+                    content="仅凭汇总结果不能可靠判断原因",
+                    context_patch={},
+                )
+            ],
+        ),
+    )
+    assert verify_explanation(view, source)
+    reference["source_evidence_id"] = str(uuid.uuid4())
+    assert not verify_explanation(view, source)
+    reference["source_evidence_id"] = str(evidence_id)
+    reference["source_run_id"] = str(uuid.uuid4())
+    assert not verify_explanation(view, source)
+    reference["source_run_id"] = str(run_id)
+    view.tool_calls.append(SimpleNamespace(tool_name="query.metric"))
+    assert not verify_explanation(view, source)
+
+
+def test_social_interruption_cannot_read_data_or_create_query_evidence() -> None:
+    view = cast(
+        AnalysisRunViewResponse,
+        SimpleNamespace(
+            run=SimpleNamespace(status="completed", context={"follow_up_relation": "continue"}),
+            tool_calls=[SimpleNamespace(tool_name="system.small_talk")],
+            artifacts=[],
+            evidence=[],
+            messages=[SimpleNamespace(role="assistant", content="你好，想分析什么？")],
+        ),
+    )
+    assert verify_social_interruption(view)
+    view.evidence = [SimpleNamespace()]
+    assert not verify_social_interruption(view)
+    view.evidence = []
+    view.tool_calls.append(SimpleNamespace(tool_name="query.metric"))
+    assert not verify_social_interruption(view)
 
 
 def test_multiturn_is_one_pinned_conversation_not_independent_questions() -> None:

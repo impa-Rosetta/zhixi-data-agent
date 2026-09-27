@@ -11,9 +11,10 @@ import re
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Literal
 
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
@@ -61,9 +62,50 @@ from packages.shared_contracts.agents import (
 )
 from packages.shared_contracts.semantic_models import PhysicalMapping
 
-ADAPTER_VERSION = "draft-postgres-anomaly-security-v2"
-MULTITURN_ID = "multiturn-trend-then-monthly"
-MULTITURN_TURNS = ("最近三个月不良率趋势", "按月份展开")
+ADAPTER_VERSION = "draft-postgres-conversation-clarification-v3"
+ConversationPhase = Literal["trend", "refine", "explain", "social"]
+
+
+@dataclass(frozen=True)
+class MultiturnSpec:
+    turns: tuple[str, ...]
+    metric_name: str
+    metric_key: str
+    phases: tuple[ConversationPhase, ...]
+
+
+MULTITURN_CASES = {
+    "multiturn-trend-then-monthly": MultiturnSpec(
+        ("最近三个月不良率趋势", "按月份展开"),
+        "不良率",
+        "defect_rate",
+        ("trend", "refine"),
+    ),
+    "multiturn-inspection-count-then-monthly": MultiturnSpec(
+        ("最近三个月检验数量趋势", "按月份展开"),
+        "检验数量",
+        "inspected_quantity",
+        ("trend", "refine"),
+    ),
+    "multiturn-production-count-then-monthly": MultiturnSpec(
+        ("最近三个月生产产量趋势", "按月份展开"),
+        "生产产量",
+        "production_quantity",
+        ("trend", "refine"),
+    ),
+    "multiturn-defect-trend-explain": MultiturnSpec(
+        ("最近三个月不良率趋势", "解释一下"),
+        "不良率",
+        "defect_rate",
+        ("trend", "explain"),
+    ),
+    "multiturn-defect-social-then-refine": MultiturnSpec(
+        ("最近三个月不良率趋势", "你好", "按月份展开"),
+        "不良率",
+        "defect_rate",
+        ("trend", "social", "refine"),
+    ),
+}
 FIXTURE_URL = (
     "postgresql+psycopg://source_admin:source-admin-local-only@source-evaluation:5432/factory_demo"
 )
@@ -205,29 +247,38 @@ def owned_schema_name(token: uuid.UUID) -> str:
 
 
 def pinned_multiturn(case: EvaluationCase) -> bool:
-    return (
-        case.id == MULTITURN_ID and case.category == "multi_turn" and case.turns == MULTITURN_TURNS
-    )
+    spec = MULTITURN_CASES.get(case.id)
+    return spec is not None and case.category == "multi_turn" and case.turns == spec.turns
 
 
-def verify_monthly_result(view: AnalysisRunViewResponse) -> bool:
+def verify_monthly_result(view: AnalysisRunViewResponse, metric_key: str = "defect_rate") -> bool:
     """Fixed fixture oracle, not values generated from model output or expectations."""
+    oracles = {
+        "defect_rate": ("inspection_time", ("1.75", "2.75", "3.00")),
+        "inspected_quantity": ("inspection_time", ("400", "400", "400")),
+        "production_quantity": ("production_time", ("972", "961", "947")),
+    }
+    oracle = oracles.get(metric_key)
+    if oracle is None:
+        return False
     queries = [item for item in view.artifacts if item.artifact_type == "query_result"]
     if len(queries) != 1:
         return False
     summary = queries[0].summary
     columns, rows = summary.get("columns"), summary.get("rows")
     if (
-        columns != ["inspection_time", "defect_rate"]
+        columns != [oracle[0], metric_key]
         or not isinstance(rows, list)
         or len(rows) != 3
         or summary.get("truncated") is not False
     ):
         return False
-    expected = (
-        ("2026-07", Decimal("1.75")),
-        ("2026-08", Decimal("2.75")),
-        ("2026-09", Decimal("3.00")),
+    expected = dict(
+        zip(
+            ("2026-07", "2026-08", "2026-09"),
+            (Decimal(value) for value in oracle[1]),
+            strict=True,
+        )
     )
     actual: dict[str, Decimal] = {}
     for row in rows:
@@ -255,7 +306,66 @@ def verify_monthly_result(view: AnalysisRunViewResponse) -> bool:
             actual[month] = number
         except (ValueError, ArithmeticError):
             return False
-    return actual == dict(expected)
+    return actual == expected
+
+
+def verify_explanation(view: AnalysisRunViewResponse, source: AnalysisRunViewResponse) -> bool:
+    references = [
+        item for item in view.evidence if item.evidence_type == "verified_result_reference"
+    ]
+    replies = [item for item in view.messages if item.role == "assistant"]
+    if len(references) != 1 or not replies:
+        return False
+    reference = references[0].reference
+    source_artifact = next(
+        (
+            item
+            for item in source.artifacts
+            if str(item.id) == reference.get("source_artifact_id")
+            and item.artifact_type in {"query_result", "analysis_summary", "chart_spec"}
+        ),
+        None,
+    )
+    source_evidence = next(
+        (
+            item
+            for item in source.evidence
+            if str(item.id) == reference.get("source_evidence_id")
+            and source_artifact is not None
+            and item.artifact_id == source_artifact.id
+        ),
+        None,
+    )
+    return (
+        source_artifact is not None
+        and source_evidence is not None
+        and any(item.outcome == "passed" for item in source.validations)
+        and view.run.status == "completed"
+        and view.run.context.get("follow_up_relation") == "explain"
+        and view.run.context.get("previous_run_id") == str(source.run.id)
+        and [item.tool_name for item in view.tool_calls] == ["analysis.describe"]
+        and not any(item.artifact_type == "query_result" for item in view.artifacts)
+        and reference.get("source_run_id") == str(source.run.id)
+        and any(
+            item.validation_type == "verified_result_reference" and item.outcome == "passed"
+            for item in view.validations
+        )
+        and "仅凭汇总结果不能可靠判断原因" in replies[-1].content
+        and "answer_claims" not in replies[-1].context_patch
+    )
+
+
+def verify_social_interruption(view: AnalysisRunViewResponse) -> bool:
+    replies = [item for item in view.messages if item.role == "assistant"]
+    return (
+        view.run.status == "completed"
+        and view.run.context.get("follow_up_relation") == "continue"
+        and [item.tool_name for item in view.tool_calls] == ["system.small_talk"]
+        and not any(item.artifact_type == "query_result" for item in view.artifacts)
+        and not view.evidence
+        and bool(replies)
+        and "你好" in replies[-1].content
+    )
 
 
 class _ConversationSession:
@@ -263,6 +373,7 @@ class _ConversationSession:
         self.db, self.user, self.workspace, self.case = db, user, workspace, case
 
     def execute(self) -> OfflineCaseExecution:
+        spec = MULTITURN_CASES[self.case.id]
         conversation = create_conversation(
             self.db,
             workspace_id=self.workspace.id,
@@ -271,26 +382,31 @@ class _ConversationSession:
             payload=CreateAnalysisConversationRequest(message=self.case.turns[0]),
         )
         run_ids: list[uuid.UUID] = []
-        outputs = (
-            {
-                "task_type": "trend",
-                "goal": self.case.turns[0],
-                "metrics": ["不良率"],
-                "dimensions": ["月份"],
-                "time_range": "最近三个月",
-                "output": ["time_series"],
-                "confidence": 0.99,
-            },
-            {"mode": "patch", "patch": {"dimensions": ["月份"], "output": ["time_series"]}},
-        )
-        for index, output in enumerate(outputs):
+        previous_view: AnalysisRunViewResponse | None = None
+        for index, phase in enumerate(spec.phases):
+            output: dict[str, object] | None = None
+            if phase == "trend":
+                output = {
+                    "task_type": "trend",
+                    "goal": self.case.turns[0],
+                    "metrics": [spec.metric_name],
+                    "dimensions": ["月份"],
+                    "time_range": "最近三个月",
+                    "output": ["time_series"],
+                    "confidence": 0.99,
+                }
+            elif phase == "refine":
+                output = {
+                    "mode": "patch",
+                    "patch": {"dimensions": ["月份"], "output": ["time_series"]},
+                }
             if index:
                 send_conversation_message(
                     self.db,
                     workspace_id=self.workspace.id,
                     conversation_id=conversation.id,
                     actor_user_id=self.user.id,
-                    idempotency_key=f"{self.case.id}:followup",
+                    idempotency_key=f"{self.case.id}:followup:{index}",
                     payload=SendAnalysisConversationMessageRequest(message=self.case.turns[index]),
                 )
             run = self.db.scalar(
@@ -307,7 +423,7 @@ class _ConversationSession:
             run.created_at = datetime(2026, 9, 27, index, tzinfo=UTC)
             self.db.commit()
             run_ids.append(run.id)
-            gateway = FakeGateway(
+            responses = (
                 [
                     GatewayResponse(
                         f"offline-conversation-{index}",
@@ -319,13 +435,26 @@ class _ConversationSession:
                         GatewayUsage(20, 10, 30),
                     )
                 ]
+                if output is not None
+                else []
             )
+            gateway = FakeGateway(responses)
             run_analysis(self.db, run_id=run.id, gateway=gateway)
             view = get_run_view(self.db, workspace_id=self.workspace.id, run_id=run.id)
-            if view.run.status != "completed" or not verify_monthly_result(view):
+            if view.run.status != "completed":
+                return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
+            if phase in {"trend", "refine"} and not verify_monthly_result(view, spec.metric_key):
+                return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
+            if phase == "social" and not verify_social_interruption(view):
+                return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
+            if phase == "explain" and (
+                previous_view is None or not verify_explanation(view, previous_view)
+            ):
                 return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
             synchronize_conversation_after_run(self.db, run_id=run.id)
             self.db.commit()
+            if phase in {"trend", "refine"}:
+                previous_view = view
         intent = view.run.context.get("intent")
         if not isinstance(intent, dict) or intent.get("time_range") != "最近三个月":
             return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
