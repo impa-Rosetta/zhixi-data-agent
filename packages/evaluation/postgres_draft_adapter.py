@@ -68,9 +68,19 @@ FIXTURE_URL = (
     "postgresql+psycopg://source_admin:source-admin-local-only@source-evaluation:5432/factory_demo"
 )
 MONTH_CASES = {
-    "standard-july-defect-rate": ("2026年7月的不良率是多少？", "2026年7月"),
-    "standard-august-defect-rate": ("2026年8月的不良率是多少？", "2026年8月"),
-    "standard-september-defect-rate": ("2026年9月的不良率是多少？", "2026年9月"),
+    "standard-july-defect-rate": ("2026年7月的不良率是多少？", "2026年7月", "不良率"),
+    "standard-august-defect-rate": ("2026年8月的不良率是多少？", "2026年8月", "不良率"),
+    "standard-september-defect-rate": ("2026年9月的不良率是多少？", "2026年9月", "不良率"),
+    "standard-july-inspected-quantity": ("2026年7月的检验数量是多少？", "2026年7月", "检验数量"),
+    "standard-august-inspected-quantity": ("2026年8月的检验数量是多少？", "2026年8月", "检验数量"),
+    "standard-september-inspected-quantity": (
+        "2026年9月的检验数量是多少？",
+        "2026年9月",
+        "检验数量",
+    ),
+    "standard-july-defect-quantity": ("2026年7月的缺陷数量是多少？", "2026年7月", "缺陷数量"),
+    "standard-august-defect-quantity": ("2026年8月的缺陷数量是多少？", "2026年8月", "缺陷数量"),
+    "standard-september-defect-quantity": ("2026年9月的缺陷数量是多少？", "2026年9月", "缺陷数量"),
 }
 ANOMALY_CASES = {
     "anomaly-no-matching-month": ("2000年1月的不良率是多少？", "2000年1月"),
@@ -110,6 +120,13 @@ def pinned_month(case: EvaluationCase) -> str | None:
     if spec is None or case.category != "standard" or case.turns != (spec[0],):
         return None
     return spec[1]
+
+
+def pinned_metric(case: EvaluationCase) -> str | None:
+    spec = MONTH_CASES.get(case.id)
+    if spec is None or case.category != "standard" or case.turns != (spec[0],):
+        return None
+    return spec[2]
 
 
 def owned_schema_name(token: uuid.UUID) -> str:
@@ -358,14 +375,21 @@ def _seed(db: Session, *, source_schema: str = "public") -> tuple[User, Workspac
 
 class _MonthSession:
     def __init__(
-        self, db: Session, user: User, workspace: Workspace, case: EvaluationCase, month: str
+        self,
+        db: Session,
+        user: User,
+        workspace: Workspace,
+        case: EvaluationCase,
+        month: str,
+        metric_name: str,
     ) -> None:
-        self.db, self.user, self.workspace, self.case, self.month = (
+        self.db, self.user, self.workspace, self.case, self.month, self.metric_name = (
             db,
             user,
             workspace,
             case,
             month,
+            metric_name,
         )
 
     def execute(self) -> OfflineCaseExecution:
@@ -385,7 +409,7 @@ class _MonthSession:
                         {
                             "task_type": "metric_query",
                             "goal": self.case.turns[0],
-                            "metrics": ["不良率"],
+                            "metrics": [self.metric_name],
                             "time_range": self.month,
                             "confidence": 0.99,
                         },
@@ -414,6 +438,7 @@ class _MonthSession:
 @contextmanager
 def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     month = pinned_month(case)
+    metric_name = pinned_metric(case)
     anomaly_month = pinned_anomaly(case)
     multi_turn = pinned_multiturn(case)
     if case.category == "security":
@@ -463,7 +488,14 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             else:
                 selected_month = month or anomaly_month
                 assert selected_month is not None
-                yield _MonthSession(db, user, workspace, case, selected_month)
+                yield _MonthSession(
+                    db,
+                    user,
+                    workspace,
+                    case,
+                    selected_month,
+                    metric_name if month is not None and metric_name is not None else "不良率",
+                )
     finally:
         engine.dispose()
         try:

@@ -6,12 +6,15 @@ from typing import cast
 import pytest
 
 from packages.evaluation import load_suite
+from packages.evaluation.contracts import EvaluationSuite
 from packages.evaluation.postgres_draft_adapter import (
     owned_schema_name,
+    pinned_metric,
     pinned_month,
     pinned_multiturn,
     verify_monthly_result,
 )
+from packages.evaluation.registry import SUITE_VERSIONS, registered_suite
 from packages.shared_contracts.agents import AnalysisRunViewResponse
 
 
@@ -33,6 +36,35 @@ def test_owned_schema_is_exact_unique_uuid_name() -> None:
     token = uuid.UUID("01234567-89ab-cdef-0123-456789abcdef")
     assert owned_schema_name(token) == "eval_0123456789abcdef0123456789abcdef"
     assert owned_schema_name(uuid.uuid4()) != owned_schema_name(uuid.uuid4())
+
+
+def test_new_metric_cases_are_pinned_independently_of_expected_values() -> None:
+    suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.3.json"))
+    new_cases = suite.cases[9:]
+    assert len(new_cases) == 6
+    assert {pinned_metric(case) for case in new_cases} == {"检验数量", "缺陷数量"}
+    assert {pinned_month(case) for case in new_cases} == {"2026年7月", "2026年8月", "2026年9月"}
+    for case in new_cases:
+        assert pinned_metric(case.model_copy(update={"turns": ("伪造输入",)})) is None
+        assert pinned_metric(case.model_copy(update={"category": "anomaly"})) is None
+
+
+def test_new_draft_is_immutable_extension_not_published_accuracy() -> None:
+    from scripts.build_m8_suite_v013 import build_suite
+
+    old = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.2.json"))
+    new = registered_suite("0.1.3")
+    assert SUITE_VERSIONS[0] == "0.1.3"
+    assert new == EvaluationSuite.model_validate(build_suite())
+    assert not old.published and not new.published
+    assert new.content_digest != old.content_digest
+    assert new.cases[: len(old.cases)] == old.cases
+    assert len(new.cases) == 15
+    assert sum(case.category == "standard" for case in new.cases) == 9
+    assert {case.expected.metric_ids[0] for case in new.cases[9:]} == {
+        "inspected_quantity",
+        "defect_quantity",
+    }
 
 
 def test_multiturn_is_one_pinned_conversation_not_independent_questions() -> None:
