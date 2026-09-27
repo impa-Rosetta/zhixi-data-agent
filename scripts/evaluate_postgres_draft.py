@@ -34,8 +34,9 @@ def main() -> int:
             "0.1.16",
             "0.1.17",
             "0.1.18",
+            "0.1.19",
         ),
-        default="0.1.18",
+        default="0.1.19",
     )
     parser.add_argument("--output", type=Path, help="New report path, never overwritten")
     args = parser.parse_args()

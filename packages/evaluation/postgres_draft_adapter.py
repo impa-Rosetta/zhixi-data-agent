@@ -43,6 +43,7 @@ from packages.evaluation.production_boundary_fixture import (
 )
 from packages.evaluation.quality_metric_fixture import (
     EXTRA_QUALITY_MAPPINGS,
+    QualityMetricSpec,
     create_quality_fixture,
     pinned_quality_metric,
 )
@@ -171,6 +172,40 @@ MULTITURN_CASES.update(
 )
 FIXTURE_URL = (
     "postgresql+psycopg://source_admin:source-admin-local-only@source-evaluation:5432/factory_demo"
+)
+MULTITURN_CASES.update(
+    {
+        "multiturn-quality-qualified-monthly": MultiturnSpec(
+            ("最近三个月合格数量趋势", "按月份展开"),
+            "合格数量",
+            "qualified_quantity",
+            ("trend", "refine"),
+        ),
+        "multiturn-quality-first-pass-monthly": MultiturnSpec(
+            ("最近三个月一次通过率趋势", "按月份展开"),
+            "一次通过率",
+            "first_pass_yield",
+            ("trend", "refine"),
+        ),
+        "multiturn-quality-scrap-explain": MultiturnSpec(
+            ("最近三个月报废率趋势", "解释一下"), "报废率", "scrap_rate", ("trend", "explain")
+        ),
+        "multiturn-quality-rework-monthly": MultiturnSpec(
+            ("最近三个月返工率趋势", "按月份展开"), "返工率", "rework_rate", ("trend", "refine")
+        ),
+        "multiturn-quality-pass-social": MultiturnSpec(
+            ("最近三个月检验合格率趋势", "你好", "按月份展开"),
+            "检验合格率",
+            "inspection_pass_rate",
+            ("trend", "social", "refine"),
+        ),
+        "multiturn-quality-ppm-narrow-explain": MultiturnSpec(
+            ("最近三个月百万件缺陷数趋势", "只看2026年9月", "解释一下"),
+            "百万件缺陷数",
+            "defect_ppm",
+            ("trend", "september", "explain"),
+        ),
+    }
 )
 MULTITURN_CASES.update(
     {
@@ -386,6 +421,12 @@ def verify_monthly_result(
         "inspected_quantity": ("inspection_time", ("400", "400", "400")),
         "production_quantity": ("production_time", ("972", "961", "947")),
         "plan_completion_rate": ("production_time", ("97.2", "96.1", "94.7")),
+        "qualified_quantity": ("inspection_time", ("360", "380", "480")),
+        "first_pass_yield": ("inspection_time", ("85", "90", "90")),
+        "scrap_rate": ("inspection_time", ("2", "1", "2")),
+        "rework_rate": ("inspection_time", ("3", "2", "1")),
+        "inspection_pass_rate": ("inspection_time", ("90", "95", "96")),
+        "defect_ppm": ("inspection_time", ("100000", "50000", "40000")),
     }
     oracle = oracles.get(metric_key)
     if oracle is None:
@@ -866,6 +907,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     production_boundary = pinned_production_boundary(case)
     quality_metric = pinned_quality_metric(case)
     equipment_metric = pinned_equipment_metric(case)
+    quality_conversation = multi_turn and case.id.startswith("multiturn-quality-")
     if case.category == "security":
         from packages.evaluation.security_draft_adapter import security_case_factory
 
@@ -894,9 +936,12 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             connection.execute(CreateSchema(schema))
         created = True
         Base.metadata.create_all(engine)
-        if quality_metric is not None:
+        if quality_metric is not None or quality_conversation:
             with admin.begin() as connection:
-                create_quality_fixture(connection, schema, quality_metric)
+                spec = quality_metric or QualityMetricSpec(
+                    "july", "最近三个月", MULTITURN_CASES[case.id].metric_name
+                )
+                create_quality_fixture(connection, schema, spec, all_months=quality_conversation)
         if equipment_metric is not None:
             with admin.begin() as connection:
                 create_equipment_fixture(connection, schema, equipment_metric)
@@ -956,6 +1001,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                     or production_boundary is not None
                     or quality_metric is not None
                     or equipment_metric is not None
+                    or quality_conversation
                 )
                 else "public"
             )
@@ -965,7 +1011,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                 production_mapping=production_boundary is not None,
                 extra_mappings=(
                     EXTRA_QUALITY_MAPPINGS
-                    if quality_metric is not None
+                    if quality_metric is not None or quality_conversation
                     else EXTRA_EQUIPMENT_MAPPINGS
                     if equipment_metric is not None
                     else ()

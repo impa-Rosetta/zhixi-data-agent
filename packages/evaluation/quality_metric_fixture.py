@@ -49,7 +49,9 @@ def pinned_quality_metric(case: EvaluationCase) -> QualityMetricSpec | None:
     return None
 
 
-def create_quality_fixture(connection: Connection, schema: str, spec: QualityMetricSpec) -> None:
+def create_quality_fixture(
+    connection: Connection, schema: str, spec: QualityMetricSpec, *, all_months: bool = False
+) -> None:
     if re.fullmatch(r"eval_[0-9a-f]{32}", schema) is None:
         raise ValueError("evaluation.invalid_fixture_schema")
     connection.execute(
@@ -60,17 +62,18 @@ def create_quality_fixture(connection: Connection, schema: str, spec: QualityMet
             "inspected_at timestamptz)"
         )
     )
-    month = {"july": "07", "august": "08", "september": "09"}[spec.month_key]
     fields = ("inspected", "qualified", "defect", "scrap", "rework", "first_pass")
-    connection.execute(
-        text(
-            f'INSERT INTO "{schema}".quality_inspections VALUES '
-            "(:inspected, :qualified, :defect, :scrap, :rework, :first_pass, :at)"
-        ),
-        [
-            {**dict(zip(fields, row, strict=True)), "at": f"2026-{month}-05T09:00:00Z"}
-            for row in QUALITY_ROWS[spec.month_key]
-        ],
-    )
+    for month_key in QUALITY_ROWS if all_months else (spec.month_key,):
+        month = {"july": "07", "august": "08", "september": "09"}[month_key]
+        connection.execute(
+            text(
+                f'INSERT INTO "{schema}".quality_inspections VALUES '
+                "(:inspected, :qualified, :defect, :scrap, :rework, :first_pass, :at)"
+            ),
+            [
+                {**dict(zip(fields, row, strict=True)), "at": f"2026-{month}-05T09:00:00Z"}
+                for row in QUALITY_ROWS[month_key]
+            ],
+        )
     connection.execute(text(f'GRANT USAGE ON SCHEMA "{schema}" TO zhixi_reader'))
     connection.execute(text(f'GRANT SELECT ON "{schema}".quality_inspections TO zhixi_reader'))
