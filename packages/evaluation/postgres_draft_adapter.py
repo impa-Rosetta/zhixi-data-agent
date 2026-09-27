@@ -36,6 +36,11 @@ from packages.evaluation.production_boundary_fixture import (
     create_production_fixture,
     pinned_production_boundary,
 )
+from packages.evaluation.quality_metric_fixture import (
+    EXTRA_QUALITY_MAPPINGS,
+    create_quality_fixture,
+    pinned_quality_metric,
+)
 from packages.evaluation.runner import OfflineCaseExecution, OfflineCaseSession
 from packages.evaluation.versions import OFFLINE_TOOL_VERSION
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
@@ -632,7 +637,11 @@ class _ConversationSession:
 
 
 def _seed(
-    db: Session, *, source_schema: str = "public", production_mapping: bool = False
+    db: Session,
+    *,
+    source_schema: str = "public",
+    production_mapping: bool = False,
+    extra_mappings: tuple[tuple[str, str, str, str], ...] = (),
 ) -> tuple[User, Workspace]:
     user = User(email="evaluation@example.test", display_name="Evaluator", password_hash="unused")
     workspace = Workspace(name="Synthetic PG Evaluation", slug=f"eval-{uuid.uuid4().hex}")
@@ -715,6 +724,7 @@ def _seed(
                 ("production_order", "production_orders", "start_time", "started_at"),
             ]
         )
+    mappings.extend(extra_mappings)
     for entity, relation, attribute, physical in mappings:
         column = db.scalar(
             select(CatalogColumn)
@@ -849,6 +859,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     multi_turn = pinned_multiturn(case)
     numeric_boundary = pinned_numeric_boundary(case)
     production_boundary = pinned_production_boundary(case)
+    quality_metric = pinned_quality_metric(case)
     if case.category == "security":
         from packages.evaluation.security_draft_adapter import security_case_factory
 
@@ -862,6 +873,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
         and not multi_turn
         and numeric_boundary is None
         and production_boundary is None
+        and quality_metric is None
     ):
         with draft_case_factory(case) as fallback:
             yield fallback
@@ -875,6 +887,9 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             connection.execute(CreateSchema(schema))
         created = True
         Base.metadata.create_all(engine)
+        if quality_metric is not None:
+            with admin.begin() as connection:
+                create_quality_fixture(connection, schema, quality_metric)
         if (
             (case.id == "anomaly-zero-denominator" and anomaly_month is not None)
             or missing_column
@@ -929,11 +944,15 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                     or missing_column
                     or numeric_boundary is not None
                     or production_boundary is not None
+                    or quality_metric is not None
                 )
                 else "public"
             )
             user, workspace = _seed(
-                db, source_schema=source_schema, production_mapping=production_boundary is not None
+                db,
+                source_schema=source_schema,
+                production_mapping=production_boundary is not None,
+                extra_mappings=EXTRA_QUALITY_MAPPINGS if quality_metric is not None else (),
             )
             if missing_column:
                 # The published snapshot still references the field; change only this owned fixture.
@@ -944,7 +963,11 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                             "DROP COLUMN defect_quantity"
                         )
                     )
-            if multi_turn:
+            if quality_metric is not None:
+                yield _MonthSession(
+                    db, user, workspace, case, quality_metric.time_range, quality_metric.metric_name
+                )
+            elif multi_turn:
                 yield _ConversationSession(db, user, workspace, case)
             else:
                 selected_month = (
