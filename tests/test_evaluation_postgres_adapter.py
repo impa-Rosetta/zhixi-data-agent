@@ -36,6 +36,56 @@ def test_month_inputs_are_pinned_not_derived_from_expected_numbers() -> None:
     assert pinned_month(case.model_copy(update={"category": "security"})) is None
 
 
+def test_condition_change_draft_preserves_previous_cases_and_pins_all_turns() -> None:
+    previous = registered_suite("0.1.9")
+    current = registered_suite("0.1.10")
+    assert current.cases[:62] == previous.cases
+    assert len(current.cases) == 69 and not current.published
+    assert sum(case.category == "multi_turn" for case in current.cases) == 12
+    for case in current.cases[62:]:
+        assert pinned_multiturn(case)
+        assert not pinned_multiturn(case.model_copy(update={"turns": tuple(reversed(case.turns))}))
+
+
+def test_single_point_revision_changes_only_four_output_expectations() -> None:
+    from scripts.build_m8_suite_v0111 import SINGLE_MONTH_IDS
+
+    previous = registered_suite("0.1.10")
+    current = registered_suite("0.1.11")
+    assert not current.published and len(current.cases) == 69
+    changed = set()
+    for before, after in zip(previous.cases, current.cases, strict=True):
+        assert before.id == after.id and before.turns == after.turns
+        if before != after:
+            changed.add(before.id)
+            assert after.expected.required_tools == ("query.metric",)
+            assert after.expected.allowed_tools == ("semantic.resolve", "query.metric")
+            assert (
+                after.expected.require_evidence
+                and after.expected.metric_ids == before.expected.metric_ids
+            )
+    assert changed == SINGLE_MONTH_IDS
+
+
+def test_narrowed_month_oracle_rejects_stale_range_wrong_metric_and_wrong_value() -> None:
+    summary = {
+        "columns": ["inspection_time", "defect_rate"],
+        "rows": [["2026-09-01T00:00:00+00:00", "3.00"]],
+        "truncated": False,
+    }
+    view = cast(
+        AnalysisRunViewResponse,
+        SimpleNamespace(artifacts=[SimpleNamespace(artifact_type="query_result", summary=summary)]),
+    )
+    assert verify_monthly_result(view, "defect_rate", ("2026-09",))
+    assert not verify_monthly_result(view)
+    assert not verify_monthly_result(view, "defect_rate", ("2026-08",))
+    assert not verify_monthly_result(view, "inspected_quantity", ("2026-09",))
+    assert not verify_monthly_result(view, "defect_rate", ("2026-09", "2026-09"))
+    summary["rows"] = [["2026-09-01T00:00:00+00:00", "2.75"]]
+    assert not verify_monthly_result(view, "defect_rate", ("2026-09",))
+
+
 def test_owned_schema_is_exact_unique_uuid_name() -> None:
     token = uuid.UUID("01234567-89ab-cdef-0123-456789abcdef")
     assert owned_schema_name(token) == "eval_0123456789abcdef0123456789abcdef"

@@ -64,7 +64,9 @@ from packages.shared_contracts.agents import (
 from packages.shared_contracts.semantic_models import PhysicalMapping
 
 ADAPTER_VERSION = OFFLINE_TOOL_VERSION
-ConversationPhase = Literal["trend", "refine", "explain", "social"]
+ConversationPhase = Literal[
+    "trend", "refine", "explain", "social", "september", "august", "recent", "switch_metric"
+]
 
 
 @dataclass(frozen=True)
@@ -107,6 +109,52 @@ MULTITURN_CASES = {
         ("trend", "social", "refine"),
     ),
 }
+MULTITURN_CASES.update(
+    {
+        "multiturn-narrow-month": MultiturnSpec(
+            ("最近三个月不良率趋势", "只看2026年9月"),
+            "不良率",
+            "defect_rate",
+            ("trend", "september"),
+        ),
+        "multiturn-replace-month": MultiturnSpec(
+            ("最近三个月不良率趋势", "只看2026年9月", "改成2026年8月"),
+            "不良率",
+            "defect_rate",
+            ("trend", "september", "august"),
+        ),
+        "multiturn-reset-range": MultiturnSpec(
+            ("最近三个月不良率趋势", "只看2026年9月", "改成最近三个月"),
+            "不良率",
+            "defect_rate",
+            ("trend", "september", "recent"),
+        ),
+        "multiturn-replace-metric": MultiturnSpec(
+            ("最近三个月不良率趋势", "改成检验数量"),
+            "不良率",
+            "defect_rate",
+            ("trend", "switch_metric"),
+        ),
+        "multiturn-narrow-then-explain": MultiturnSpec(
+            ("最近三个月不良率趋势", "只看2026年9月", "解释一下"),
+            "不良率",
+            "defect_rate",
+            ("trend", "september", "explain"),
+        ),
+        "multiturn-replace-metric-retains-month": MultiturnSpec(
+            ("最近三个月不良率趋势", "只看2026年9月", "改成检验数量"),
+            "不良率",
+            "defect_rate",
+            ("trend", "september", "switch_metric"),
+        ),
+        "multiturn-social-retains-narrowed-month": MultiturnSpec(
+            ("最近三个月不良率趋势", "只看2026年9月", "你好", "按月份展开"),
+            "不良率",
+            "defect_rate",
+            ("trend", "september", "social", "refine"),
+        ),
+    }
+)
 FIXTURE_URL = (
     "postgresql+psycopg://source_admin:source-admin-local-only@source-evaluation:5432/factory_demo"
 )
@@ -252,7 +300,11 @@ def pinned_multiturn(case: EvaluationCase) -> bool:
     return spec is not None and case.category == "multi_turn" and case.turns == spec.turns
 
 
-def verify_monthly_result(view: AnalysisRunViewResponse, metric_key: str = "defect_rate") -> bool:
+def verify_monthly_result(
+    view: AnalysisRunViewResponse,
+    metric_key: str = "defect_rate",
+    months: tuple[str, ...] = ("2026-07", "2026-08", "2026-09"),
+) -> bool:
     """Fixed fixture oracle, not values generated from model output or expectations."""
     oracles = {
         "defect_rate": ("inspection_time", ("1.75", "2.75", "3.00")),
@@ -270,7 +322,7 @@ def verify_monthly_result(view: AnalysisRunViewResponse, metric_key: str = "defe
     if (
         columns != [oracle[0], metric_key]
         or not isinstance(rows, list)
-        or len(rows) != 3
+        or len(rows) != len(months)
         or summary.get("truncated") is not False
     ):
         return False
@@ -281,6 +333,13 @@ def verify_monthly_result(view: AnalysisRunViewResponse, metric_key: str = "defe
             strict=True,
         )
     )
+    if (
+        not months
+        or len(set(months)) != len(months)
+        or any(month not in expected for month in months)
+    ):
+        return False
+    expected = {month: expected[month] for month in months}
     actual: dict[str, Decimal] = {}
     for row in rows:
         if not isinstance(row, list) or len(row) != 2:
@@ -384,6 +443,9 @@ class _ConversationSession:
         )
         run_ids: list[uuid.UUID] = []
         previous_view: AnalysisRunViewResponse | None = None
+        current_metric = spec.metric_key
+        current_range = "最近三个月"
+        months: tuple[str, ...] = ("2026-07", "2026-08", "2026-09")
         for index, phase in enumerate(spec.phases):
             output: dict[str, object] | None = None
             if phase == "trend":
@@ -401,6 +463,21 @@ class _ConversationSession:
                     "mode": "patch",
                     "patch": {"dimensions": ["月份"], "output": ["time_series"]},
                 }
+            elif phase in {"september", "august", "recent"}:
+                current_range = {
+                    "september": "2026年9月",
+                    "august": "2026年8月",
+                    "recent": "最近三个月",
+                }[phase]
+                months = {
+                    "september": ("2026-09",),
+                    "august": ("2026-08",),
+                    "recent": ("2026-07", "2026-08", "2026-09"),
+                }[phase]
+                output = {"mode": "patch", "patch": {"time_range": current_range}}
+            elif phase == "switch_metric":
+                current_metric = "inspected_quantity"
+                output = {"mode": "patch", "patch": {"metrics": ["检验数量"]}}
             if index:
                 send_conversation_message(
                     self.db,
@@ -444,8 +521,34 @@ class _ConversationSession:
             view = get_run_view(self.db, workspace_id=self.workspace.id, run_id=run.id)
             if view.run.status != "completed":
                 return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
-            if phase in {"trend", "refine"} and not verify_monthly_result(view, spec.metric_key):
+            query_phase = phase not in {"social", "explain"}
+            if query_phase and not verify_monthly_result(view, current_metric, months):
                 return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
+            if (
+                query_phase
+                and len(months) == 1
+                and (
+                    any(
+                        item.artifact_type in {"analysis_summary", "chart_spec"}
+                        for item in view.artifacts
+                    )
+                    or any(
+                        item.tool_name in {"analysis.describe", "visualization.compose"}
+                        for item in view.tool_calls
+                    )
+                )
+            ):
+                return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
+            if query_phase:
+                intent = view.run.context.get("intent")
+                binding = view.run.context.get("binding")
+                if (
+                    not isinstance(intent, dict)
+                    or intent.get("time_range") != current_range
+                    or not isinstance(binding, dict)
+                    or binding.get("metric_keys") != [current_metric]
+                ):
+                    return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
             if phase == "social" and not verify_social_interruption(view):
                 return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
             if phase == "explain" and (
@@ -454,10 +557,10 @@ class _ConversationSession:
                 return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
             synchronize_conversation_after_run(self.db, run_id=run.id)
             self.db.commit()
-            if phase in {"trend", "refine"}:
+            if query_phase:
                 previous_view = view
         intent = view.run.context.get("intent")
-        if not isinstance(intent, dict) or intent.get("time_range") != "最近三个月":
+        if not isinstance(intent, dict) or intent.get("time_range") != current_range:
             return OfflineCaseExecution(ObservedOutcome(status="failed"), tuple(run_ids))
         return OfflineCaseExecution(observe_completed_run(view), tuple(run_ids))
 

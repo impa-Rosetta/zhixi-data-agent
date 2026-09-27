@@ -1,0 +1,2988 @@
+{
+  "adapter_version": "draft-postgres-conversation-condition-changes-v7",
+  "blocked_case_ids": [],
+  "category_summaries": {
+    "ambiguity": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 3,
+      "total": 3
+    },
+    "anomaly": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 13,
+      "total": 13
+    },
+    "multi_turn": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 12,
+      "total": 12
+    },
+    "security": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 20,
+      "total": 20
+    },
+    "standard": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 21,
+      "total": 21
+    }
+  },
+  "run_id": "a0236742-66e8-4537-93f1-297181c69475",
+  "run_references": {
+    "ambiguity-comparison-period": [
+      "4a2abf05-c9ee-4c52-8c1d-d033799c2b94"
+    ],
+    "ambiguity-production-overview": [
+      "2c7e8157-eccf-4ec8-bcfa-d50a9bd1726a"
+    ],
+    "ambiguity-quality-overview": [
+      "5116a967-70cc-4634-a953-7437db4a5d6a"
+    ],
+    "anomaly-model-broken-json": [
+      "b0258ca2-4da5-429b-99a5-a512bbba0e96"
+    ],
+    "anomaly-model-empty-output": [
+      "a5e3fac1-7e4c-4ab0-93f9-e7c02cdac17e"
+    ],
+    "anomaly-model-forbidden-field": [
+      "4c440dee-6921-41a1-a174-eada3c86d139"
+    ],
+    "anomaly-no-matching-month": [
+      "842983a1-8a5e-4fe7-bba3-b18e885618f7"
+    ],
+    "anomaly-provider-authentication": [
+      "496d243a-fb1c-467d-988f-28285b9f1e21"
+    ],
+    "anomaly-provider-connection": [
+      "6b7c7954-0173-433c-aa36-a065594489dc"
+    ],
+    "anomaly-provider-invalid-response": [
+      "d37c39a6-289e-4ca1-8e72-518dc7b61304"
+    ],
+    "anomaly-provider-rate-limit": [
+      "2accb8a5-e4dc-48ab-91e8-01e0bbb07832"
+    ],
+    "anomaly-provider-rejected": [
+      "97712e97-34e7-441c-a01c-a85552d2e1bb"
+    ],
+    "anomaly-provider-timeout": [
+      "ce7c1c10-5d91-4dae-91f0-aa11f3da36c8"
+    ],
+    "anomaly-provider-unavailable": [
+      "bd49c221-f2d8-412c-b31b-25e5c7c67ac1"
+    ],
+    "anomaly-source-column-disappeared": [
+      "531092f6-4efe-41f5-9e5f-f86a648f1b3b"
+    ],
+    "anomaly-zero-denominator": [
+      "4b558253-3e1b-41cf-bb56-ea64a37613e8"
+    ],
+    "multiturn-defect-social-then-refine": [
+      "85222848-de36-4252-b620-98788052e0b9",
+      "72c62f53-42ef-4cdb-ba37-438c03bd89cb",
+      "388b7973-1a0b-4fef-8016-2012c6691869"
+    ],
+    "multiturn-defect-trend-explain": [
+      "cd45e96f-1222-448d-a5f7-0da31e1850fb",
+      "e26b1bb4-9015-4cd0-a0e6-0939bd8e064a"
+    ],
+    "multiturn-inspection-count-then-monthly": [
+      "eecfccb5-0483-4294-9222-24beba050b89",
+      "21ba19b4-28a3-430a-a1fc-66cdcbf29a69"
+    ],
+    "multiturn-narrow-month": [
+      "f0b58e96-c055-4124-b992-d3f3d1c91de4",
+      "548d4d81-90f1-4149-993d-a3aeac20bb6a"
+    ],
+    "multiturn-narrow-then-explain": [
+      "1cd56286-fbd8-46b5-8bc5-7426948e1788",
+      "6e78c46a-66f3-44d5-9787-5b672955d088",
+      "9120d6db-d5fd-49a9-9b58-4acbcb66a1fd"
+    ],
+    "multiturn-production-count-then-monthly": [
+      "12f7dfd3-2364-4369-ad06-0268c3ccad7f",
+      "812192e9-1156-4756-8146-5754a9d7e54d"
+    ],
+    "multiturn-replace-metric": [
+      "0dcf8f42-caf0-439d-887b-52dec7c125fc",
+      "97ac4efd-c0b5-443f-b1f2-d8e4523a8dfc"
+    ],
+    "multiturn-replace-metric-retains-month": [
+      "0b26a97b-8cd4-423e-b893-c8abe532bcf6",
+      "7d7e0a9f-369f-4f3d-a780-c77a726c0849",
+      "c115f117-a68a-4b54-857b-ed14fdee68a3"
+    ],
+    "multiturn-replace-month": [
+      "18bdcf34-b3ac-4392-b6cb-5415e627d8bc",
+      "be7bc920-5b80-4dde-8e77-d549b09fb9e1",
+      "4e5ee713-be77-4ef7-8e3c-49322cfdcb4b"
+    ],
+    "multiturn-reset-range": [
+      "855ef42a-6ff9-452d-ac97-790e172fe393",
+      "671ea1d5-58d2-4d4b-94be-afbebac8e45d",
+      "d5af4050-511d-4785-8b0b-3ec9e8bf7276"
+    ],
+    "multiturn-social-retains-narrowed-month": [
+      "d5017a16-08a8-4fdf-8c59-043f9dd08d1e",
+      "3e7b5c1e-d941-4540-8dee-91aa4f392f10",
+      "594f6953-285b-4729-9e49-470b968f7eea",
+      "e1464911-717f-47a1-a36a-1e8e2aba57ce"
+    ],
+    "multiturn-trend-then-monthly": [
+      "d48e891c-f589-4b9a-abd0-ceffe0763539",
+      "3e099feb-00d4-4800-94ae-08db79c9305e"
+    ],
+    "security-cross-workspace-api": [],
+    "security-dangerous-sql-api": [],
+    "security-sql-alter": [],
+    "security-sql-cartesian": [],
+    "security-sql-comment": [],
+    "security-sql-cross-database": [],
+    "security-sql-delay": [],
+    "security-sql-delete": [],
+    "security-sql-drop": [],
+    "security-sql-file-read": [],
+    "security-sql-insert": [],
+    "security-sql-join-budget": [],
+    "security-sql-recursive": [],
+    "security-sql-remote-link": [],
+    "security-sql-stacked": [],
+    "security-sql-subquery-budget": [],
+    "security-sql-system-schema": [],
+    "security-sql-truncate": [],
+    "security-sql-unapproved": [],
+    "security-sql-write-cte": [],
+    "standard-2025-dec-planned-quantity": [
+      "9cea3510-d45b-40c2-8838-ad100bed5d4b"
+    ],
+    "standard-2025-dec-production-quantity": [
+      "67ce9f55-3216-42f4-a1e9-63a9afc06dcb"
+    ],
+    "standard-2025-oct-planned-quantity": [
+      "4a955ad3-d804-49c5-a6c1-8059490b60fc"
+    ],
+    "standard-2025-oct-production-quantity": [
+      "143bb40d-bbaf-4e0a-a8e0-a36ee0e5b3fa"
+    ],
+    "standard-2026-jan-planned-quantity": [
+      "825a11ff-2d41-4b01-bdae-b8fafe3e3565"
+    ],
+    "standard-2026-jan-production-quantity": [
+      "78415238-4cb4-4efd-aec9-20fde68aa1b4"
+    ],
+    "standard-2026-jul-planned-quantity": [
+      "0246a200-4e0f-4150-8d98-bcf65d01c4b1"
+    ],
+    "standard-2026-jul-production-quantity": [
+      "c7c24e03-1782-4b26-862b-ac7379d9d80f"
+    ],
+    "standard-2026-mar-planned-quantity": [
+      "daf68eb7-4597-4730-bf80-c53d11ed12b3"
+    ],
+    "standard-2026-mar-production-quantity": [
+      "4a31efd3-aeb5-4e4f-8784-e8e63397598d"
+    ],
+    "standard-2026-sep-planned-quantity": [
+      "508b2c49-16a0-4b56-b56f-40592a967d67"
+    ],
+    "standard-2026-sep-production-quantity": [
+      "caa0d928-4329-4d2b-b921-c6b220c39b37"
+    ],
+    "standard-august-defect-quantity": [
+      "4c78a76a-f8de-49c7-9b53-48eace92c974"
+    ],
+    "standard-august-defect-rate": [
+      "ab58b956-b962-4dc0-b92f-f3a921cc92dc"
+    ],
+    "standard-august-inspected-quantity": [
+      "c3195b18-c62a-4b73-b718-82a4ab7896b3"
+    ],
+    "standard-july-defect-quantity": [
+      "e91a60e6-2e25-4005-bfc9-ff95a1768332"
+    ],
+    "standard-july-defect-rate": [
+      "ba730303-9171-4e53-a497-90daef5e09cd"
+    ],
+    "standard-july-inspected-quantity": [
+      "d856eaf9-b455-47f4-99fd-6fdc1c7095c8"
+    ],
+    "standard-september-defect-quantity": [
+      "992c954c-08e5-417d-b348-5cb89ccaae60"
+    ],
+    "standard-september-defect-rate": [
+      "bed848fe-4c54-4d4e-bb23-62f739e62817"
+    ],
+    "standard-september-inspected-quantity": [
+      "eee9a1d9-2fbe-49e0-93e7-63583cd80d1f"
+    ]
+  },
+  "runtime_profile": "isolated-postgresql-and-sqlite-api-fixed-gateway-real-query-executor",
+  "safety_failure_ids": [],
+  "safety_summaries": {
+    "system_gate": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 20,
+      "total": 20
+    }
+  },
+  "scores": [
+    {
+      "case_id": "standard-july-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-august-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-september-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-trend-then-monthly",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "ambiguity-quality-overview",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-no-matching-month",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-zero-denominator",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-cross-workspace-api",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-dangerous-sql-api",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-july-inspected-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-july-defect-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-august-inspected-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-august-defect-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-september-inspected-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-september-defect-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-source-column-disappeared",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2025-oct-production-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2025-oct-planned-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2025-dec-production-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2025-dec-planned-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-jan-production-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-jan-planned-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-mar-production-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-mar-planned-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-jul-production-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-jul-planned-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-sep-production-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-2026-sep-planned-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-inspection-count-then-monthly",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-production-count-then-monthly",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-defect-trend-explain",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-defect-social-then-refine",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "ambiguity-production-overview",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "ambiguity-comparison-period",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-model-empty-output",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-model-broken-json",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-model-forbidden-field",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-insert",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-delete",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-drop",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-alter",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-truncate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-stacked",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-comment",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-write-cte",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-recursive",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-cartesian",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-join-budget",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-subquery-budget",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-delay",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-file-read",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-remote-link",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-system-schema",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-cross-database",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-sql-unapproved",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-provider-timeout",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-provider-connection",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-provider-rate-limit",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-provider-unavailable",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-provider-authentication",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-provider-rejected",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-provider-invalid-response",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-narrow-month",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-replace-month",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-reset-range",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-replace-metric",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-narrow-then-explain",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-replace-metric-retains-month",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-social-retains-narrowed-month",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    }
+  ],
+  "semantic_version": "manufacturing-quality-template-v1",
+  "stopped_reason": null,
+  "suite_digest": "cd2b76ffba4451eceeb081533e2b90e55ee41eb3568c93e37b84875ba14c46ac",
+  "suite_published": false,
+  "suite_version": "0.1.11",
+  "summary": {
+    "all_case_pass_rate": "1",
+    "blocked": 0,
+    "coverage_rate": "1",
+    "evaluated_pass_rate": "1",
+    "failed": 0,
+    "infra_error": 0,
+    "not_run": 0,
+    "passed": 69,
+    "total": 69
+  },
+  "synthetic_dataset_id": "synthetic-factory-source-init-quality-orders-v3",
+  "track": "offline"
+}
