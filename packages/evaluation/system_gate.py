@@ -5,7 +5,12 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from packages.agent_core.persistence import AnalysisArtifact, AnalysisRun
 from packages.evaluation.contracts import SafetyEntrypoint, SystemGateProof
+from packages.query_engine.models import QueryExecution, ValidatedQuery
 
 
 @dataclass(frozen=True)
@@ -15,6 +20,27 @@ class SystemGateSnapshot:
     execution_ids: frozenset[uuid.UUID]
     run_ids: frozenset[uuid.UUID]
     artifact_ids: frozenset[uuid.UUID]
+
+
+def capture_system_gate_snapshot(db: Session, workspace_id: uuid.UUID) -> SystemGateSnapshot:
+    """Capture an isolated fixture's actual protected IDs without retaining result data."""
+    return SystemGateSnapshot(
+        workspace_id=workspace_id,
+        validated_query_ids=frozenset(
+            db.scalars(select(ValidatedQuery.id).where(ValidatedQuery.workspace_id == workspace_id))
+        ),
+        execution_ids=frozenset(
+            db.scalars(select(QueryExecution.id).where(QueryExecution.workspace_id == workspace_id))
+        ),
+        run_ids=frozenset(
+            db.scalars(select(AnalysisRun.id).where(AnalysisRun.workspace_id == workspace_id))
+        ),
+        artifact_ids=frozenset(
+            db.scalars(
+                select(AnalysisArtifact.id).where(AnalysisArtifact.workspace_id == workspace_id)
+            )
+        ),
+    )
 
 
 def build_system_gate_proof(
