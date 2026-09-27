@@ -115,7 +115,7 @@ def test_conversation_draft_is_immutable_and_pins_full_turn_sequence() -> None:
 
     old = registered_suite("0.1.5")
     new = registered_suite("0.1.6")
-    assert SUITE_VERSIONS[0] == "0.1.6"
+    assert "0.1.6" in SUITE_VERSIONS
     assert new == EvaluationSuite.model_validate(build_suite())
     assert not old.published and not new.published
     assert new.cases[: len(old.cases)] == old.cases

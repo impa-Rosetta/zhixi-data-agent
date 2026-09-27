@@ -37,6 +37,71 @@ AMBIGUITY_CASES = {
     ),
 }
 
+MODEL_FAILURE_CASES: dict[str, tuple[str, str | None, str]] = {
+    "anomaly-model-empty-output": ("分析不良率", None, "model.missing_structured_output"),
+    "anomaly-model-broken-json": ("分析不良率", '{"task_type":', "model.schema_validation_failed"),
+    "anomaly-model-forbidden-field": (
+        "分析不良率",
+        '{"task_type":"metric_query","goal":"分析不良率","metrics":["不良率"],"sql":"SELECT 1"}',
+        "model.schema_validation_failed",
+    ),
+}
+
+
+def pinned_model_failure(case: EvaluationCase) -> tuple[str, str | None, str] | None:
+    spec = MODEL_FAILURE_CASES.get(case.id)
+    return spec if spec and case.category == "anomaly" and case.turns == (spec[0],) else None
+
+
+class _ModelFailureSession:
+    def __init__(self, db: Session, user: User, workspace: Workspace, case: EvaluationCase) -> None:
+        self.db, self.user, self.workspace, self.case = db, user, workspace, case
+
+    def execute(self) -> OfflineCaseExecution:
+        spec = pinned_model_failure(self.case)
+        if spec is None:
+            raise OfflineExecutionError("evaluation.precondition_failed", blocked=True)
+        run = create_run(
+            self.db,
+            workspace_id=self.workspace.id,
+            actor_user_id=self.user.id,
+            idempotency_key=self.case.id,
+            payload=CreateAnalysisRunRequest(message=spec[0]),
+        )
+        gateway = FakeGateway(
+            [
+                GatewayResponse(
+                    "offline-malformed-1",
+                    "fake",
+                    spec[1],
+                    None,
+                    (),
+                    "stop",
+                    GatewayUsage(20, 10, 30),
+                )
+            ]
+        )
+        run_analysis(self.db, run_id=run.id, gateway=gateway)
+        view = get_run_view(self.db, workspace_id=self.workspace.id, run_id=run.id)
+        last = view.messages[-1] if view.messages else None
+        safe_failure = (
+            view.run.status == "failed"
+            and view.run.error_code == spec[2]
+            and len(gateway.calls) == 1
+            and not view.tool_calls
+            and not view.artifacts
+            and not view.evidence
+            and not view.validations
+            and last is not None
+            and last.role == "assistant"
+            and "没有产生可用结论" in last.content
+            and "model." not in last.content
+            and "SELECT" not in last.content
+        )
+        if not safe_failure:
+            raise OfflineExecutionError("evaluation.execution_failed")
+        return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
+
 
 def pinned_ambiguity(case: EvaluationCase) -> tuple[str, str, tuple[str, ...], str] | None:
     spec = AMBIGUITY_CASES.get(case.id)
@@ -105,7 +170,7 @@ class _ClarificationSession:
 @contextmanager
 def draft_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     """Only pinned ambiguity cases are ready; numeric cases need real query fixtures."""
-    if pinned_ambiguity(case) is None:
+    if pinned_ambiguity(case) is None and pinned_model_failure(case) is None:
         yield _UnavailableSession()
         return
     engine = create_engine(
@@ -126,6 +191,9 @@ def draft_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             )
             db.add_all([user, workspace])
             db.commit()
-            yield _ClarificationSession(db, user, workspace, case)
+            if pinned_model_failure(case) is not None:
+                yield _ModelFailureSession(db, user, workspace, case)
+            else:
+                yield _ClarificationSession(db, user, workspace, case)
     finally:
         engine.dispose()

@@ -7,6 +7,62 @@ from packages.evaluation import load_suite, run_offline_suite
 from packages.evaluation.draft_adapter import draft_case_factory, pinned_ambiguity
 
 
+def test_model_failures_use_runtime_and_never_create_trusted_results() -> None:
+    from packages.evaluation.draft_adapter import pinned_model_failure
+
+    suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.7.json"))
+    cases = tuple(case for case in suite.cases if case.id.startswith("anomaly-model-"))
+    assert len(cases) == 3
+    for case in cases:
+        assert pinned_model_failure(case) is not None
+        assert pinned_model_failure(case.model_copy(update={"turns": ("其他问题",)})) is None
+    result = run_offline_suite(suite.model_copy(update={"cases": cases}), draft_case_factory)
+    assert result.summary.passed == 3
+    assert result.summary.failed == result.summary.blocked == 0
+    assert len(result.run_references) == 3
+
+
+def test_new_model_anomaly_draft_preserves_frozen_previous_cases() -> None:
+    from packages.evaluation.registry import SUITE_VERSIONS, registered_suite
+
+    previous = registered_suite("0.1.6")
+    current = registered_suite("0.1.7")
+    assert SUITE_VERSIONS[0] == "0.1.7"
+    assert current.cases[: len(previous.cases)] == previous.cases
+    assert len(current.cases) == 37 and not current.published
+    assert sum(case.category == "anomaly" for case in current.cases) == 6
+
+
+@pytest.mark.parametrize("corruption", ["status", "code", "reply"])
+def test_model_failure_cannot_pass_with_incorrect_persisted_contract(
+    monkeypatch, corruption
+) -> None:
+    import packages.evaluation.draft_adapter as adapter
+
+    original = adapter.get_run_view
+
+    def changed_view(*args, **kwargs):
+        view = original(*args, **kwargs)
+        if corruption == "status":
+            return view.model_copy(
+                update={"run": view.run.model_copy(update={"status": "completed"})}
+            )
+        if corruption == "code":
+            return view.model_copy(
+                update={"run": view.run.model_copy(update={"error_code": "other"})}
+            )
+        messages = list(view.messages)
+        messages[-1] = messages[-1].model_copy(update={"content": "分析成功，不良率为 0。"})
+        return view.model_copy(update={"messages": messages})
+
+    monkeypatch.setattr(adapter, "get_run_view", changed_view)
+    suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.7.json"))
+    case = next(case for case in suite.cases if case.id == "anomaly-model-empty-output")
+    result = run_offline_suite(suite.model_copy(update={"cases": (case,)}), draft_case_factory)
+    assert result.summary.passed == 0
+    assert result.summary.infra_error == 1
+
+
 def test_first_golden_draft_executes_clarification_and_blocks_unavailable_data_cases() -> None:
     suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.0.json"))
     result = run_offline_suite(suite, draft_case_factory)
