@@ -10,7 +10,10 @@ export type EvaluationRun = {
   suite_version: string
   suite_digest: string
   dataset_id: string
+  semantic_version: string
   model_version: string
+  tool_version: string
+  prompt_version: string
   summary: Record<string, unknown>
   budget: { max_seconds?: number }
   calls_used: number
@@ -57,10 +60,10 @@ export function useEvaluationSuites(workspaceId: string | undefined) {
   })
 }
 
-export function useEvaluationRuns(workspaceId: string | undefined) {
+export function useEvaluationRuns(workspaceId: string | undefined, page = 0) {
   return useQuery({
-    queryKey: [...key(workspaceId), 'runs'], enabled: Boolean(workspaceId),
-    queryFn: () => apiClient.request<Page<EvaluationRun>>(path(workspaceId)),
+    queryKey: [...key(workspaceId), 'runs', page], enabled: Boolean(workspaceId),
+    queryFn: () => apiClient.request<Page<EvaluationRun>>(`${path(workspaceId)}?limit=30&offset=${page * 30}`),
     refetchInterval: (query) => query.state.data?.items.some((item) => active(item.status)) ? 2000 : false,
   })
 }
@@ -73,10 +76,16 @@ export function useEvaluationDetail(workspaceId: string | undefined, runId: stri
   })
 }
 
-export function useEvaluationCases(workspaceId: string | undefined, runId: string | undefined, running: boolean) {
+export function useEvaluationCases(
+  workspaceId: string | undefined, runId: string | undefined, running: boolean,
+  page = 0, category = 'all', status = 'all',
+) {
+  const filters = new URLSearchParams({ limit: '25', offset: String(page * 25) })
+  if (category !== 'all') filters.set('category', category)
+  if (status !== 'all') filters.set('status', status)
   return useQuery({
-    queryKey: [...key(workspaceId), 'cases', runId], enabled: Boolean(workspaceId && runId),
-    queryFn: () => apiClient.request<Page<EvaluationCaseResult>>(`${path(workspaceId)}/${runId}/cases?limit=200`),
+    queryKey: [...key(workspaceId), 'cases', runId, page, category, status], enabled: Boolean(workspaceId && runId),
+    queryFn: () => apiClient.request<Page<EvaluationCaseResult>>(`${path(workspaceId)}/${runId}/cases?${filters.toString()}`),
     refetchInterval: running ? 2000 : false,
   })
 }

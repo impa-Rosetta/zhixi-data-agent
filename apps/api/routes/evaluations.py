@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from apps.api.authorization import authorize
 from apps.api.dependencies import CurrentUser, DbSession
+from packages.evaluation.contracts import CaseCategory
 from packages.evaluation.lifecycle import (
     EvaluationLifecycleError,
     cancel_run,
@@ -26,6 +27,7 @@ from packages.shared_contracts.evaluations import (
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/evaluations", tags=["evaluations"])
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=100)]
+CaseStatus = Literal["queued", "running", "passed", "failed", "blocked", "infra_error"]
 
 
 def _error(error: EvaluationLifecycleError) -> HTTPException:
@@ -146,8 +148,10 @@ def cases(
     run_id: UUID,
     db: DbSession,
     user: CurrentUser,
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(default=25, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    category: CaseCategory | None = None,
+    status: CaseStatus | None = None,
 ) -> dict[str, object]:
     authorize(db, user=user, workspace_id=workspace_id, action=Action.EVALUATION_READ)
     try:
@@ -158,6 +162,10 @@ def cases(
         EvaluationCaseResult.workspace_id == workspace_id,
         EvaluationCaseResult.evaluation_run_id == run_id,
     )
+    if category is not None:
+        query = query.where(EvaluationCaseResult.category == category)
+    if status is not None:
+        query = query.where(EvaluationCaseResult.status == status)
     count = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     results = db.scalars(query.order_by(EvaluationCaseResult.case_id).limit(limit).offset(offset))
     return {

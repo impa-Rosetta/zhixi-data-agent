@@ -134,3 +134,25 @@ def test_cancel_is_authorized_and_terminal(context) -> None:
     assert client.post(url).status_code == 204
     assert client.post(url).status_code == 409
     assert db.get(EvaluationRun, fixture.id).status == "cancelled"
+
+
+def test_server_pagination_and_case_filters_are_workspace_scoped(context) -> None:
+    client, db, fixture, _ = context
+    url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations"
+    created = client.post(
+        url, json={"suite_version": "0.1.2"}, headers={"Idempotency-Key": "paged"}
+    )
+    assert created.status_code == 201
+    first = client.get(f"{url}?limit=1&offset=0").json()
+    second = client.get(f"{url}?limit=1&offset=1").json()
+    assert first["total"] == second["total"] == 2
+    assert first["items"][0]["id"] != second["items"][0]["id"]
+    run_id = created.json()["id"]
+    security = client.get(f"{url}/{run_id}/cases?category=security&limit=1").json()
+    assert security["total"] == 2 and len(security["items"]) == 1
+    assert security["items"][0]["category"] == "security"
+    filtered = client.get(f"{url}/{run_id}/cases?status=passed").json()
+    assert filtered["total"] == 0
+    assert client.get(f"{url}/{run_id}/cases?category=../../x").status_code == 422
+    assert client.get(f"{url}/{run_id}/cases?status=secret").status_code == 422
+    assert db.get(EvaluationRun, uuid.UUID(run_id)) is not None

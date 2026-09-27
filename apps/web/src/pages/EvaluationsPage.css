@@ -20,6 +20,10 @@
 .evaluation-table table { width: 100%; border-collapse: collapse; }
 .evaluation-table th, .evaluation-table td { padding: 12px; border-bottom: 1px solid #e2e7ef; text-align: left; overflow-wrap: anywhere; }
 .evaluation-table th { background: #f5f7fc; }
+.evaluation-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 14px; }
+.evaluation-pagination button:disabled { opacity: .48; cursor: not-allowed; }
+.evaluation-comparison { border-top: 1px solid #e2e7ef; padding-top: 16px; margin-bottom: 20px; color: #52627a; }
+.evaluation-comparison h3 { color: #1d2939; margin: 0 0 12px; font-size: 17px; }
 @media (max-width: 640px) {
   .evaluation-panel { padding: 16px; }
   .evaluation-metrics { grid-template-columns: 1fr; }
