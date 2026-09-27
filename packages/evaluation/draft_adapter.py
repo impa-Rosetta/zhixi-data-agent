@@ -26,16 +26,36 @@ from packages.platform_core.database import Base
 from packages.platform_core.models import User, Workspace
 from packages.shared_contracts.agents import CreateAnalysisRunRequest
 
-ADAPTER_VERSION = "draft-clarification-v2"
+ADAPTER_VERSION = "draft-clarification-v3"
 AMBIGUITY_CASES = {
     "ambiguity-quality-overview": ("看看质量情况", "metric_query", (), "metric_required"),
     "ambiguity-production-overview": ("看看生产情况", "metric_query", (), "metric_required"),
+    "ambiguity-trend-metric": ("看看最近三个月的趋势", "trend", (), "metric_required"),
+    "ambiguity-ranking-metric": ("哪些工单排名最高？", "ranking", (), "metric_required"),
+    "ambiguity-comparison-current-period": (
+        "不良率与上月对比",
+        "comparison",
+        ("不良率",),
+        "comparison_period_required",
+    ),
+    "ambiguity-comparison-baseline-period": (
+        "比较本月不良率",
+        "comparison",
+        ("不良率",),
+        "comparison_period_required",
+    ),
     "ambiguity-comparison-period": (
         "对比一下不良率",
         "comparison",
         ("不良率",),
         "comparison_period_required",
     ),
+}
+
+# Independent fixture inputs: only the absent period should be requested.
+_COMPARISON_PERIODS = {
+    "ambiguity-comparison-current-period": (None, "previous_period"),
+    "ambiguity-comparison-baseline-period": ("this_month", None),
 }
 
 MODEL_FAILURE_CASES: dict[str, tuple[str, str | None, str]] = {
@@ -216,6 +236,7 @@ class _ClarificationSession:
         if spec is None:
             raise OfflineExecutionError("evaluation.precondition_failed", blocked=True)
         question, task_type, metrics, expected_reason = spec
+        time_range, comparison = _COMPARISON_PERIODS.get(self.case.id, (None, None))
         run = create_run(
             self.db,
             workspace_id=self.workspace.id,
@@ -235,6 +256,8 @@ class _ClarificationSession:
                             "task_type": task_type,
                             "goal": question,
                             "metrics": list(metrics),
+                            "time_range": time_range,
+                            "comparison": comparison,
                             "confidence": 0.4,
                         },
                         ensure_ascii=False,
@@ -251,9 +274,27 @@ class _ClarificationSession:
         if view.run.status != "waiting_for_clarification":
             return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
         clarification = view.run.context.get("clarification")
+        expected_missing = (
+            ["metrics"]
+            if expected_reason == "metric_required"
+            else [
+                field
+                for field, value in (("time_range", time_range), ("comparison", comparison))
+                if value is None
+            ]
+        )
+        expected_question = (
+            "你希望分析哪个指标？"
+            if expected_reason == "metric_required"
+            else "请说明要比较的当前周期和对比周期。"
+        )
         if (
             not isinstance(clarification, dict)
             or clarification.get("reason_code") != expected_reason
+            or clarification.get("missing_fields") != expected_missing
+            or clarification.get("question") != expected_question
+            or clarification.get("resume_node")
+            != ("understand" if expected_reason == "metric_required" else "route")
         ):
             return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
         return OfflineCaseExecution(observe_clarification_run(view), (run.id,))

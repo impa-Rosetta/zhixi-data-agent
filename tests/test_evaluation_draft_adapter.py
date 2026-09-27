@@ -157,7 +157,7 @@ def test_cli_partial_coverage_returns_nonzero_and_never_overwrites_report(
     assert payload["summary"]["passed"] == 1
     assert payload["summary"]["blocked"] == 4
     assert payload["summary"]["coverage_rate"] == "0.2"
-    assert payload["adapter_version"] == "draft-clarification-v2"
+    assert payload["adapter_version"] == "draft-clarification-v3"
     assert "runtime_profile" in payload
     original = target.read_bytes()
     with pytest.raises(FileExistsError):
@@ -180,3 +180,53 @@ def test_ambiguity_draft_distinguishes_missing_metric_from_missing_period() -> N
     result = run_offline_suite(suite.model_copy(update={"cases": cases}), draft_case_factory)
     assert result.summary.passed == 2
     assert result.summary.failed == result.summary.blocked == 0
+
+
+def test_route_ambiguity_cases_preserve_previous_suite_and_execute_real_clarification() -> None:
+    from packages.evaluation.registry import registered_suite
+
+    previous = registered_suite("0.1.12")
+    suite = registered_suite("0.1.13")
+    assert suite.cases[:76] == previous.cases
+    assert len(suite.cases) == 80 and not suite.published
+    cases = suite.cases[76:]
+    assert len(cases) == 4 and all(case.category == "ambiguity" for case in cases)
+    for case in cases:
+        assert pinned_ambiguity(case) is not None
+        assert pinned_ambiguity(case.model_copy(update={"turns": ("其他问题",)})) is None
+    result = run_offline_suite(suite.model_copy(update={"cases": cases}), draft_case_factory)
+    assert result.summary.passed == 4, result.to_json()
+    assert result.summary.failed == result.summary.blocked == result.summary.infra_error == 0
+    assert len(result.run_references) == 4
+
+
+@pytest.mark.parametrize("corruption", ["missing_fields", "question", "resume_node"])
+def test_clarification_contract_rejects_wrong_information_even_when_question_is_shown(
+    monkeypatch, corruption
+) -> None:
+    import packages.evaluation.draft_adapter as adapter
+    from packages.evaluation.registry import registered_suite
+
+    original = adapter.get_run_view
+
+    def changed_view(*args, **kwargs):
+        view = original(*args, **kwargs)
+        context = dict(view.run.context)
+        request = dict(context["clarification"])
+        request[corruption] = {
+            "missing_fields": ["metrics"],
+            "question": "请提供数据库密码。",
+            "resume_node": "query",
+        }[corruption]
+        context["clarification"] = request
+        messages = list(view.messages)
+        messages[-1] = messages[-1].model_copy(update={"content": request["question"]})
+        return view.model_copy(
+            update={"run": view.run.model_copy(update={"context": context}), "messages": messages}
+        )
+
+    monkeypatch.setattr(adapter, "get_run_view", changed_view)
+    suite = registered_suite("0.1.13")
+    case = next(case for case in suite.cases if case.id == "ambiguity-comparison-current-period")
+    result = run_offline_suite(suite.model_copy(update={"cases": (case,)}), draft_case_factory)
+    assert result.summary.passed == 0 and result.summary.failed == 1
