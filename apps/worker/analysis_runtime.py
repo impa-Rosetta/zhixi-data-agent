@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from apps.api.services.analysis_runs import add_event
-from apps.api.services.queries import compile_query, execute_query
+from apps.api.services.queries import QueryServiceError, compile_query, execute_query
 from packages.agent_core.capabilities import capability_response
 from packages.agent_core.catalog_search import search_published_catalogs
 from packages.agent_core.contracts import (
@@ -1378,6 +1378,13 @@ def _execute_metric(db: Session, run: AnalysisRun, plan: AnalysisPlan) -> dict[s
         actor_user_id=run.created_by_user_id,
         validated_query_id=validated.id,
     )
+    if execution.status != "succeeded" or execution.evidence_digest is None:
+        # The query service persists failed executions for audit. Never turn their
+        # empty result payload into a trusted Agent answer or fabricated evidence.
+        raise QueryServiceError(
+            "query.execution_failed",
+            "Query execution did not produce a verified result",
+        )
     return {
         "validated_query_id": str(validated.id),
         "execution_id": str(execution.id),

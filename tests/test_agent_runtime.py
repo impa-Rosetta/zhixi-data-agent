@@ -3,7 +3,9 @@ import json
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -15,7 +17,9 @@ from apps.api.services.analysis_runs import (
     stream_events,
 )
 from apps.api.services.queries import QueryServiceError
+from apps.worker import analysis_runtime
 from apps.worker.analysis_runtime import _exception_code, run_analysis
+from packages.agent_core.contracts import AnalysisPlan, AnalysisStep
 from packages.agent_core.persistence import AnalysisEvent, AnalysisRun, AnalysisRunStatus
 from packages.connectors.metadata import (
     MetadataColumn,
@@ -94,6 +98,55 @@ def test_runtime_preserves_structured_query_error_codes() -> None:
     error = QueryServiceError("query.mapping_incomplete", "internal mapping detail")
 
     assert _exception_code(error) == "query.mapping_incomplete"
+
+
+@pytest.mark.parametrize(
+    ("status", "evidence_digest"),
+    [("failed", None), ("cancelled", None), ("succeeded", None)],
+)
+def test_metric_executor_never_promotes_failed_or_unverified_query_to_answer(
+    monkeypatch, status: str, evidence_digest: str | None
+) -> None:
+    db, user, workspace = _database()
+    created = create_run(
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
+        idempotency_key=f"unverified-query-{status}",
+        payload=CreateAnalysisRunRequest(message="分析不良率"),
+    )
+    run = db.get(AnalysisRun, created.id)
+    assert run is not None
+    plan = AnalysisPlan(
+        goal="分析不良率",
+        steps=(
+            AnalysisStep(
+                id="query",
+                tool="query.metric",
+                arguments={
+                    "semantic_model_id": str(uuid.uuid4()),
+                    "metrics": ["defect_rate"],
+                    "dimensions": [],
+                },
+                expected_evidence=("query_execution",),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        analysis_runtime,
+        "compile_query",
+        lambda *_args, **_kwargs: SimpleNamespace(id=uuid.uuid4()),
+    )
+    monkeypatch.setattr(
+        analysis_runtime,
+        "execute_query",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            status=status, evidence_digest=evidence_digest, columns=[], rows=[], row_count=0
+        ),
+    )
+    with pytest.raises(QueryServiceError) as failure:
+        analysis_runtime._execute_metric(db, run, plan)
+    assert failure.value.code == "query.execution_failed"
 
 
 def test_behavior_capture_observes_real_runtime_not_just_refusal_text() -> None:

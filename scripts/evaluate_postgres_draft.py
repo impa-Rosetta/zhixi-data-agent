@@ -13,7 +13,7 @@ from packages.evaluation.postgres_draft_adapter import ADAPTER_VERSION, postgres
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--suite-version", choices=("0.1.0", "0.1.1", "0.1.2", "0.1.3"), default="0.1.3"
+        "--suite-version", choices=("0.1.0", "0.1.1", "0.1.2", "0.1.3", "0.1.4"), default="0.1.4"
     )
     parser.add_argument("--output", type=Path, help="New report path, never overwritten")
     args = parser.parse_args()

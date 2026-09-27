@@ -86,6 +86,8 @@ ANOMALY_CASES = {
     "anomaly-no-matching-month": ("2000年1月的不良率是多少？", "2000年1月"),
     "anomaly-zero-denominator": ("1999年1月的不良率是多少？", "1999年1月"),
 }
+MISSING_COLUMN_ID = "anomaly-source-column-disappeared"
+MISSING_COLUMN_TURN = "2026年9月的不良率是多少？"
 
 
 def pinned_anomaly(case: EvaluationCase) -> str | None:
@@ -93,6 +95,28 @@ def pinned_anomaly(case: EvaluationCase) -> str | None:
     if spec is None or case.category != "anomaly" or case.turns != (spec[0],):
         return None
     return spec[1]
+
+
+def pinned_missing_column(case: EvaluationCase) -> bool:
+    return (
+        case.id == MISSING_COLUMN_ID
+        and case.category == "anomaly"
+        and case.turns == (MISSING_COLUMN_TURN,)
+    )
+
+
+def verify_missing_column_failure(view: AnalysisRunViewResponse) -> bool:
+    if view.run.status != "failed" or not view.run.error_code:
+        return False
+    replies = [item for item in view.messages if item.role == "assistant"]
+    return (
+        bool(replies)
+        and "没有产生可用结论" in replies[-1].content
+        and "answer_claims" not in replies[-1].context_patch
+        and not any(item.artifact_type == "query_result" for item in view.artifacts)
+        and not view.evidence
+        and not view.validations
+    )
 
 
 def verify_null_metric(view: AnalysisRunViewResponse) -> bool:
@@ -425,6 +449,15 @@ class _MonthSession:
         # No metric_executor override: compile, SQL gates, database, evidence are real.
         run_analysis(self.db, run_id=run.id, gateway=gateway)
         view = get_run_view(self.db, workspace_id=self.workspace.id, run_id=run.id)
+        if pinned_missing_column(self.case):
+            valid = verify_missing_column_failure(view)
+            return OfflineCaseExecution(
+                ObservedOutcome(
+                    status="failed" if valid else "completed",
+                    tool_calls=tuple(item.tool_name for item in view.tool_calls),
+                ),
+                (run.id,),
+            )
         if self.case.category == "anomaly" and not verify_null_metric(view):
             return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
         observation = (
@@ -440,6 +473,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     month = pinned_month(case)
     metric_name = pinned_metric(case)
     anomaly_month = pinned_anomaly(case)
+    missing_column = pinned_missing_column(case)
     multi_turn = pinned_multiturn(case)
     if case.category == "security":
         from packages.evaluation.security_draft_adapter import security_case_factory
@@ -447,7 +481,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
         with security_case_factory(case) as security:
             yield security
         return
-    if month is None and anomaly_month is None and not multi_turn:
+    if month is None and anomaly_month is None and not missing_column and not multi_turn:
         with draft_case_factory(case) as fallback:
             yield fallback
         return
@@ -460,7 +494,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             connection.execute(CreateSchema(schema))
         created = True
         Base.metadata.create_all(engine)
-        if case.id == "anomaly-zero-denominator" and anomaly_month is not None:
+        if (case.id == "anomaly-zero-denominator" and anomaly_month is not None) or missing_column:
             # Only this owned synthetic schema is writable; never mutate public source data.
             with admin.begin() as connection:
                 connection.execute(
@@ -470,23 +504,42 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                         "inspected_at timestamptz)"
                     )
                 )
-                connection.execute(
-                    text(
-                        f'INSERT INTO "{schema}".quality_inspections VALUES '
-                        "(0, 0, '1999-01-01T00:00:00Z')"
+                if not missing_column:
+                    connection.execute(
+                        text(
+                            f'INSERT INTO "{schema}".quality_inspections VALUES '
+                            "(0, 0, '1999-01-01T00:00:00Z')"
+                        )
                     )
-                )
+                else:
+                    connection.execute(
+                        text(
+                            f'INSERT INTO "{schema}".quality_inspections VALUES '
+                            "(12, 400, '2026-09-05T09:00:00Z')"
+                        )
+                    )
                 connection.execute(text(f'GRANT USAGE ON SCHEMA "{schema}" TO zhixi_reader'))
                 connection.execute(
                     text(f'GRANT SELECT ON "{schema}".quality_inspections TO zhixi_reader')
                 )
         with Session(engine) as db:
-            source_schema = schema if case.id == "anomaly-zero-denominator" else "public"
+            source_schema = (
+                schema if case.id == "anomaly-zero-denominator" or missing_column else "public"
+            )
             user, workspace = _seed(db, source_schema=source_schema)
+            if missing_column:
+                # The published snapshot still references the field; change only this owned fixture.
+                with admin.begin() as connection:
+                    connection.execute(
+                        text(
+                            f'ALTER TABLE "{schema}".quality_inspections '
+                            "DROP COLUMN defect_quantity"
+                        )
+                    )
             if multi_turn:
                 yield _ConversationSession(db, user, workspace, case)
             else:
-                selected_month = month or anomaly_month
+                selected_month = month or anomaly_month or ("2026年9月" if missing_column else None)
                 assert selected_month is not None
                 yield _MonthSession(
                     db,

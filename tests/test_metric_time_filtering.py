@@ -16,6 +16,7 @@ def test_metric_execution_converts_relative_range_to_parameterized_filters(monke
     def fake_execute(db, *, workspace_id, actor_user_id, validated_query_id):
         return SimpleNamespace(
             id=uuid4(),
+            status="succeeded",
             columns=["inspection_time", "defect_rate"],
             rows=[["2026-07-01", 1.75], ["2026-08-01", 2.75]],
             row_count=2,

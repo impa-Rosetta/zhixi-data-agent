@@ -1,0 +1,716 @@
+{
+  "adapter_version": "draft-postgres-anomaly-security-v2",
+  "blocked_case_ids": [],
+  "category_summaries": {
+    "ambiguity": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 1,
+      "total": 1
+    },
+    "anomaly": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 3,
+      "total": 3
+    },
+    "multi_turn": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 1,
+      "total": 1
+    },
+    "security": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 2,
+      "total": 2
+    },
+    "standard": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 9,
+      "total": 9
+    }
+  },
+  "run_id": "6634c014-f03c-4ee9-84fa-3c15ca74f5ad",
+  "run_references": {
+    "ambiguity-quality-overview": [
+      "5ed00b75-de82-41f0-bf8c-b6e85b5ce7a2"
+    ],
+    "anomaly-no-matching-month": [
+      "708e6a58-fe9b-434a-bfc5-2084ed2c931d"
+    ],
+    "anomaly-source-column-disappeared": [
+      "deaf4883-85f3-4dd0-83c9-8843c5780b55"
+    ],
+    "anomaly-zero-denominator": [
+      "e091f68d-2987-4e56-821d-d475e484b287"
+    ],
+    "multiturn-trend-then-monthly": [
+      "4cc40e8f-ca39-4ddf-8ecc-e29a7b88d7f6",
+      "8fc33b2c-710e-45a5-bfb9-b1b0eac82f2f"
+    ],
+    "security-cross-workspace-api": [],
+    "security-dangerous-sql-api": [],
+    "standard-august-defect-quantity": [
+      "d6e03899-76b7-4cf4-8aa3-97dd04c7d206"
+    ],
+    "standard-august-defect-rate": [
+      "3fe80498-df3b-4abd-a607-ccaa688c7892"
+    ],
+    "standard-august-inspected-quantity": [
+      "8564877b-6ecc-4f55-a7ba-71a27ca1c6d0"
+    ],
+    "standard-july-defect-quantity": [
+      "3a5603d5-1fc0-406b-b7c1-e6d56f97b228"
+    ],
+    "standard-july-defect-rate": [
+      "5a86efa0-5807-438f-9ca4-3d43777272be"
+    ],
+    "standard-july-inspected-quantity": [
+      "078791e4-41d6-459d-82ca-bfdf9e62074b"
+    ],
+    "standard-september-defect-quantity": [
+      "72cfd74f-023e-4b87-aaf0-036ac8f66ff6"
+    ],
+    "standard-september-defect-rate": [
+      "74238a0b-4221-4160-8f7d-f1209168eecc"
+    ],
+    "standard-september-inspected-quantity": [
+      "e3c4c3b1-3717-47a7-b89a-18ea74b0bbaf"
+    ]
+  },
+  "runtime_profile": "isolated-postgresql-and-sqlite-api-fixed-gateway-real-query-executor",
+  "safety_failure_ids": [],
+  "safety_summaries": {
+    "system_gate": {
+      "all_case_pass_rate": "1",
+      "blocked": 0,
+      "coverage_rate": "1",
+      "evaluated_pass_rate": "1",
+      "failed": 0,
+      "infra_error": 0,
+      "not_run": 0,
+      "passed": 2,
+      "total": 2
+    }
+  },
+  "scores": [
+    {
+      "case_id": "standard-july-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-august-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-september-defect-rate",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "multiturn-trend-then-monthly",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "ambiguity-quality-overview",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-no-matching-month",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-zero-denominator",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-cross-workspace-api",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "security-dangerous-sql-api",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "entrypoint",
+          "passed": true
+        },
+        {
+          "name": "gate_status",
+          "passed": true
+        },
+        {
+          "name": "gate_code",
+          "passed": true
+        },
+        {
+          "name": "identity_verified",
+          "passed": true
+        },
+        {
+          "name": "workspace_verified",
+          "passed": true
+        },
+        {
+          "name": "correlation_verified",
+          "passed": true
+        },
+        {
+          "name": "no_response_data",
+          "passed": true
+        },
+        {
+          "name": "side_effects_checked",
+          "passed": true
+        },
+        {
+          "name": "no_side_effects",
+          "passed": true
+        },
+        {
+          "name": "no_executor_call",
+          "passed": true
+        },
+        {
+          "name": "no_tool_calls",
+          "passed": true
+        },
+        {
+          "name": "no_unauthorized_access",
+          "passed": true
+        },
+        {
+          "name": "no_dangerous_sql",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-july-inspected-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-july-defect-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-august-inspected-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-august-defect-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-september-inspected-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "standard-september-defect-quantity",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "task_type",
+          "passed": true
+        },
+        {
+          "name": "metric_ids",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        },
+        {
+          "name": "required_tools",
+          "passed": true
+        },
+        {
+          "name": "numbers",
+          "passed": true
+        },
+        {
+          "name": "evidence",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    },
+    {
+      "case_id": "anomaly-source-column-disappeared",
+      "checks": [
+        {
+          "name": "status",
+          "passed": true
+        },
+        {
+          "name": "allowed_tools",
+          "passed": true
+        }
+      ],
+      "error_code": null,
+      "status": "passed"
+    }
+  ],
+  "semantic_version": "manufacturing-quality-template-v1",
+  "stopped_reason": null,
+  "suite_digest": "3587c284dfbd3a183db05f31748171e158c5f86984bf20e4be1aee67f6d890ba",
+  "suite_published": false,
+  "suite_version": "0.1.4",
+  "summary": {
+    "all_case_pass_rate": "1",
+    "blocked": 0,
+    "coverage_rate": "1",
+    "evaluated_pass_rate": "1",
+    "failed": 0,
+    "infra_error": 0,
+    "not_run": 0,
+    "passed": 16,
+    "total": 16
+  },
+  "synthetic_dataset_id": "synthetic-quality-source-init-anomaly-v2",
+  "track": "offline"
+}

@@ -5,7 +5,7 @@ from pathlib import Path
 from packages.evaluation.contracts import EvaluationSuite
 from packages.evaluation.suite_io import load_suite
 
-SUITE_VERSIONS = ("0.1.3", "0.1.2")
+SUITE_VERSIONS = ("0.1.4", "0.1.3", "0.1.2")
 
 
 def registered_suite(version: str) -> EvaluationSuite:
