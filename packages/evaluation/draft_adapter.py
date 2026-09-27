@@ -21,12 +21,16 @@ from packages.evaluation.runner import (
     OfflineCaseSession,
     OfflineExecutionError,
 )
+from packages.evaluation.semantic_ambiguity_fixture import (
+    SemanticClarificationSession,
+    pinned_semantic_ambiguity,
+)
 from packages.model_gateway import DeepSeekGateway, FakeGateway, GatewayResponse, GatewayUsage
 from packages.platform_core.database import Base
 from packages.platform_core.models import User, Workspace
 from packages.shared_contracts.agents import CreateAnalysisRunRequest
 
-ADAPTER_VERSION = "draft-clarification-v3"
+ADAPTER_VERSION = "draft-clarification-v4"
 AMBIGUITY_CASES = {
     "ambiguity-quality-overview": ("看看质量情况", "metric_query", (), "metric_required"),
     "ambiguity-production-overview": ("看看生产情况", "metric_query", (), "metric_required"),
@@ -307,6 +311,7 @@ def draft_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
         pinned_ambiguity(case) is None
         and pinned_model_failure(case) is None
         and pinned_provider_failure(case) is None
+        and pinned_semantic_ambiguity(case) is None
     ):
         yield _UnavailableSession()
         return
@@ -328,7 +333,9 @@ def draft_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             )
             db.add_all([user, workspace])
             db.commit()
-            if pinned_provider_failure(case) is not None:
+            if pinned_semantic_ambiguity(case) is not None:
+                yield SemanticClarificationSession(db, user, workspace, case)
+            elif pinned_provider_failure(case) is not None:
                 yield _ProviderFailureSession(db, user, workspace, case)
             elif pinned_model_failure(case) is not None:
                 yield _ModelFailureSession(db, user, workspace, case)

@@ -157,7 +157,7 @@ def test_cli_partial_coverage_returns_nonzero_and_never_overwrites_report(
     assert payload["summary"]["passed"] == 1
     assert payload["summary"]["blocked"] == 4
     assert payload["summary"]["coverage_rate"] == "0.2"
-    assert payload["adapter_version"] == "draft-clarification-v3"
+    assert payload["adapter_version"] == "draft-clarification-v4"
     assert "runtime_profile" in payload
     original = target.read_bytes()
     with pytest.raises(FileExistsError):
