@@ -59,32 +59,32 @@ def test_api_create_is_idempotent_and_freezes_draft_identity(context) -> None:
     assert db.scalar(select(func.count()).select_from(EvaluationCaseResult)) == 9
 
 
-def test_latest_draft_is_discoverable_and_creates_all_55_cases(context) -> None:
+def test_latest_draft_is_discoverable_and_creates_all_62_cases(context) -> None:
     client, db, fixture, _ = context
     url = f"/api/v1/workspaces/{fixture.workspace_id}/evaluations"
     suites = client.get(f"{url}/suites")
     assert suites.status_code == 200
     newest = suites.json()["items"][0]
-    assert newest["suite_version"] == "0.1.8"
-    assert newest["case_count"] == 55
+    assert newest["suite_version"] == "0.1.9"
+    assert newest["case_count"] == 62
     assert newest["published"] is False
     assert newest["category_counts"] == {
         "standard": 21,
         "multi_turn": 5,
         "ambiguity": 3,
-        "anomaly": 6,
+        "anomaly": 13,
         "security": 20,
     }
     created = client.post(
         url,
-        json={"suite_version": "0.1.8", "track": "offline", "max_seconds": 300},
-        headers={"Idempotency-Key": "evaluation-api-v018"},
+        json={"suite_version": "0.1.9", "track": "offline", "max_seconds": 300},
+        headers={"Idempotency-Key": "evaluation-api-v019"},
     )
     assert created.status_code == 201
     assert created.json()["suite_digest"] == newest["suite_digest"]
     assert created.json()["calls_used"] == 0
-    assert client.get(f"{url}/{created.json()['id']}/cases?limit=50").json()["total"] == 55
-    assert db.scalar(select(func.count()).select_from(EvaluationCaseResult)) == 55
+    assert client.get(f"{url}/{created.json()['id']}/cases?limit=50").json()["total"] == 62
+    assert db.scalar(select(func.count()).select_from(EvaluationCaseResult)) == 62
 
 
 @pytest.mark.parametrize(

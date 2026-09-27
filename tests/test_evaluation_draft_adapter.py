@@ -22,6 +22,53 @@ def test_model_failures_use_runtime_and_never_create_trusted_results() -> None:
     assert len(result.run_references) == 3
 
 
+def test_provider_faults_exercise_real_gateway_retry_and_safe_agent_failure() -> None:
+    from packages.evaluation.draft_adapter import pinned_provider_failure
+
+    previous = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.8.json"))
+    suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.9.json"))
+    assert suite.cases[:55] == previous.cases
+    cases = tuple(case for case in suite.cases if case.id.startswith("anomaly-provider-"))
+    assert len(cases) == 7
+    for case in cases:
+        assert pinned_provider_failure(case)
+        assert not pinned_provider_failure(case.model_copy(update={"turns": ("其他问题",)}))
+    result = run_offline_suite(suite.model_copy(update={"cases": cases}), draft_case_factory)
+    assert result.summary.passed == 7, result.to_json()
+    assert len(result.run_references) == 7
+
+
+@pytest.mark.parametrize("corruption", ["terminal_status", "provider_leak", "retry_flag"])
+def test_provider_fault_contract_rejects_wrong_state_or_leaked_body(
+    monkeypatch, corruption
+) -> None:
+    import packages.evaluation.draft_adapter as adapter
+
+    original = adapter.get_run_view
+
+    def changed_view(*args, **kwargs):
+        view = original(*args, **kwargs)
+        if corruption == "terminal_status":
+            return view.model_copy(update={"run": view.run.model_copy(update={"status": "failed"})})
+        messages = list(view.messages)
+        last = messages[-1]
+        if corruption == "provider_leak":
+            messages[-1] = last.model_copy(
+                update={"content": last.content + "SYNTHETIC_PROVIDER_BODY_CANARY"}
+            )
+        else:
+            context = dict(last.context_patch)
+            context["interaction"] = {**context["interaction"], "retryable": False}
+            messages[-1] = last.model_copy(update={"context_patch": context})
+        return view.model_copy(update={"messages": messages})
+
+    monkeypatch.setattr(adapter, "get_run_view", changed_view)
+    suite = load_suite(Path("evaluations/golden/manufacturing-quality-draft-v0.1.9.json"))
+    case = next(case for case in suite.cases if case.id == "anomaly-provider-rate-limit")
+    result = run_offline_suite(suite.model_copy(update={"cases": (case,)}), draft_case_factory)
+    assert result.summary.passed == 0 and result.summary.infra_error == 1
+
+
 def test_new_model_anomaly_draft_preserves_frozen_previous_cases() -> None:
     from packages.evaluation.registry import SUITE_VERSIONS, registered_suite
 

@@ -87,6 +87,16 @@ def failure_presentation(
         )
     elif code == "model.not_configured":
         content = "模型服务暂时不可用，我已经保留当前进度。配置完成后可以重新尝试。"
+    elif code == "model.authentication_failed":
+        content = (
+            "模型服务的访问配置暂时无法通过验证，我没有继续查询数据，也没有产生可用结论。"
+            "请联系工作区管理员检查模型服务配置，修复后可以重新尝试。"
+        )
+    elif code == "model.request_rejected":
+        content = (
+            "模型服务未能接受本次分析请求，我没有继续查询数据，也没有产生可用结论。"
+            "请联系管理员检查模型接口和请求配置，再重新尝试。"
+        )
     elif code in {
         "model.rate_limited",
         "model.timeout",
