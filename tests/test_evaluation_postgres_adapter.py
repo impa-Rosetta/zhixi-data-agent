@@ -102,6 +102,66 @@ def test_numeric_boundary_source_rows_are_independent_and_inputs_pinned() -> Non
         assert not pinned_numeric_boundary(case.model_copy(update={"category": "standard"}))
 
 
+def test_production_boundaries_use_independent_quantities_and_preserve_previous_suite() -> None:
+    from decimal import Decimal
+
+    from packages.evaluation.production_boundary_fixture import pinned_production_boundary
+
+    previous = registered_suite("0.1.14")
+    suite = registered_suite("0.1.15")
+    assert suite.cases[:88] == previous.cases
+    assert len(suite.cases) == 92 and not suite.published
+    for case in suite.cases[88:]:
+        rows = pinned_production_boundary(case)
+        assert rows and case.category == "anomaly"
+        changed = case.model_copy(
+            update={"expected": case.expected.model_copy(update={"numbers": {}})}
+        )
+        assert pinned_production_boundary(changed) == rows
+        assert not pinned_production_boundary(case.model_copy(update={"turns": ("其他问题",)}))
+        assert not pinned_production_boundary(case.model_copy(update={"category": "standard"}))
+        actual, planned = sum(row[0] for row in rows), sum(row[1] for row in rows)
+        if planned:
+            assert case.expected.numbers == {
+                "plan_completion_rate": Decimal(actual) / Decimal(planned) * 100
+            }
+        else:
+            assert not case.expected.numbers
+
+
+@pytest.mark.parametrize("corruption", [None, "zero", "wrong_metric", "unfounded_reason"])
+def test_zero_plan_requires_null_result_and_safe_natural_explanation(corruption) -> None:
+    from packages.evaluation.postgres_draft_adapter import verify_null_metric
+
+    summary = {"columns": ["plan_completion_rate"], "rows": [[None]], "truncated": False}
+    content = "无法计算，不能把它当作 0；仅凭当前结果还不能确定具体原因。"
+    if corruption == "zero":
+        summary["rows"] = [[0]]
+    elif corruption == "wrong_metric":
+        summary["columns"] = ["defect_rate"]
+    elif corruption == "unfounded_reason":
+        content = "计划达成率为0%，原因是车间停工。"
+    view = cast(
+        AnalysisRunViewResponse,
+        SimpleNamespace(
+            artifacts=[SimpleNamespace(artifact_type="query_result", summary=summary)],
+            messages=[SimpleNamespace(role="assistant", content=content, context_patch={})],
+        ),
+    )
+    assert verify_null_metric(view, "plan_completion_rate") is (corruption is None)
+
+
+@pytest.mark.parametrize("schema", ["public", "eval_unknown", 'eval_";DROP SCHEMA public;--'])
+def test_production_fixture_rejects_unowned_schema_before_any_database_write(schema) -> None:
+    from packages.evaluation.production_boundary_fixture import create_production_fixture
+
+    def unexpected_write(*args):
+        pytest.fail("Unowned schema must not reach the database")
+
+    with pytest.raises(ValueError, match="evaluation.invalid_fixture_schema"):
+        create_production_fixture(SimpleNamespace(execute=unexpected_write), schema, ((1, 2),))
+
+
 def test_condition_change_draft_preserves_previous_cases_and_pins_all_turns() -> None:
     previous = registered_suite("0.1.9")
     current = registered_suite("0.1.10")

@@ -32,6 +32,10 @@ from packages.connectors.postgresql import PostgreSQLConnector
 from packages.evaluation.contracts import EvaluationCase, ObservedOutcome
 from packages.evaluation.draft_adapter import draft_case_factory
 from packages.evaluation.observation import observe_completed_run
+from packages.evaluation.production_boundary_fixture import (
+    create_production_fixture,
+    pinned_production_boundary,
+)
 from packages.evaluation.runner import OfflineCaseExecution, OfflineCaseSession
 from packages.evaluation.versions import OFFLINE_TOOL_VERSION
 from packages.model_gateway import FakeGateway, GatewayResponse, GatewayUsage
@@ -315,7 +319,7 @@ def verify_missing_column_failure(view: AnalysisRunViewResponse) -> bool:
     )
 
 
-def verify_null_metric(view: AnalysisRunViewResponse) -> bool:
+def verify_null_metric(view: AnalysisRunViewResponse, metric_key: str = "defect_rate") -> bool:
     queries = [item for item in view.artifacts if item.artifact_type == "query_result"]
     if len(queries) != 1:
         return False
@@ -325,7 +329,7 @@ def verify_null_metric(view: AnalysisRunViewResponse) -> bool:
         return False
     reply = replies[-1]
     return (
-        summary.get("columns") == ["defect_rate"]
+        summary.get("columns") == [metric_key]
         and summary.get("rows") == [[None]]
         and summary.get("truncated") is False
         and "无法计算" in reply.content
@@ -627,7 +631,9 @@ class _ConversationSession:
         return OfflineCaseExecution(observe_completed_run(view), tuple(run_ids))
 
 
-def _seed(db: Session, *, source_schema: str = "public") -> tuple[User, Workspace]:
+def _seed(
+    db: Session, *, source_schema: str = "public", production_mapping: bool = False
+) -> tuple[User, Workspace]:
     user = User(email="evaluation@example.test", display_name="Evaluator", password_hash="unused")
     workspace = Workspace(name="Synthetic PG Evaluation", slug=f"eval-{uuid.uuid4().hex}")
     db.add_all([user, workspace])
@@ -695,7 +701,7 @@ def _seed(db: Session, *, source_schema: str = "public") -> tuple[User, Workspac
         ("inspection", "quality_inspections", "inspected_quantity", "inspected_quantity"),
         ("inspection", "quality_inspections", "inspection_time", "inspected_at"),
     ]
-    if source_schema == "public":
+    if source_schema == "public" or production_mapping:
         mappings.extend(
             [
                 ("production_order", "production_orders", "order_id", "order_no"),
@@ -803,6 +809,13 @@ class _MonthSession:
         # No metric_executor override: compile, SQL gates, database, evidence are real.
         run_analysis(self.db, run_id=run.id, gateway=gateway)
         view = get_run_view(self.db, workspace_id=self.workspace.id, run_id=run.id)
+        production_rows = pinned_production_boundary(self.case)
+        if (
+            production_rows is not None
+            and sum(planned for _, planned in production_rows) == 0
+            and not verify_null_metric(view, "plan_completion_rate")
+        ):
+            return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
         if pinned_missing_column(self.case):
             valid = verify_missing_column_failure(view)
             return OfflineCaseExecution(
@@ -815,6 +828,7 @@ class _MonthSession:
         if (
             self.case.category == "anomaly"
             and pinned_numeric_boundary(self.case) is None
+            and production_rows is None
             and not verify_null_metric(view)
         ):
             return OfflineCaseExecution(ObservedOutcome(status="failed"), (run.id,))
@@ -834,6 +848,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
     missing_column = pinned_missing_column(case)
     multi_turn = pinned_multiturn(case)
     numeric_boundary = pinned_numeric_boundary(case)
+    production_boundary = pinned_production_boundary(case)
     if case.category == "security":
         from packages.evaluation.security_draft_adapter import security_case_factory
 
@@ -846,6 +861,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
         and not missing_column
         and not multi_turn
         and numeric_boundary is None
+        and production_boundary is None
     ):
         with draft_case_factory(case) as fallback:
             yield fallback
@@ -863,6 +879,7 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
             (case.id == "anomaly-zero-denominator" and anomaly_month is not None)
             or missing_column
             or numeric_boundary is not None
+            or production_boundary is not None
         ):
             # Only this owned synthetic schema is writable; never mutate public source data.
             with admin.begin() as connection:
@@ -902,6 +919,8 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                 connection.execute(
                     text(f'GRANT SELECT ON "{schema}".quality_inspections TO zhixi_reader')
                 )
+                if production_boundary is not None:
+                    create_production_fixture(connection, schema, production_boundary)
         with Session(engine) as db:
             source_schema = (
                 schema
@@ -909,10 +928,13 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                     case.id == "anomaly-zero-denominator"
                     or missing_column
                     or numeric_boundary is not None
+                    or production_boundary is not None
                 )
                 else "public"
             )
-            user, workspace = _seed(db, source_schema=source_schema)
+            user, workspace = _seed(
+                db, source_schema=source_schema, production_mapping=production_boundary is not None
+            )
             if missing_column:
                 # The published snapshot still references the field; change only this owned fixture.
                 with admin.begin() as connection:
@@ -928,7 +950,13 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                 selected_month = (
                     month
                     or anomaly_month
-                    or ("2026年9月" if missing_column or numeric_boundary is not None else None)
+                    or (
+                        "2026年9月"
+                        if missing_column
+                        or numeric_boundary is not None
+                        or production_boundary is not None
+                        else None
+                    )
                 )
                 assert selected_month is not None
                 yield _MonthSession(
@@ -937,7 +965,11 @@ def postgres_case_factory(case: EvaluationCase) -> Iterator[OfflineCaseSession]:
                     workspace,
                     case,
                     selected_month,
-                    metric_name if month is not None and metric_name is not None else "不良率",
+                    "计划达成率"
+                    if production_boundary is not None
+                    else (
+                        metric_name if month is not None and metric_name is not None else "不良率"
+                    ),
                 )
     finally:
         engine.dispose()
