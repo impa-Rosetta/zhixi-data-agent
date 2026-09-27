@@ -81,6 +81,50 @@ MONTH_CASES = {
     "standard-july-defect-quantity": ("2026年7月的缺陷数量是多少？", "2026年7月", "缺陷数量"),
     "standard-august-defect-quantity": ("2026年8月的缺陷数量是多少？", "2026年8月", "缺陷数量"),
     "standard-september-defect-quantity": ("2026年9月的缺陷数量是多少？", "2026年9月", "缺陷数量"),
+    "standard-2025-oct-production-quantity": (
+        "2025年10月的生产产量是多少？",
+        "2025年10月",
+        "生产产量",
+    ),
+    "standard-2025-oct-planned-quantity": (
+        "2025年10月的计划产量是多少？",
+        "2025年10月",
+        "计划产量",
+    ),
+    "standard-2025-dec-production-quantity": (
+        "2025年12月的实际产量是多少？",
+        "2025年12月",
+        "实际产量",
+    ),
+    "standard-2025-dec-planned-quantity": (
+        "2025年12月的计划数量是多少？",
+        "2025年12月",
+        "计划数量",
+    ),
+    "standard-2026-jan-production-quantity": (
+        "2026年1月的完工数量是多少？",
+        "2026年1月",
+        "完工数量",
+    ),
+    "standard-2026-jan-planned-quantity": ("2026年1月的计划产量是多少？", "2026年1月", "计划产量"),
+    "standard-2026-mar-production-quantity": (
+        "2026年3月的生产产量是多少？",
+        "2026年3月",
+        "生产产量",
+    ),
+    "standard-2026-mar-planned-quantity": ("2026年3月的计划数量是多少？", "2026年3月", "计划数量"),
+    "standard-2026-jul-production-quantity": (
+        "2026年7月的实际产量是多少？",
+        "2026年7月",
+        "实际产量",
+    ),
+    "standard-2026-jul-planned-quantity": ("2026年7月的计划产量是多少？", "2026年7月", "计划产量"),
+    "standard-2026-sep-production-quantity": (
+        "2026年9月的完工数量是多少？",
+        "2026年9月",
+        "完工数量",
+    ),
+    "standard-2026-sep-planned-quantity": ("2026年9月的计划数量是多少？", "2026年9月", "计划数量"),
 }
 ANOMALY_CASES = {
     "anomaly-no-matching-month": ("2000年1月的不良率是多少？", "2000年1月"),
@@ -351,17 +395,32 @@ def _seed(db: Session, *, source_schema: str = "public") -> tuple[User, Workspac
     source.active_snapshot_id = snapshot.id
     db.flush()
     document = manufacturing_quality_template()
-    for attribute, physical in (
-        ("defect_quantity", "defect_quantity"),
-        ("inspected_quantity", "inspected_quantity"),
-        ("inspection_time", "inspected_at"),
-    ):
+    mappings = [
+        ("inspection", "quality_inspections", "defect_quantity", "defect_quantity"),
+        ("inspection", "quality_inspections", "inspected_quantity", "inspected_quantity"),
+        ("inspection", "quality_inspections", "inspection_time", "inspected_at"),
+    ]
+    if source_schema == "public":
+        mappings.extend(
+            [
+                ("production_order", "production_orders", "order_id", "order_no"),
+                ("production_order", "production_orders", "planned_quantity", "planned_quantity"),
+                (
+                    "production_order",
+                    "production_orders",
+                    "produced_quantity",
+                    "completed_quantity",
+                ),
+                ("production_order", "production_orders", "start_time", "started_at"),
+            ]
+        )
+    for entity, relation, attribute, physical in mappings:
         column = db.scalar(
             select(CatalogColumn)
             .join(CatalogRelation)
             .where(
                 CatalogRelation.snapshot_id == snapshot.id,
-                CatalogRelation.name == "quality_inspections",
+                CatalogRelation.name == relation,
                 CatalogColumn.name == physical,
             )
         )
@@ -369,7 +428,7 @@ def _seed(db: Session, *, source_schema: str = "public") -> tuple[User, Workspac
             raise ValueError("evaluation.fixture_column_missing")
         document.mappings.append(
             PhysicalMapping(
-                semantic_attribute=f"inspection.{attribute}",
+                semantic_attribute=f"{entity}.{attribute}",
                 snapshot_id=snapshot.id,
                 relation_id=column.relation_id,
                 column_id=column.id,

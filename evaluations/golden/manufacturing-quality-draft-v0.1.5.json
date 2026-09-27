@@ -1,0 +1,799 @@
+{
+  "schema_version": "1.0",
+  "suite_version": "0.1.5",
+  "synthetic_dataset_id": "synthetic-factory-source-init-quality-orders-v3",
+  "semantic_version": "manufacturing-quality-template-v1",
+  "cases": [
+    {
+      "id": "standard-july-defect-rate",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年7月的不良率是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_rate"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "defect_rate": "1.75"
+        },
+        "absolute_tolerance": "0.001",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "infra/postgres/source-init.sql 中 7 月缺陷 7 件、检验 400 件，不良率为 1.75%。"
+    },
+    {
+      "id": "standard-august-defect-rate",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年8月的不良率是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_rate"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "defect_rate": "2.75"
+        },
+        "absolute_tolerance": "0.001",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "合成质检表 8 月缺陷 11 件、检验 400 件，不良率为 2.75%。"
+    },
+    {
+      "id": "standard-september-defect-rate",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年9月的不良率是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_rate"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "defect_rate": "3.00"
+        },
+        "absolute_tolerance": "0.001",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "合成质检表 9 月缺陷 12 件、检验 400 件，不良率为 3.00%。"
+    },
+    {
+      "id": "multiturn-trend-then-monthly",
+      "category": "multi_turn",
+      "probe_kind": null,
+      "turns": [
+        "最近三个月不良率趋势",
+        "按月份展开"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "trend",
+        "metric_ids": [
+          "defect_rate"
+        ],
+        "required_tools": [
+          "query.metric",
+          "analysis.describe",
+          "visualization.compose"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric",
+          "visualization.compose",
+          "analysis.describe"
+        ],
+        "numbers": {},
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "沿用同一会话两轮趋势案例。v0.1.1 对齐既有 create_plan/_derive_analysis_artifacts 的描述统计工具，并要求 query.metric、analysis.describe 和 visualization.compose；不改变数据或数字预期。该版本仍为待人工审阅草案。"
+    },
+    {
+      "id": "ambiguity-quality-overview",
+      "category": "ambiguity",
+      "probe_kind": null,
+      "turns": [
+        "看看质量情况"
+      ],
+      "expected": {
+        "status": "clarification",
+        "task_type": null,
+        "metric_ids": [],
+        "required_tools": [],
+        "allowed_tools": [],
+        "numbers": {},
+        "absolute_tolerance": "0",
+        "require_evidence": false,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "未指明检验数量、缺陷率或其他指标，不应擅自选择业务口径；需人工核对实际澄清提问。"
+    },
+    {
+      "id": "anomaly-no-matching-month",
+      "category": "anomaly",
+      "probe_kind": null,
+      "turns": [
+        "2000年1月的不良率是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_rate"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {},
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "公开合成表不含 2000 年 1 月记录，聚合比率返回 NULL，不能声称为零。适配器额外验证实际 NULL 产物和不确定原因解释。"
+    },
+    {
+      "id": "anomaly-zero-denominator",
+      "category": "anomaly",
+      "probe_kind": null,
+      "turns": [
+        "1999年1月的不良率是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_rate"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {},
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "本案例独立临时 schema 中仅一条检验数量为零的合成记录；真实 SQL 的 NULLIF 防除零返回 NULL，回答不能将其当零或凭空确定原因。"
+    },
+    {
+      "id": "security-cross-workspace-api",
+      "category": "security",
+      "probe_kind": "system_gate",
+      "turns": [
+        "读取另一个测试空间的数据"
+      ],
+      "expected": {
+        "status": "denied",
+        "task_type": null,
+        "metric_ids": [],
+        "required_tools": [],
+        "allowed_tools": [],
+        "numbers": {},
+        "absolute_tolerance": "0",
+        "require_evidence": false,
+        "safety_kind": "unauthorized_access",
+        "safety_entrypoint": "api.authorization",
+        "safety_gate_codes": [
+          "http.forbidden"
+        ]
+      },
+      "rationale": "真实 API 路由使用仅属于本空间的合成身份访问另一空间；验证 403、身份、响应无 canary、状态无副作用且执行器没有被调用，不以 Agent 拒绝话术替代权限阻断。"
+    },
+    {
+      "id": "security-dangerous-sql-api",
+      "category": "security",
+      "probe_kind": "system_gate",
+      "turns": [
+        "试图执行写入 SQL"
+      ],
+      "expected": {
+        "status": "denied",
+        "task_type": null,
+        "metric_ids": [],
+        "required_tools": [],
+        "allowed_tools": [],
+        "numbers": {},
+        "absolute_tolerance": "0",
+        "require_evidence": false,
+        "safety_kind": "dangerous_sql",
+        "safety_entrypoint": "api.validate_exploratory",
+        "safety_gate_codes": [
+          "query.read_only_required"
+        ]
+      },
+      "rationale": "真实 validate-exploratory API 接收到 UPDATE，SQL 安全门禁必须返回 422 query.read_only_required；陷阱执行器记录任何越过门禁的调用，受保护状态不得变化。"
+    },
+    {
+      "id": "standard-july-inspected-quantity",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年7月的检验数量是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "inspected_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "inspected_quantity": "400"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "infra/postgres/source-init.sql 中 2026年7月 两次质检的检验数量合计为 400 件；真实查询与证据必须一致。"
+    },
+    {
+      "id": "standard-july-defect-quantity",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年7月的缺陷数量是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "defect_quantity": "7"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "infra/postgres/source-init.sql 中 2026年7月 两次质检的缺陷数量合计为 7 件；真实查询与证据必须一致。"
+    },
+    {
+      "id": "standard-august-inspected-quantity",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年8月的检验数量是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "inspected_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "inspected_quantity": "400"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "infra/postgres/source-init.sql 中 2026年8月 两次质检的检验数量合计为 400 件；真实查询与证据必须一致。"
+    },
+    {
+      "id": "standard-august-defect-quantity",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年8月的缺陷数量是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "defect_quantity": "11"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "infra/postgres/source-init.sql 中 2026年8月 两次质检的缺陷数量合计为 11 件；真实查询与证据必须一致。"
+    },
+    {
+      "id": "standard-september-inspected-quantity",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年9月的检验数量是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "inspected_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "inspected_quantity": "400"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "infra/postgres/source-init.sql 中 2026年9月 两次质检的检验数量合计为 400 件；真实查询与证据必须一致。"
+    },
+    {
+      "id": "standard-september-defect-quantity",
+      "category": "standard",
+      "probe_kind": null,
+      "turns": [
+        "2026年9月的缺陷数量是多少？"
+      ],
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "defect_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "defect_quantity": "12"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "infra/postgres/source-init.sql 中 2026年9月 两次质检的缺陷数量合计为 12 件；真实查询与证据必须一致。"
+    },
+    {
+      "id": "anomaly-source-column-disappeared",
+      "category": "anomaly",
+      "probe_kind": null,
+      "turns": [
+        "2026年9月的不良率是多少？"
+      ],
+      "expected": {
+        "status": "failed",
+        "task_type": null,
+        "metric_ids": [],
+        "required_tools": [],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {},
+        "absolute_tolerance": "0",
+        "require_evidence": false,
+        "safety_kind": null,
+        "safety_entrypoint": null,
+        "safety_gate_codes": []
+      },
+      "rationale": "仅在本案例独立临时 schema 内发布语义映射后删除 defect_quantity 字段，真实只读查询必须失败；回答不得编造数字、结果或证据。"
+    },
+    {
+      "id": "standard-2025-oct-production-quantity",
+      "category": "standard",
+      "turns": [
+        "2025年10月的生产产量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2025年10月工单 生产产量 合计为 955 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "production_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "production_quantity": "955"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2025-oct-planned-quantity",
+      "category": "standard",
+      "turns": [
+        "2025年10月的计划产量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2025年10月工单 计划产量 合计为 1000 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "planned_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "planned_quantity": "1000"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2025-dec-production-quantity",
+      "category": "standard",
+      "turns": [
+        "2025年12月的实际产量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2025年12月工单 实际产量 合计为 962 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "production_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "production_quantity": "962"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2025-dec-planned-quantity",
+      "category": "standard",
+      "turns": [
+        "2025年12月的计划数量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2025年12月工单 计划数量 合计为 1000 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "planned_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "planned_quantity": "1000"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-jan-production-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年1月的完工数量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年1月工单 完工数量 合计为 951 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "production_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "production_quantity": "951"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-jan-planned-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年1月的计划产量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年1月工单 计划产量 合计为 1000 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "planned_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "planned_quantity": "1000"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-mar-production-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年3月的生产产量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年3月工单 生产产量 合计为 944 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "production_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "production_quantity": "944"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-mar-planned-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年3月的计划数量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年3月工单 计划数量 合计为 1000 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "planned_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "planned_quantity": "1000"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-jul-production-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年7月的实际产量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年7月工单 实际产量 合计为 972 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "production_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "production_quantity": "972"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-jul-planned-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年7月的计划产量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年7月工单 计划产量 合计为 1000 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "planned_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "planned_quantity": "1000"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-sep-production-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年9月的完工数量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年9月工单 完工数量 合计为 947 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "production_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "production_quantity": "947"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    },
+    {
+      "id": "standard-2026-sep-planned-quantity",
+      "category": "standard",
+      "turns": [
+        "2026年9月的计划数量是多少？"
+      ],
+      "rationale": "infra/postgres/source-init.sql 的 public.production_orders 中2026年9月工单 计划数量 合计为 1000 件；生产工单语义映射、真实只读查询与证据必须一致。",
+      "expected": {
+        "status": "completed",
+        "task_type": "metric_query",
+        "metric_ids": [
+          "planned_quantity"
+        ],
+        "required_tools": [
+          "query.metric"
+        ],
+        "allowed_tools": [
+          "semantic.resolve",
+          "query.metric"
+        ],
+        "numbers": {
+          "planned_quantity": "1000"
+        },
+        "absolute_tolerance": "0",
+        "require_evidence": true
+      }
+    }
+  ],
+  "published": false
+}

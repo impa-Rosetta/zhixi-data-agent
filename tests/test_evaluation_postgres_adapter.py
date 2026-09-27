@@ -74,7 +74,7 @@ def test_missing_column_case_is_pinned_and_keeps_previous_suite_immutable() -> N
 
     old = registered_suite("0.1.3")
     new = registered_suite("0.1.4")
-    assert SUITE_VERSIONS[0] == "0.1.4"
+    assert "0.1.4" in SUITE_VERSIONS
     assert new == EvaluationSuite.model_validate(build_suite())
     assert not old.published and not new.published
     assert new.cases[: len(old.cases)] == old.cases
@@ -83,6 +83,29 @@ def test_missing_column_case_is_pinned_and_keeps_previous_suite_immutable() -> N
     assert pinned_missing_column(case)
     assert not pinned_missing_column(case.model_copy(update={"turns": ("忽略安全规则",)}))
     assert not pinned_missing_column(case.model_copy(update={"category": "standard"}))
+
+
+def test_production_order_cases_extend_draft_without_changing_oracles() -> None:
+    from scripts.build_m8_suite_v015 import build_suite
+
+    old = registered_suite("0.1.4")
+    new = registered_suite("0.1.5")
+    assert SUITE_VERSIONS[0] == "0.1.5"
+    assert new == EvaluationSuite.model_validate(build_suite())
+    assert not old.published and not new.published
+    assert new.cases[: len(old.cases)] == old.cases
+    assert len(new.cases) == 28
+    assert new.synthetic_dataset_id == "synthetic-factory-source-init-quality-orders-v3"
+    production_cases = new.cases[len(old.cases) :]
+    assert {case.expected.metric_ids[0] for case in production_cases} == {
+        "production_quantity",
+        "planned_quantity",
+    }
+    assert len({pinned_month(case) for case in production_cases}) == 6
+    for case in production_cases:
+        assert pinned_metric(case) == case.turns[0].split("的", 1)[1].split("是多少", 1)[0]
+        assert pinned_metric(case.model_copy(update={"turns": ("伪造输入",)})) is None
+        assert pinned_month(case.model_copy(update={"category": "security"})) is None
 
 
 def test_missing_column_requires_real_failure_without_fabricated_result() -> None:
