@@ -1,4 +1,4 @@
-"""Deterministic parsing for the bounded relative time phrases accepted by the Agent."""
+"""Deterministic parsing for calendar months and bounded relative time phrases."""
 
 from __future__ import annotations
 
@@ -33,6 +33,16 @@ def resolve_time_range(value: str | None, *, reference: datetime) -> ResolvedTim
     if value is None or value in {"all_available", "全部", "所有时间"}:
         return None
     normalized = value.strip().casefold()
+    calendar_month = re.fullmatch(r"([0-9]{4})(?:-([0-9]{1,2})|年([0-9]{1,2})月)", normalized)
+    if calendar_month:
+        year = int(calendar_month.group(1))
+        month = int(calendar_month.group(2) or calendar_month.group(3))
+        try:
+            start = datetime(year, month, 1, tzinfo=UTC)
+            end = _shift_months(start, 1)
+        except ValueError as exc:
+            raise ValueError("query.invalid_time_range") from exc
+        return ResolvedTimeRange(start, end)
     reference = reference.astimezone(UTC)
     month_start = datetime(reference.year, reference.month, 1, tzinfo=UTC)
     if normalized in {"本月", "this_month"}:
