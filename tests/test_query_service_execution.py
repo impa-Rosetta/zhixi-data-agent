@@ -14,6 +14,8 @@ from apps.api.services import queries
 from packages.connectors.base import ConnectorCredentials, ConnectorError
 from packages.platform_core.database import Base
 from packages.platform_core.models import (
+    CatalogColumn,
+    CatalogColumnProfile,
     CatalogRelation,
     CatalogSchema,
     CatalogSnapshot,
@@ -240,6 +242,53 @@ def _catalog_relation(db, source, snapshot, home_id) -> None:
         )
     )
     db.flush()
+
+
+def test_sensitivity_profile_masks_matching_output_column(query_db, monkeypatch) -> None:
+    db, item, source, snapshot, actor_id, home_id, _ = query_db
+    _catalog_relation(db, source, snapshot, home_id)
+    relation = db.scalar(select(CatalogRelation).where(CatalogRelation.snapshot_id == snapshot.id))
+    assert relation is not None
+    column = CatalogColumn(
+        workspace_id=home_id,
+        data_source_id=source.id,
+        snapshot_id=snapshot.id,
+        relation_id=relation.id,
+        stable_key="public.inspections.secret",
+        name="secret",
+        normalized_name="secret",
+        ordinal_position=1,
+        data_type="text",
+        native_type="text",
+        nullable=True,
+    )
+    db.add(column)
+    db.flush()
+    db.add(
+        CatalogColumnProfile(
+            workspace_id=home_id,
+            data_source_id=source.id,
+            snapshot_id=snapshot.id,
+            column_id=column.id,
+            sensitivity_type="personal_identifier",
+            sensitivity_confidence=1.0,
+        )
+    )
+    db.flush()
+    monkeypatch.setattr(
+        queries,
+        "load_runtime_credentials",
+        lambda *_args: (ConnectorCredentials("reader", "synthetic-only"), object()),
+    )
+    monkeypatch.setattr(
+        queries,
+        "execute_read_only",
+        lambda *_args, **_kwargs: QueryResult(("secret", "value"), (("do-not-show", 2),), False),
+    )
+    response = queries.execute_query(
+        db, workspace_id=home_id, actor_user_id=actor_id, validated_query_id=item.id
+    )
+    assert response.rows == [["***MASKED***", 2]]
 
 
 def test_exploratory_validation_caps_rows_and_persists_untrusted_provenance(query_db) -> None:
