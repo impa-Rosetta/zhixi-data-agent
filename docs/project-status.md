@@ -36,6 +36,8 @@ M9-G9从当前源码构建非root API镜像，在无主机端口、无持久卷�
 
 M7.7-D6以当前生产代码在专用无端口、无卷全栈中复验API、PostgreSQL、Redis、MinIO、Worker、Beat及真实Outbox报告投递；三格式对象摘要、PDF授权下载200、匿名拒绝和撤权403均通过，临时资源已清理。合成报告由数据库直接种子创建，不等于前端/创建接口或正式发布验收。详见[M7.7-D6记录](acceptance/M7.7-D6-current-source-stack-acceptance.md)。
 
+M9-G10复核当前前端：lint、typecheck、生产构建通过；默认并行测试出现70/71的图表附件超时，单文件7/7及串行全套71/71通过，故前端测试稳定性仍未关闭，浏览器图表SVG可见性亦待验收。详见[M9-G10诊断](acceptance/M9-G10-frontend-test-stability-diagnostic-2026-09-28.md)。
+
 ## 里程碑
 
 | 阶段 | 当前状态 | 已实现范围 | 剩余验收 |
