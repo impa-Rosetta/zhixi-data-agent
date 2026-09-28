@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "source_revision": "6f0cc2812e330894c65938f9dc2a6b93062c61c4",
+  "track": "offline",
+  "suite_version": "0.1.19",
+  "suite_digest": "6c156829c0313b791dbd13427dff6878e00816e434dfa60526c3da349f1aad03",
+  "workspace_id": "5b37f42b-7f06-4cd1-a337-648dd80122b0",
+  "dataset_id": "synthetic-factory-source-init-quality-orders-v3",
+  "semantic_version": "manufacturing-quality-template-v1",
+  "model_version": "offline-fixed-v1",
+  "tool_version": "draft-postgres-quality-conversations-v15",
+  "prompt_version": "draft-fixed-v1",
+  "api_image": "sha256:4064b0b22409fa18c841023293c410caf34a14e17bfac467208fe2210120e35b",
+  "worker_image": "sha256:8ba53383dea6c819c8bf5ab44282e84f667410b3a23b466aa18d4c6c9b3e3902",
+  "runs": [
+    {
+      "id": "f1a6c7de-7865-48e5-8efb-fa0008fe7cbc",
+      "status": "completed",
+      "attempt_count": 1,
+      "total": 144,
+      "passed": 144,
+      "failed": 0,
+      "infra_error": 0,
+      "blocked": 0,
+      "coverage_rate": 1,
+      "evaluated_pass_rate": 1,
+      "all_case_pass_rate": 1,
+      "calls_used": 0,
+      "tokens_used": 0,
+      "started_at": "2026-09-28T06:52:28.311394+00:00",
+      "finished_at": "2026-09-28T06:56:06.349893+00:00"
+    },
+    {
+      "id": "970ecef9-08f6-443b-a341-5142ee70c5ca",
+      "status": "completed",
+      "attempt_count": 1,
+      "total": 144,
+      "passed": 144,
+      "failed": 0,
+      "infra_error": 0,
+      "blocked": 0,
+      "coverage_rate": 1,
+      "evaluated_pass_rate": 1,
+      "all_case_pass_rate": 1,
+      "calls_used": 0,
+      "tokens_used": 0,
+      "started_at": "2026-09-28T06:52:28.316735+00:00",
+      "finished_at": "2026-09-28T06:56:06.365847+00:00"
+    }
+  ],
+  "cases_total": 288,
+  "cases_passed": 288,
+  "outbox_total": 2,
+  "outbox_published": 2,
+  "outbox_max_attempts": 1,
+  "remaining_owned_fixture_schemas": 0,
+  "browser_checks": [
+    { "width": 1440, "persisted_trend_rows": 2, "series": 2, "overflow": 0, "refresh_restored": true, "api_results_intercepted": false },
+    { "width": 390, "persisted_trend_rows": 2, "series": 2, "overflow": 0, "refresh_restored": true, "api_results_intercepted": false }
+  ]
+}
