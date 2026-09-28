@@ -16,7 +16,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "minio>=7.2,<8",
   "pymysql>=1.1,<2",
-  "weasyprint==66.0",
+  "weasyprint==70.0",
   "pyjwt>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "psycopg[binary]>=3.2,<4",

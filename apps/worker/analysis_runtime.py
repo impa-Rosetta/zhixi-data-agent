@@ -61,7 +61,12 @@ from packages.agent_core.small_talk import small_talk_response
 from packages.agent_core.time_ranges import resolve_time_range
 from packages.analysis_engine import compose_chart_spec, describe_verified_result
 from packages.model_gateway import ModelGateway, ModelGatewayError
-from packages.semantic_model.models import SemanticModel, SemanticModelVersion
+from packages.semantic_model.models import (
+    SemanticModel,
+    SemanticModelStatus,
+    SemanticModelVersion,
+    SemanticVersionStatus,
+)
 from packages.shared_contracts.queries import QueryFilter, SemanticQueryRequest
 from packages.shared_contracts.semantic_models import SemanticDocument
 from packages.toolkit import build_default_registry
@@ -103,7 +108,13 @@ def _published_semantics(db: Session, run: AnalysisRun) -> tuple[PublishedSemant
     rows = db.execute(
         select(SemanticModel, SemanticModelVersion)
         .join(SemanticModelVersion, SemanticModel.active_version_id == SemanticModelVersion.id)
-        .where(SemanticModel.workspace_id == run.workspace_id)
+        .where(
+            SemanticModel.workspace_id == run.workspace_id,
+            SemanticModel.status == SemanticModelStatus.PUBLISHED,
+            SemanticModelVersion.status == SemanticVersionStatus.PUBLISHED,
+            SemanticModelVersion.workspace_id == run.workspace_id,
+            SemanticModelVersion.semantic_model_id == SemanticModel.id,
+        )
     ).all()
     return tuple(
         PublishedSemantic(

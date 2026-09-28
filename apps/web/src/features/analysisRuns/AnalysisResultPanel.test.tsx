@@ -1,9 +1,19 @@
 import { render, screen } from '@testing-library/react'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 
 import { AnalysisResultPanel } from './AnalysisResultPanel'
 import { AnalysisInspector } from './AnalysisInspector'
-import type { AnalysisRunView } from './types'
+import type { AnalysisArtifact, AnalysisRunView } from './types'
+
+const { chartRender } = vi.hoisted(() => ({ chartRender: vi.fn() }))
+
+// Parent tests verify attachment wiring; the separate SVG test uses real ECharts.
+vi.mock('./AnalysisChart', () => ({
+  AnalysisChart: ({ artifact, source }: { artifact: AnalysisArtifact; source: AnalysisArtifact }) => {
+    chartRender(artifact, source)
+    return <div role="img" aria-label="隔离图表组件" />
+  },
+}))
 
 function resultView(
   summary: Record<string, unknown>,
@@ -210,5 +220,6 @@ test('renders derived statistics and a validated chart attachment', async () => 
 
   expect(screen.getByRole('region', { name: '描述统计' })).toBeInTheDocument()
   expect(screen.getByText('标准差')).toBeInTheDocument()
-  expect(await screen.findByRole('img', { name: '月度不良率趋势 折线图' }, { timeout: 5_000 })).toBeInTheDocument()
+  expect(await screen.findByRole('img', { name: '隔离图表组件' })).toBeInTheDocument()
+  expect(chartRender).toHaveBeenLastCalledWith(view.artifacts[2], view.artifacts[0])
 })
