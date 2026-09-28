@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$OutputDirectory = "output/初赛代码包"
 )
 
@@ -45,6 +45,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead($archive)
 try {
     $entries = @($zip.Entries | Where-Object { $_.Name })
