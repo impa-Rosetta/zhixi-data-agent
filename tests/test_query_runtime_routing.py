@@ -1,7 +1,9 @@
 """Network and failure routing for the read-only query executor."""
 
 import ipaddress
+from contextlib import contextmanager
 from decimal import Decimal
+from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -106,3 +108,100 @@ def test_query_value_conversion_keeps_json_safe_scalars() -> None:
     assert runtime._json_value(True) is True
     assert runtime._json_value(Decimal("2.5")) == 2.5
     assert runtime._json_value(ipaddress.ip_address("10.0.0.1")) == "10.0.0.1"
+
+
+class _Cursor:
+    def __init__(self, *, postgres: bool) -> None:
+        self.postgres = postgres
+        self.description = (
+            [SimpleNamespace(name="amount")]
+            if postgres
+            else [("amount", None, None, None, None, None, None)]
+        )
+        self.commands = []
+        self.fetch_limit = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return None
+
+    def execute(self, sql, parameters=None):
+        self.commands.append((sql, parameters))
+
+    def fetchmany(self, limit):
+        self.fetch_limit = limit
+        return [(Decimal("1.5"),), (Decimal("2.5"),), (Decimal("3.5"),)][:limit]
+
+
+class _Connection:
+    def __init__(self, *, postgres: bool) -> None:
+        self.info = SimpleNamespace(hostaddr="10.1.2.3")
+        self.fake_cursor = _Cursor(postgres=postgres)
+        self.rollback_count = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return None
+
+    def cursor(self):
+        return self.fake_cursor
+
+    def rollback(self):
+        self.rollback_count += 1
+
+
+def test_postgres_enforces_transaction_read_only_and_truncates_before_return(monkeypatch) -> None:
+    target, credentials, rules = _arguments()
+    address = ipaddress.ip_address("10.1.2.3")
+    connection = _Connection(postgres=True)
+    captured = {}
+    verified = []
+
+    def connect(**kwargs):
+        captured.update(kwargs)
+        return connection
+
+    monkeypatch.setattr(runtime.psycopg, "connect", connect)
+    monkeypatch.setattr(runtime, "verify_connected_address", lambda *args: verified.append(args))
+    result = runtime._execute_postgres(
+        target, credentials, rules, (address,), address, "SELECT %s", (7,), 2, 3
+    )
+    assert captured["hostaddr"] == "10.1.2.3"
+    assert "default_transaction_read_only=on" in captured["options"]
+    assert "statement_timeout=3000" in captured["options"]
+    assert verified[0][0] == address and verified[0][1] == (address,)
+    assert connection.fake_cursor.commands == [
+        ("SET TRANSACTION READ ONLY", None),
+        ("SELECT %s", (7,)),
+    ]
+    assert connection.fake_cursor.fetch_limit == 3 and connection.rollback_count == 1
+    assert result == runtime.QueryResult(("amount",), ((1.5,), (2.5,)), True)
+
+
+def test_mysql_uses_read_only_session_and_truncates_before_return(monkeypatch) -> None:
+    target, credentials, rules = _arguments()
+    address = ipaddress.ip_address("10.1.2.3")
+    connection = _Connection(postgres=False)
+    authorized = (address,)
+    connected = []
+    read_only = []
+
+    @contextmanager
+    def connection_context(*args):
+        connected.append(args)
+        yield connection
+
+    monkeypatch.setattr(runtime, "_connect_address", connection_context)
+    monkeypatch.setattr(runtime, "_start_read_only", lambda *args: read_only.append(args))
+    result = runtime._execute_mysql(
+        target, credentials, rules, authorized, address, "SELECT %s", (9,), 2, 4
+    )
+    assert connected == [(target, credentials, rules, authorized, address)]
+    assert read_only == [(connection, 4)]
+    assert connection.fake_cursor.commands == [("SELECT %s", (9,))]
+    assert connection.fake_cursor.fetch_limit == 3 and connection.rollback_count == 1
+    assert result == runtime.QueryResult(("amount",), ((1.5,), (2.5,)), True)
