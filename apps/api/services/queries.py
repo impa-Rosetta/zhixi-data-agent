@@ -348,7 +348,10 @@ def execute_query(
     if item is None:
         raise QueryServiceError("query.not_found", "Validated query not found")
     now = datetime.now(UTC)
-    if item.expires_at < now:
+    expires_at = item.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    if expires_at < now:
         raise QueryServiceError(
             "query.validation_expired", "Validated query has expired; validate it again"
         )
