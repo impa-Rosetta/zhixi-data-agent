@@ -91,14 +91,18 @@ def _project_completed_context(
         return AnalysisConversationContext.model_validate(turn.context_before)
     raw_binding = run.context.get("binding")
     binding = Binding.model_validate(raw_binding) if isinstance(raw_binding, dict) else None
+    artifact_query = select(AnalysisArtifact).where(
+        AnalysisArtifact.workspace_id == run.workspace_id,
+        AnalysisArtifact.run_id == run.id,
+    )
+    if intent.task_type in {"correlation", "anomaly_detection"}:
+        # Explanation revalidates the query and recomputes its derived analysis.
+        # A later chart artifact is not a substitute for the trusted query source.
+        artifact_query = artifact_query.where(AnalysisArtifact.artifact_type == "query_result")
     artifact = db.scalar(
-        select(AnalysisArtifact)
-        .where(
-            AnalysisArtifact.workspace_id == run.workspace_id,
-            AnalysisArtifact.run_id == run.id,
-        )
-        .order_by(AnalysisArtifact.created_at.desc(), AnalysisArtifact.id.desc())
-        .limit(1)
+        artifact_query.order_by(
+            AnalysisArtifact.created_at.desc(), AnalysisArtifact.id.desc()
+        ).limit(1)
     )
     evidence = None
     if artifact is not None:
@@ -163,6 +167,8 @@ def _previous_intent_run(
                 "comparison",
                 "ranking",
                 "trend",
+                "correlation",
+                "anomaly_detection",
                 "exploration",
             }:
                 return previous_run, intent

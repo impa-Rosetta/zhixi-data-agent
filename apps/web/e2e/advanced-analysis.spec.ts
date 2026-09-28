@@ -1,0 +1,46 @@
+import { expect, test } from '@playwright/test'
+
+test('advanced analysis persists five turns, visible charts and downloadable reports', async ({ page }, testInfo) => {
+  const conversationId = process.env.ADVANCED_CONVERSATION_ID
+  const password = process.env.E2E_PASSWORD
+  test.skip(!conversationId || !password, 'Owned advanced acceptance fixture is required')
+  await page.goto('/login')
+  await page.getByLabel('邮箱').fill(process.env.E2E_EMAIL ?? 'evaluation@example.test')
+  await page.getByLabel('密码').fill(password!)
+  await page.getByRole('button', { name: '登录' }).click()
+  await expect(page).toHaveURL(/\/app\/?$/)
+  await page.goto(`/app/conversations/${conversationId}`)
+  const correlations = page.getByRole('region', { name: '相关性分析', exact: true })
+  await expect(correlations).toHaveCount(2)
+  await expect(correlations.nth(0).getByText('Pearson', { exact: true })).toBeVisible()
+  await expect(correlations.nth(1).getByText('Spearman', { exact: true })).toBeVisible()
+  const anomaly = page.getByRole('region', { name: 'IQR 异常检测', exact: true })
+  await expect(anomaly.getByRole('cell', { name: '60', exact: true })).toBeVisible()
+  await expect(anomaly.getByRole('cell', { name: '高于上界', exact: true })).toBeVisible()
+  const charts = page.getByRole('region', { name: '分析图表', exact: true })
+  await expect(charts).toHaveCount(3)
+  for (const chart of await charts.all()) {
+    await chart.scrollIntoViewIfNeeded()
+    await expect(chart.locator('svg')).toBeVisible()
+    expect(await chart.locator('svg path').count()).toBeGreaterThan(10)
+  }
+  await expect(page.getByPlaceholder('输入问题或继续追问…')).toBeVisible()
+  const reports = page.getByRole('region', { name: '可信分析报告' })
+  await expect(reports.getByText('已生成', { exact: true })).toBeVisible()
+  await reports.getByRole('button', { name: '在线预览', exact: true }).click()
+  const preview = page.frameLocator('iframe[title="高级分析联合验收（模拟数据）预览"]')
+  await expect(preview.getByRole('heading', { name: '高级分析联合验收（模拟数据）', exact: true })).toBeVisible()
+  expect(await preview.locator('svg circle').count()).toBeGreaterThanOrEqual(24)
+  await expect(preview.locator('svg circle[fill="#dc4c64"]')).toHaveCount(1)
+  const downloaded = page.waitForEvent('download')
+  await reports.getByRole('button', { name: 'PDF', exact: true }).click()
+  const file = await downloaded
+  expect(await file.failure()).toBeNull()
+  expect(file.suggestedFilename()).toBe('高级分析联合验收（模拟数据）.pdf')
+  await file.saveAs(testInfo.outputPath('advanced-report.pdf'))
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1)
+  await page.screenshot({ path: testInfo.outputPath('advanced-report.png'), fullPage: true })
+  await page.reload()
+  await expect(correlations).toHaveCount(2)
+  await expect(page.getByPlaceholder('输入问题或继续追问…')).toBeVisible()
+})

@@ -1,0 +1,88 @@
+name: zhixi-advanced-acceptance
+
+x-env: &env
+  DATABASE_URL: postgresql+psycopg://synthetic:synthetic-local-only@platform-advanced:5432/advanced
+  REDIS_URL: redis://redis-advanced:6379/0
+  S3_ENDPOINT_URL: http://minio-advanced:9000
+  S3_ACCESS_KEY: advanced-fixture
+  S3_SECRET_KEY: advanced-fixture-local-only
+  S3_BUCKET: advanced-acceptance
+  DEEPSEEK_API_KEY: ''
+  CORS_ORIGINS: '["http://127.0.0.1:58142"]'
+  DATA_SOURCE_ALLOWED_PRIVATE_CIDRS: '["172.16.0.0/12"]'
+
+services:
+  platform-advanced:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: synthetic
+      POSTGRES_PASSWORD: synthetic-local-only
+      POSTGRES_DB: advanced
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U synthetic -d advanced']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  source-evaluation:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: source_admin
+      POSTGRES_PASSWORD: source-admin-local-only
+      POSTGRES_DB: factory_demo
+    tmpfs: [/var/lib/postgresql/data]
+    volumes:
+      - ../postgres/source-init.sql:/docker-entrypoint-initdb.d/source.sql:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U source_admin -d factory_demo']
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  redis-advanced:
+    image: redis:7.4-alpine
+  minio-advanced:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: advanced-fixture
+      MINIO_ROOT_PASSWORD: advanced-fixture-local-only
+    tmpfs: [/data]
+  api-advanced:
+    image: zhixi-advanced-api:acceptance
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+      labels:
+        org.opencontainers.image.revision: ${ADVANCED_ACCEPTANCE_REVISION:?revision required}
+    environment: *env
+    ports: ['127.0.0.1:58141:8000']
+    depends_on:
+      platform-advanced: {condition: service_healthy}
+      source-evaluation: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  worker-advanced:
+    image: zhixi-advanced-worker:acceptance
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+      labels:
+        org.opencontainers.image.revision: ${ADVANCED_ACCEPTANCE_REVISION:?revision required}
+    environment: *env
+  beat-advanced:
+    image: zhixi-advanced-worker:acceptance
+    environment: *env
+    command: [celery, -A, 'apps.worker.celery_app:celery_app', beat, --loglevel=INFO, '--schedule=/tmp/advanced-beat', '--pidfile=/tmp/advanced-beat.pid']
+  web-advanced:
+    image: zhixi-advanced-web:acceptance
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://127.0.0.1:58141
+      labels:
+        org.opencontainers.image.revision: ${ADVANCED_ACCEPTANCE_REVISION:?revision required}
+    ports: ['127.0.0.1:58142:80']

@@ -2,6 +2,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -11,7 +12,10 @@ from apps.api.services.analysis_conversations import (
     send_conversation_message,
 )
 from apps.worker.analysis_runtime import run_analysis
-from packages.agent_core.conversation_runtime import synchronize_conversation_after_run
+from packages.agent_core.conversation_runtime import (
+    prepare_conversation_run,
+    synchronize_conversation_after_run,
+)
 from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisEvent,
@@ -146,6 +150,43 @@ def _send_follow_up(
     run = db.get(AnalysisRun, turn.analysis_run_id)
     assert run is not None
     return turn, run
+
+
+@pytest.mark.parametrize("task", ["correlation", "anomaly_detection"])
+@pytest.mark.parametrize(
+    "message,relation", [("改用Spearman重新计算", "refine"), ("解释这个结果", "explain")]
+)
+def test_advanced_follow_up_preserves_previous_analysis(task, message, relation) -> None:
+    db, user, workspace = _database()
+    conversation_id, first_run, source = _completed_first_turn(db, user, workspace)
+    first_run.context = {
+        **first_run.context,
+        "intent": {**first_run.context["intent"], "task_type": task},
+    }
+    db.add(
+        AnalysisArtifact(
+            workspace_id=workspace.id,
+            run_id=first_run.id,
+            artifact_type="chart_spec",
+            summary={},
+            content_digest="c" * 64,
+        )
+    )
+    db.flush()
+    synchronize_conversation_after_run(db, run_id=first_run.id)
+    db.commit()
+    turn, run = _send_follow_up(
+        db, user, workspace, conversation_id, key="advanced-follow-up", message=message
+    )
+    offline = FakeGateway([])
+    decision, usage = prepare_conversation_run(db, run=run, gateway=offline)
+    assert decision is not None and decision.relation == relation
+    assert turn.relation.value == relation
+    assert run.context["intent"]["task_type"] == task
+    assert run.context["previous_run_id"] == str(first_run.id)
+    assert run.context["conversation_context"]["last_result"]["artifact_id"] == str(source.id)
+    assert run.context["intent_revision_pending"] is (relation == "refine")
+    assert usage.model_calls == 0 and offline.calls == []
 
 
 def test_refine_follow_up_inherits_previous_intent_before_binding() -> None:
