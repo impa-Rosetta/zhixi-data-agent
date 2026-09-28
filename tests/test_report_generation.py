@@ -2,10 +2,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from celery.exceptions import Retry
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from apps.worker.tasks import analysis_reports as report_tasks
 from packages.agent_core.persistence import (
     AnalysisConversation,
     AnalysisConversationStatus,
@@ -127,6 +129,78 @@ def test_render_report_produces_three_hashed_formats() -> None:
     assert [item.extension for item in generated.files] == ["md", "html", "pdf"]
     assert all(len(item.sha256_digest) == 64 for item in generated.files)
     assert len(generated.content_digest) == 64
+    db.close()
+
+
+def test_worker_task_claims_renders_and_publishes_three_files(monkeypatch) -> None:
+    db, report = _database()
+    engine = db.get_bind()
+    storage = MemoryStorage()
+    monkeypatch.setattr(report_tasks, "get_engine", lambda: engine)
+    monkeypatch.setattr(report_tasks, "_storage", lambda: storage)
+    monkeypatch.setattr(
+        report_tasks,
+        "render_report",
+        lambda spec: render_report(spec, pdf_renderer=lambda _: b"%PDF-1.7 synthetic"),
+    )
+
+    report_tasks.generate_analysis_report.run(str(report.id))
+
+    db.refresh(report)
+    assert report.status is AnalysisReportStatus.SUCCEEDED
+    assert len(storage.objects) == 3
+    assert len(list(db.scalars(select(AnalysisReportFile)))) == 3
+    assert report_tasks.generate_analysis_report.run(str(report.id)) is None
+    assert storage.put_count == 3
+    db.close()
+
+
+def test_worker_storage_outage_requeues_and_raises_retry(monkeypatch) -> None:
+    db, report = _database()
+    engine = db.get_bind()
+    retries = []
+
+    def retry(*, exc, countdown):
+        retries.append((exc.code, countdown))
+        raise Retry("synthetic retry")
+
+    monkeypatch.setattr(report_tasks, "get_engine", lambda: engine)
+    monkeypatch.setattr(report_tasks, "_storage", lambda: MemoryStorage(fail=True))
+    monkeypatch.setattr(report_tasks.generate_analysis_report, "retry", retry)
+    monkeypatch.setattr(
+        report_tasks,
+        "render_report",
+        lambda spec: render_report(spec, pdf_renderer=lambda _: b"%PDF-1.7 synthetic"),
+    )
+
+    with pytest.raises(Retry):
+        report_tasks.generate_analysis_report.run(str(report.id))
+
+    db.refresh(report)
+    assert report.status is AnalysisReportStatus.QUEUED
+    assert report.error_code == "report.storage_unavailable"
+    assert retries == [("report.storage_unavailable", 2)]
+    assert list(db.scalars(select(AnalysisReportFile))) == []
+    db.close()
+
+
+def test_worker_invalid_report_spec_fails_without_render_or_retry(monkeypatch) -> None:
+    db, report = _database()
+    engine = db.get_bind()
+    report.report_spec = {"invalid": True}
+    db.commit()
+    monkeypatch.setattr(report_tasks, "get_engine", lambda: engine)
+    monkeypatch.setattr(report_tasks, "render_report", lambda *_args: pytest.fail("rendered"))
+    monkeypatch.setattr(
+        report_tasks.generate_analysis_report, "retry", lambda **_kwargs: pytest.fail("retried")
+    )
+
+    assert report_tasks.generate_analysis_report.run(str(report.id)) is None
+
+    db.refresh(report)
+    assert report.status is AnalysisReportStatus.FAILED
+    assert report.error_code == "report.spec_invalid"
+    assert list(db.scalars(select(AnalysisReportFile))) == []
     db.close()
 
 
