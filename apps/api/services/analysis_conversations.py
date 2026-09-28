@@ -2,6 +2,8 @@
 
 import re
 import uuid
+from collections.abc import Sequence
+from typing import cast
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -479,17 +481,22 @@ def list_conversations(
         .correlate(AnalysisConversation)
         .scalar_subquery()
     )
-    rows = db.execute(
-        select(
-            AnalysisConversation,
-            active_status.label("active_turn_status"),
-            last_message.label("last_message"),
+    rows = cast(
+        Sequence[tuple[AnalysisConversation, AnalysisTurnStatus | None, str | None]],
+        db.execute(
+            select(
+                AnalysisConversation,
+                active_status.label("active_turn_status"),
+                last_message.label("last_message"),
+            )
+            .where(AnalysisConversation.workspace_id == workspace_id)
+            .order_by(AnalysisConversation.updated_at.desc(), AnalysisConversation.id.desc())
+            .offset(bounded_offset)
+            .limit(bounded_limit)
         )
-        .where(AnalysisConversation.workspace_id == workspace_id)
-        .order_by(AnalysisConversation.updated_at.desc(), AnalysisConversation.id.desc())
-        .offset(bounded_offset)
-        .limit(bounded_limit)
-    ).all()
+        .tuples()
+        .all(),
+    )
     return AnalysisConversationPage(
         items=[
             _summary(conversation, turn_status, message)

@@ -109,8 +109,12 @@ test('downloads a protected PDF as a blob with the access token', async () => {
 
   const file = await client.requestBlob('/api/v1/workspaces/w/reports/r/files/pdf')
 
-  expect(file).toBeInstanceOf(Blob)
+  // Fetch and jsdom may provide Blob constructors from different realms.
+  expect(Object.prototype.toString.call(file)).toBe('[object Blob]')
+  expect(file.type).toBe('application/pdf')
+  expect(file.size).toBe(8)
   await expect(file.text()).resolves.toBe('%PDF-1.7')
+  await expect(file.arrayBuffer()).resolves.toEqual(new TextEncoder().encode('%PDF-1.7').buffer)
   expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization'))
     .toBe('Bearer report-access')
 })
