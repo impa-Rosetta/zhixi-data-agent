@@ -34,7 +34,13 @@ from packages.query_engine.models import (
     ValidatedQuery,
 )
 from packages.query_engine.runtime import QueryResult
-from packages.shared_contracts.queries import ExploratoryQueryRequest
+from packages.semantic_model.models import (
+    SemanticModel,
+    SemanticModelStatus,
+    SemanticModelVersion,
+    SemanticVersionStatus,
+)
+from packages.shared_contracts.queries import ExploratoryQueryRequest, SemanticQueryRequest
 
 
 @pytest.fixture
@@ -332,3 +338,131 @@ def test_exploratory_validation_rejects_unsafe_or_uncatalogued_sql(query_db, sql
             payload=ExploratoryQueryRequest(data_source_id=source.id, sql=sql),
         )
     assert set(db.scalars(select(ValidatedQuery.id))) == before
+
+
+def _published_metric(db, source, snapshot, actor_id, home_id):
+    _catalog_relation(db, source, snapshot, home_id)
+    relation = db.scalar(select(CatalogRelation).where(CatalogRelation.snapshot_id == snapshot.id))
+    assert relation is not None
+    column = CatalogColumn(
+        workspace_id=home_id,
+        data_source_id=source.id,
+        snapshot_id=snapshot.id,
+        relation_id=relation.id,
+        stable_key="public.inspections.amount",
+        name="amount",
+        normalized_name="amount",
+        ordinal_position=1,
+        data_type="number",
+        native_type="numeric",
+        nullable=False,
+    )
+    db.add(column)
+    model = SemanticModel(
+        workspace_id=home_id,
+        name="Synthetic output",
+        status=SemanticModelStatus.PUBLISHED,
+        created_by_user_id=actor_id,
+        updated_by_user_id=actor_id,
+    )
+    db.add(model)
+    db.flush()
+    document = {
+        "entities": [
+            {
+                "key": "inspection",
+                "name": "质检",
+                "attributes": [{"key": "amount", "name": "数量", "data_type": "number"}],
+            }
+        ],
+        "metrics": [
+            {
+                "key": "output",
+                "name": "产量",
+                "description": "合成产量",
+                "formula": {"type": "sum", "attribute": "inspection.amount"},
+                "unit": "件",
+            }
+        ],
+        "mappings": [
+            {
+                "semantic_attribute": "inspection.amount",
+                "snapshot_id": str(snapshot.id),
+                "relation_id": str(relation.id),
+                "column_id": str(column.id),
+                "confirmed": True,
+                "confidence": 1.0,
+                "reason": "synthetic fixture",
+            }
+        ],
+    }
+    version = SemanticModelVersion(
+        workspace_id=home_id,
+        semantic_model_id=model.id,
+        revision=1,
+        status=SemanticVersionStatus.PUBLISHED,
+        document=document,
+        counts={},
+        content_digest="b" * 64,
+        created_by_user_id=actor_id,
+        published_by_user_id=actor_id,
+    )
+    db.add(version)
+    db.flush()
+    model.active_version_id = version.id
+    return model, version, column
+
+
+def test_published_metric_compiles_to_persisted_trusted_query(query_db) -> None:
+    db, _, source, snapshot, actor_id, home_id, _ = query_db
+    model, version, _ = _published_metric(db, source, snapshot, actor_id, home_id)
+    response = queries.compile_query(
+        db,
+        workspace_id=home_id,
+        actor_user_id=actor_id,
+        payload=SemanticQueryRequest(semantic_model_id=model.id, metrics=["output"], limit=5),
+    )
+    persisted = db.get(ValidatedQuery, response.id)
+    assert persisted is not None
+    assert persisted.trust is QueryTrust.TRUSTED
+    assert persisted.semantic_version_id == version.id
+    assert persisted.snapshot_id == snapshot.id
+    assert persisted.row_limit == 5
+    assert "SUM(" in persisted.sql_text.upper()
+    assert "LIMIT 6" in persisted.sql_text.upper()
+    assert response.digest == persisted.digest
+
+
+def test_stale_semantic_mapping_cannot_compile(query_db) -> None:
+    db, _, source, snapshot, actor_id, home_id, _ = query_db
+    model, version, _ = _published_metric(db, source, snapshot, actor_id, home_id)
+    version.document = {
+        **version.document,
+        "mappings": [{**version.document["mappings"][0], "snapshot_id": str(uuid.uuid4())}],
+    }
+    with pytest.raises(queries.QueryServiceError) as caught:
+        queries.compile_query(
+            db,
+            workspace_id=home_id,
+            actor_user_id=actor_id,
+            payload=SemanticQueryRequest(semantic_model_id=model.id, metrics=["output"]),
+        )
+    assert caught.value.code == "query.mapping_stale"
+    assert (
+        db.scalar(select(ValidatedQuery.id).where(ValidatedQuery.semantic_model_id == model.id))
+        is None
+    )
+
+
+def test_draft_semantic_version_cannot_compile(query_db) -> None:
+    db, _, source, snapshot, actor_id, home_id, _ = query_db
+    model, version, _ = _published_metric(db, source, snapshot, actor_id, home_id)
+    version.status = SemanticVersionStatus.DRAFT
+    with pytest.raises(queries.QueryServiceError) as caught:
+        queries.compile_query(
+            db,
+            workspace_id=home_id,
+            actor_user_id=actor_id,
+            payload=SemanticQueryRequest(semantic_model_id=model.id, metrics=["output"]),
+        )
+    assert caught.value.code == "query.semantic_model_unpublished"
