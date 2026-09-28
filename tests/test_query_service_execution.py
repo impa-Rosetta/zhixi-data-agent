@@ -14,6 +14,8 @@ from apps.api.services import queries
 from packages.connectors.base import ConnectorCredentials, ConnectorError
 from packages.platform_core.database import Base
 from packages.platform_core.models import (
+    CatalogRelation,
+    CatalogSchema,
     CatalogSnapshot,
     DataSource,
     DataSourceStatus,
@@ -30,6 +32,7 @@ from packages.query_engine.models import (
     ValidatedQuery,
 )
 from packages.query_engine.runtime import QueryResult
+from packages.shared_contracts.queries import ExploratoryQueryRequest
 
 
 @pytest.fixture
@@ -211,3 +214,72 @@ def test_connector_failure_persists_safe_failure_without_result(query_db, monkey
     assert persisted.error_code == "query.timeout"
     assert persisted.rows == [] and persisted.evidence_digest is None
     assert persisted.evidence["query_digest"] == item.digest
+
+
+def _catalog_relation(db, source, snapshot, home_id) -> None:
+    schema = CatalogSchema(
+        workspace_id=home_id,
+        data_source_id=source.id,
+        snapshot_id=snapshot.id,
+        stable_key="public",
+        name="public",
+        normalized_name="public",
+    )
+    db.add(schema)
+    db.flush()
+    db.add(
+        CatalogRelation(
+            workspace_id=home_id,
+            data_source_id=source.id,
+            snapshot_id=snapshot.id,
+            schema_id=schema.id,
+            stable_key="public.inspections",
+            name="inspections",
+            normalized_name="inspections",
+            relation_type="table",
+        )
+    )
+    db.flush()
+
+
+def test_exploratory_validation_caps_rows_and_persists_untrusted_provenance(query_db) -> None:
+    db, _, source, snapshot, actor_id, home_id, _ = query_db
+    _catalog_relation(db, source, snapshot, home_id)
+    response = queries.validate_exploratory_query(
+        db,
+        workspace_id=home_id,
+        actor_user_id=actor_id,
+        payload=ExploratoryQueryRequest(
+            data_source_id=source.id, sql="SELECT * FROM public.inspections", limit=7
+        ),
+    )
+    persisted = db.get(ValidatedQuery, response.id)
+    assert persisted is not None
+    assert persisted.trust is QueryTrust.EXPLORATORY
+    assert persisted.snapshot_id == snapshot.id
+    assert persisted.row_limit == 7
+    assert "LIMIT 8" in persisted.sql_text.upper()
+    assert persisted.safety_report["warning"] == "exploratory_sql"
+    assert response.digest == persisted.digest
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "DELETE FROM public.inspections",
+        "SELECT * FROM public.unknown_table",
+        "SELECT * FROM public.inspections; DROP TABLE public.inspections",
+    ],
+)
+def test_exploratory_validation_rejects_unsafe_or_uncatalogued_sql(query_db, sql) -> None:
+    db, _, source, snapshot, actor_id, home_id, _ = query_db
+    _catalog_relation(db, source, snapshot, home_id)
+    before = set(db.scalars(select(ValidatedQuery.id)))
+    with pytest.raises(queries.QueryServiceError):
+        queries.validate_exploratory_query(
+            db,
+            workspace_id=home_id,
+            actor_user_id=actor_id,
+            payload=ExploratoryQueryRequest(data_source_id=source.id, sql=sql),
+        )
+    assert set(db.scalars(select(ValidatedQuery.id))) == before
