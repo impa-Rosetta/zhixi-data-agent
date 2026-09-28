@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
   const caseItems: Array<{ case_id: string; category: string; status: string; assertion_results: Array<{ name: string; passed: boolean }>; duration_ms: number; error_code: string | null }> = []
   const comparisonSummary: Record<string, unknown> = {}
   return {
-  role: 'workspace_admin', manage: true, enabled: true,
+  role: 'workspace_admin', manage: true, enabled: true, runsLoading: false, runsError: false,
   summary, command: vi.fn(), runItems, caseItems, runsTotal: 0, casesTotal: 0,
   runPage: vi.fn(), caseFilter: vi.fn(),
   comparisonSummary, comparisonDigest: 'a'.repeat(64),
@@ -27,11 +27,12 @@ vi.mock('../features/evaluations/api', () => ({
   } }),
   useEvaluationRuns: (_workspace: string, page: number) => {
     mocks.runPage(page)
-    return { data: { items: mocks.runItems, total: mocks.runsTotal } }
+    return { data: { items: mocks.runItems, total: mocks.runsTotal }, isLoading: mocks.runsLoading, isError: mocks.runsError }
   },
   useEvaluationDetail: (_workspace: string, id: string | undefined) => ({ data: id ? {
-    id, status: 'completed', track: 'offline', model_version: 'offline-fixed-v1',
+    id, workspace_id: 'fixture', status: 'completed', track: 'offline', model_version: 'offline-fixed-v1',
     suite_version: '0.1.2', dataset_id: 'synthetic-fixture', semantic_version: 'fixture-v1',
+    tool_version: 'fixture-tools-v1', prompt_version: 'fixture-prompt-v1',
     suite_digest: id === 'run' ? 'a'.repeat(64) : mocks.comparisonDigest,
     summary: id === 'run' ? mocks.summary : mocks.comparisonSummary,
     calls_used: 0, tokens_used: 0, attempt_count: 1, error_code: null,
@@ -45,6 +46,7 @@ vi.mock('../features/evaluations/api', () => ({
 
 beforeEach(() => {
   mocks.role = 'workspace_admin'; mocks.manage = true; mocks.enabled = true
+  mocks.runsLoading = false; mocks.runsError = false
   mocks.summary = {}; mocks.command.mockReset()
   mocks.runsTotal = 1; mocks.casesTotal = 0
   mocks.runItems = [{ id: 'run', suite_version: '0.1.2', track: 'offline', status: 'completed', created_at: new Date().toISOString() }]
@@ -102,7 +104,7 @@ test('server pages and filters are navigable rather than silently truncating res
   mocks.caseItems = [{ case_id: 'first-case', category: 'standard', status: 'passed', assertion_results: [], duration_ms: 1, error_code: null }]
   show()
   fireEvent.click(screen.getByRole('button', { name: '下一页' }))
-  expect(mocks.runPage).toHaveBeenLastCalledWith(1)
+  expect(mocks.runPage).toHaveBeenCalledWith(1)
   fireEvent.click(screen.getByRole('button', { name: '下一页案例' }))
   expect(mocks.caseFilter).toHaveBeenLastCalledWith(1, 'all', 'all')
   fireEvent.change(screen.getByLabelText('场景类别'), { target: { value: 'security' } })
@@ -125,4 +127,36 @@ test('comparison refuses to compute a misleading delta for different suites', ()
   fireEvent.change(screen.getByLabelText('对照运行'), { target: { value: 'other' } })
   expect(screen.getByText(/不计算通过率差值/)).toBeVisible()
   expect(screen.queryByText(/覆盖率变化/)).not.toBeInTheDocument()
+})
+
+test('page shows a trend from two comparable completed historical runs', () => {
+  const frozen = {
+    workspace_id: 'fixture', suite_digest: 'a'.repeat(64), dataset_id: 'synthetic-fixture',
+    semantic_version: 'fixture-v1', model_version: 'offline-fixed-v1',
+    tool_version: 'fixture-tools-v1', prompt_version: 'fixture-prompt-v1',
+  }
+  mocks.summary = { coverage_rate: 1, evaluated_pass_rate: 0.9 }
+  mocks.runItems = [
+    Object.assign(mocks.runItems[0], frozen, { summary: mocks.summary }),
+    Object.assign({ id: 'old', suite_version: '0.1.2', track: 'offline', status: 'completed',
+      created_at: '2026-09-27T12:00:00Z' }, frozen,
+    { summary: { coverage_rate: 0.8, evaluated_pass_rate: 0.7 } }),
+  ]
+  show()
+  expect(screen.getByRole('img', { name: '最近同版本评测覆盖率与已评估通过率趋势' })).toBeVisible()
+  expect(screen.getByRole('row', { name: /80\.0%.*70\.0%/ })).toBeVisible()
+})
+
+test('loading history is not presented as absent comparable runs', () => {
+  mocks.runsLoading = true
+  show()
+  expect(screen.getByText('正在加载历史趋势…')).toBeVisible()
+  expect(screen.queryByText('暂无可比趋势')).not.toBeInTheDocument()
+})
+
+test('history fetch failure is not presented as absent comparable runs', () => {
+  mocks.runsError = true
+  show()
+  expect(screen.getByText('无法读取历史趋势，请刷新后重试。')).toBeVisible()
+  expect(screen.queryByText('暂无可比趋势')).not.toBeInTheDocument()
 })

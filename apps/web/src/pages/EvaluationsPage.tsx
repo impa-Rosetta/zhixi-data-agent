@@ -6,6 +6,7 @@ import {
   useEvaluationCases, useEvaluationCommands, useEvaluationDetail,
   useEvaluationRuns, useEvaluationSuites,
 } from '../features/evaluations/api'
+import { EvaluationTrend } from '../features/evaluations/EvaluationTrend'
 import './EvaluationsPage.css'
 
 const categories: Record<string, string> = {
@@ -35,6 +36,7 @@ export function EvaluationsPage() {
   const [compareId, setCompareId] = useState('')
   const suites = useEvaluationSuites(workspaceId)
   const runs = useEvaluationRuns(workspaceId, runPage)
+  const recentRuns = useEvaluationRuns(workspaceId, 0)
   const runId = search.get('run') ?? runs.data?.items[0]?.id
   const detail = useEvaluationDetail(workspaceId, runId)
   const comparison = useEvaluationDetail(workspaceId, compareId || undefined)
@@ -110,6 +112,9 @@ export function EvaluationsPage() {
         <div><span>已评估通过率</span><strong>{percent(run.summary.evaluated_pass_rate)}</strong></div>
         <div><span>全案例通过率</span><strong>{percent(run.summary.all_case_pass_rate)}</strong></div>
       </div>
+      {recentRuns.isError ? <p role="alert">无法读取历史趋势，请刷新后重试。</p>
+        : recentRuns.isLoading ? <p role="status">正在加载历史趋势…</p>
+        : <EvaluationTrend current={run} recent={recentRuns.data?.items ?? []} />}
       <div className="evaluation-comparison"><h3>运行对照</h3><label>对照运行<select value={compareId} onChange={(event) => setCompareId(event.target.value)}><option value="">不对照</option>{runs.data?.items.filter((item) => item.id !== run.id).map((item) => <option key={item.id} value={item.id}>v{item.suite_version} · {new Date(item.created_at).toLocaleString('zh-CN')}</option>)}</select></label>
         {compareId && comparison.isError && <p role="alert">对照运行不存在或无权读取。</p>}
         {comparison.data && <><p>当前 v{run.suite_version} / 对照 v{comparison.data.suite_version}；{comparable ? '案例、数据与语义快照一致，可比较聚合比例。' : '案例、数据、语义或轨道不同，不计算通过率差值。'}</p>
