@@ -364,6 +364,98 @@ def test_report_file_http_requires_membership_and_sets_safe_headers(
         app.dependency_overrides.clear()
 
 
+def test_report_http_create_browse_detail_retry_and_revocation() -> None:
+    db, user, workspace, conversation, turn, _ = _trusted_source()
+    db.add(Membership(user_id=user.id, workspace_id=workspace.id, role=WorkspaceRole.ANALYST))
+    db.commit()
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: user
+    base = f"/api/v1/workspaces/{workspace.id}/reports"
+    try:
+        with TestClient(app) as client:
+            created = client.post(
+                base,
+                headers={"Idempotency-Key": "http-report-1"},
+                json=_payload(conversation, turn).model_dump(mode="json"),
+            )
+            assert created.status_code == 201
+            report_id = created.json()["id"]
+            assert created.json()["status"] == "queued"
+            repeated = client.post(
+                base,
+                headers={"Idempotency-Key": "http-report-1"},
+                json=_payload(conversation, turn).model_dump(mode="json"),
+            )
+            assert repeated.status_code == 201 and repeated.json()["id"] == report_id
+            listed = client.get(base)
+            assert listed.status_code == 200
+            assert listed.json()["total"] == 1
+            assert client.get(f"{base}/{report_id}").json()["id"] == report_id
+            assert client.get(f"{base}/{uuid.uuid4()}").status_code == 404
+
+            report = db.get(AnalysisReport, uuid.UUID(report_id))
+            assert report is not None
+            report.status = AnalysisReportStatus.FAILED
+            report.error_code = "report.storage_unavailable"
+            db.commit()
+            retried = client.post(f"{base}/{report_id}/retry")
+            assert retried.status_code == 200 and retried.json()["status"] == "queued"
+            assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+
+            db.query(Membership).filter_by(user_id=user.id, workspace_id=workspace.id).delete()
+            db.commit()
+            assert client.get(base).status_code == 403
+            assert client.get(f"{base}/{report_id}").status_code == 403
+            assert client.post(f"{base}/{report_id}/retry").status_code == 403
+            assert db.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+    finally:
+        app.dependency_overrides.clear()
+        db.close()
+
+
+def test_report_html_preview_is_inline_sandboxed_and_not_cached(monkeypatch) -> None:
+    db, user, workspace, report, _ = _generated_pdf()
+    content = b"<!doctype html><html><body>Synthetic report</body></html>"
+    db.add(
+        AnalysisReportFile(
+            workspace_id=workspace.id,
+            report_id=report.id,
+            format=AnalysisReportFormat.HTML,
+            object_key=f"reports/{workspace.id}/{report.id}/report.html",
+            media_type="text/html; charset=utf-8",
+            byte_size=len(content),
+            sha256_digest=hashlib.sha256(content).hexdigest(),
+        )
+    )
+    db.add(Membership(user_id=user.id, workspace_id=workspace.id, role=WorkspaceRole.ANALYST))
+    db.commit()
+
+    class HtmlStorage:
+        def get(self, object_key: str, *, max_bytes: int) -> bytes:
+            assert object_key.endswith("/report.html") and max_bytes >= len(content)
+            return content
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: user
+    monkeypatch.setattr(report_routes, "_storage", HtmlStorage)
+    base = f"/api/v1/workspaces/{workspace.id}/reports/{report.id}"
+    try:
+        with TestClient(app) as client:
+            preview = client.get(f"{base}/preview")
+            assert preview.status_code == 200 and preview.content == content
+            assert preview.headers["content-disposition"].startswith("inline;")
+            assert "sandbox" in preview.headers["content-security-policy"]
+            assert preview.headers["cache-control"] == "private, no-store"
+            assert preview.headers["x-content-type-options"] == "nosniff"
+            downloaded = client.get(f"{base}/files/html")
+            assert downloaded.status_code == 200 and downloaded.content == content
+            assert downloaded.headers["content-disposition"].startswith("attachment;")
+            assert "content-security-policy" not in downloaded.headers
+    finally:
+        app.dependency_overrides.clear()
+        db.close()
+
+
 def test_manual_retry_reuses_frozen_spec_and_emits_one_new_outbox_event() -> None:
     db, user, workspace, conversation, turn, _ = _trusted_source()
     created = create_report(
