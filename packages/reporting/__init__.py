@@ -29,6 +29,9 @@ _ALLOWED_TYPES: Final[dict[str, tuple[ReportSectionKind, str]]] = {
     "query_result": ("data", "可信查询结果"),
     "analysis_summary": ("analysis", "统计分析摘要"),
     "chart_spec": ("chart", "可视化图表"),
+    "correlation_result": ("analysis", "相关性分析"),
+    "anomaly_result": ("analysis", "统计异常检测"),
+    "visualization_data": ("data", "图表计算数据"),
 }
 
 
@@ -128,6 +131,12 @@ def compose_report_spec(
         )
 
     spec = ReportSpecV1(
+        template_version="1.1.0"
+        if any(
+            section.source.artifact_type in {"correlation_result", "anomaly_result"}
+            for section in sections
+        )
+        else "1.0.0",
         workspace_id=workspace_id,
         conversation_id=conversation_id,
         created_by_user_id=created_by_user_id,
@@ -172,7 +181,16 @@ def render_markdown(spec: ReportSpecV1) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _summary_html(section: ReportSection) -> str:
+def _summary_html(section: ReportSection, spec: ReportSpecV1) -> str:
+    if section.source.artifact_type in {"correlation_result", "anomaly_result"}:
+        from packages.agent_core.presentation import advanced_analysis_presentation
+
+        presentation = advanced_analysis_presentation(section.summary)
+        return "<p>" + html.escape(presentation.content) + "</p>"
+    if section.kind == "chart":
+        from packages.reporting.charts import render_chart_svg
+
+        return render_chart_svg(section, spec)
     columns = section.summary.get("columns")
     rows = section.summary.get("rows")
     if (
@@ -234,7 +252,7 @@ def render_html(spec: ReportSpecV1) -> str:
     )
     sections = []
     for section in spec.sections:
-        payload = _summary_html(section)
+        payload = _summary_html(section, spec)
         sections.append(
             "<section>"
             f"<h2>{html.escape(section.title)}</h2>" + payload + '<p class="evidence">'

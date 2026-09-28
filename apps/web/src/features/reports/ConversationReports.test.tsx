@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 
 import type { AnalysisConversationView } from '../analysisRuns/types'
+import { ApiError } from '../../lib/api/client'
 import { ConversationReports } from './ConversationReports'
 
 const mocks = vi.hoisted(() => ({
@@ -131,6 +132,14 @@ test('offers real report creation only for trusted completed turns', async () =>
     title: '不良率分析报告',
     turnIds: ['turn-1'],
   })))
+})
+
+test('explains invalid advanced evidence in natural language', async () => {
+  mocks.create.mockRejectedValue(new ApiError(409, 'internal', 'report.advanced_lineage_invalid'))
+  render(<ConversationReports view={conversation(true)} />)
+  fireEvent.click(screen.getByRole('button', { name: '生成报告' }))
+  expect(await screen.findByText('高级分析的来源权限或计算证据已失效，请重新查询和分析后生成报告。')).toBeInTheDocument()
+  expect(screen.queryByText('internal')).not.toBeInTheDocument()
 })
 
 test('does not offer report creation for a chat answer without evidence', () => {

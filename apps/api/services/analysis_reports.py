@@ -11,6 +11,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from apps.api.audit import add_audit_event
+from apps.api.services.advanced_report_sources import verify_advanced_report_sources
 from packages.agent_core.persistence import (
     AnalysisArtifact,
     AnalysisConversation,
@@ -232,13 +233,22 @@ def create_report(
         )
     artifacts = list(
         db.scalars(
-            select(AnalysisArtifact).where(
+            select(AnalysisArtifact)
+            .where(
                 AnalysisArtifact.workspace_id == workspace_id,
                 AnalysisArtifact.run_id.in_(run_ids),
                 AnalysisArtifact.artifact_type.in_(
-                    ("query_result", "analysis_summary", "chart_spec")
+                    (
+                        "query_result",
+                        "analysis_summary",
+                        "chart_spec",
+                        "correlation_result",
+                        "anomaly_result",
+                        "visualization_data",
+                    )
                 ),
             )
+            .execution_options(populate_existing=True)
         )
     )
     artifact_ids = [artifact.id for artifact in artifacts]
@@ -263,6 +273,13 @@ def create_report(
         )
     )
     try:
+        verify_advanced_report_sources(
+            db,
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            artifacts=artifacts,
+            evidence=evidence,
+        )
         composition = compose_report_spec(
             workspace_id=workspace_id,
             conversation_id=conversation.id,
@@ -289,7 +306,7 @@ def create_report(
         status=AnalysisReportStatus.QUEUED,
         template_key=composition.spec.template_key,
         template_version=composition.spec.template_version,
-        renderer_version="1.0.0",
+        renderer_version="1.1.0",
         report_spec=composition.spec.model_dump(mode="json"),
         source_digest=composition.source_digest,
     )

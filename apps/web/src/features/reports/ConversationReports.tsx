@@ -38,6 +38,7 @@ const retryableErrors = new Set([
 function errorText(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.code === 'report.validation_required') return '所选轮次缺少可信验证结果，请选择有数据和证据的分析。'
+    if (error.code === 'report.advanced_lineage_invalid') return '高级分析的来源权限或计算证据已失效，请重新查询和分析后生成报告。'
     if (error.code === 'analysis_report.turn_not_completed') return '所选分析尚未完成，请完成后再生成报告。'
     if (error.code === 'analysis_report.not_ready') return '报告仍在生成，请稍后再试。'
     if (error.code === 'analysis_report.integrity_failed') return '报告文件校验失败，已阻止下载。'
@@ -69,7 +70,7 @@ export function ConversationReports({ view }: Props) {
   const eligible = view.turns.filter(({ turn, analysis }) => {
     if (turn.status !== 'completed' || analysis.run.status !== 'completed') return false
     const trusted = analysis.artifacts.filter((artifact) =>
-      ['query_result', 'analysis_summary', 'chart_spec'].includes(artifact.artifact_type),
+      ['query_result', 'analysis_summary', 'chart_spec', 'correlation_result', 'anomaly_result'].includes(artifact.artifact_type),
     )
     return trusted.some((artifact) =>
       analysis.evidence.some((evidence) => evidence.artifact_id === artifact.id),

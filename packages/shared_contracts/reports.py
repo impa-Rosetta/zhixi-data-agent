@@ -6,7 +6,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ReportArtifactType = Literal["query_result", "analysis_summary", "chart_spec"]
+ReportArtifactType = Literal[
+    "query_result",
+    "analysis_summary",
+    "chart_spec",
+    "correlation_result",
+    "anomaly_result",
+    "visualization_data",
+]
 ReportSectionKind = Literal["data", "analysis", "chart"]
 
 
@@ -34,7 +41,7 @@ class ReportSection(StrictReportContract):
 class ReportSpecV1(StrictReportContract):
     schema_version: Literal["1.0"] = "1.0"
     template_key: Literal["quality-analysis-v1"] = "quality-analysis-v1"
-    template_version: Literal["1.0.0"] = "1.0.0"
+    template_version: Literal["1.0.0", "1.1.0"] = "1.0.0"
     workspace_id: uuid.UUID
     conversation_id: uuid.UUID
     created_by_user_id: uuid.UUID
