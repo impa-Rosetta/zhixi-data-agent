@@ -204,7 +204,9 @@ def get_conversation_view(
     bounded_limit = max(1, min(limit, 100))
     bounded_offset = max(0, offset)
     total = db.scalar(
-        select(func.count()).select_from(AnalysisTurn).where(
+        select(func.count())
+        .select_from(AnalysisTurn)
+        .where(
             AnalysisTurn.workspace_id == workspace_id,
             AnalysisTurn.conversation_id == conversation.id,
         )
@@ -452,9 +454,9 @@ def list_conversations(
     bounded_limit = max(1, min(limit, 100))
     bounded_offset = max(0, offset)
     total = db.scalar(
-        select(func.count()).select_from(AnalysisConversation).where(
-            AnalysisConversation.workspace_id == workspace_id
-        )
+        select(func.count())
+        .select_from(AnalysisConversation)
+        .where(AnalysisConversation.workspace_id == workspace_id)
     )
     active_status = (
         select(AnalysisTurn.status)

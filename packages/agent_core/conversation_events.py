@@ -124,6 +124,7 @@ async def stream_conversation_events(
     cursor = max(0, after)
     next_heartbeat = monotonic() + max(1.0, heartbeat_seconds)
     while True:
+
         def read_batch(after_sequence: int) -> tuple[list[AnalysisConversationEventResponse], bool]:
             with Session(bind=bind) as polling_db:
                 events = list_conversation_events(
@@ -132,12 +133,15 @@ async def stream_conversation_events(
                     conversation_id=conversation_id,
                     after=after_sequence,
                 )
-                exists = polling_db.scalar(
-                    select(AnalysisConversation.id).where(
-                        AnalysisConversation.id == conversation_id,
-                        AnalysisConversation.workspace_id == workspace_id,
+                exists = (
+                    polling_db.scalar(
+                        select(AnalysisConversation.id).where(
+                            AnalysisConversation.id == conversation_id,
+                            AnalysisConversation.workspace_id == workspace_id,
+                        )
                     )
-                ) is not None
+                    is not None
+                )
                 return events, exists
 
         events, exists = await to_thread.run_sync(read_batch, cursor)

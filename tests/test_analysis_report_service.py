@@ -47,7 +47,9 @@ from packages.platform_core.models import (
 from packages.shared_contracts.reports import CreateAnalysisReportRequest
 
 
-def _trusted_source(engine_override: Engine | None = None) -> tuple[
+def _trusted_source(
+    engine_override: Engine | None = None,
+) -> tuple[
     Session,
     User,
     Workspace,

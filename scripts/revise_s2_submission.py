@@ -6,12 +6,13 @@ import sys
 from pathlib import Path
 
 from docx import Document
+from docx.text.paragraph import Paragraph
 
 SOURCE = Path(sys.argv[1])
 TARGET = Path(sys.argv[2])
 
 
-def replace_paragraph(paragraph, old: str, new: str) -> None:
+def replace_paragraph(paragraph: Paragraph, old: str, new: str) -> None:
     text = paragraph.text
     if old not in text:
         raise ValueError(f"Missing expected text: {old[:60]}")
@@ -26,7 +27,7 @@ def replace_paragraph(paragraph, old: str, new: str) -> None:
 
 
 def main() -> None:
-    document = Document(SOURCE)
+    document = Document(str(SOURCE))
     changes: dict[int, tuple[str, str]] = {
         31: (
             "合并门禁包括 Ruff、严格 MyPy、Pytest、ESLint、TypeScript、Vitest、Playwright、迁移往返、镜像构建、依赖审计和秘密扫描",
@@ -119,7 +120,7 @@ def main() -> None:
                 )
                 break
     TARGET.parent.mkdir(parents=True, exist_ok=True)
-    document.save(TARGET)
+    document.save(str(TARGET))
     print(TARGET)
 
 

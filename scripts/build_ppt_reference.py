@@ -2,7 +2,6 @@ from pathlib import Path
 
 from build_report_content_package import build
 
-
 SOURCE = Path("docs/submission/初赛材料/给PPT同学的20页制作参考稿.md")
 OUTPUT = SOURCE.with_suffix(".docx")
 

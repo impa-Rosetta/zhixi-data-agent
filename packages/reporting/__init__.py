@@ -198,13 +198,17 @@ def _summary_html(section: ReportSection) -> str:
             table += "<p>没有符合条件的数据。</p>"
         extra = {k: v for k, v in section.summary.items() if k not in {"columns", "rows"}}
         if extra:
-            table += "<pre>" + html.escape(
-                json.dumps(extra, ensure_ascii=False, sort_keys=True, indent=2)
-            ) + "</pre>"
+            table += (
+                "<pre>"
+                + html.escape(json.dumps(extra, ensure_ascii=False, sort_keys=True, indent=2))
+                + "</pre>"
+            )
         return table
-    return "<pre>" + html.escape(
-        json.dumps(section.summary, ensure_ascii=False, sort_keys=True, indent=2)
-    ) + "</pre>"
+    return (
+        "<pre>"
+        + html.escape(json.dumps(section.summary, ensure_ascii=False, sort_keys=True, indent=2))
+        + "</pre>"
+    )
 
 
 def render_html(spec: ReportSpecV1) -> str:
@@ -233,9 +237,7 @@ def render_html(spec: ReportSpecV1) -> str:
         payload = _summary_html(section)
         sections.append(
             "<section>"
-            f"<h2>{html.escape(section.title)}</h2>"
-            + payload
-            + '<p class="evidence">'
+            f"<h2>{html.escape(section.title)}</h2>" + payload + '<p class="evidence">'
             f"证据定位：Turn {section.source.turn_id} / "
             f"Artifact {section.source.artifact_id}"
             "</p>"

@@ -74,8 +74,7 @@ def test_conversation_context_rejects_unbounded_collections_and_wrong_version() 
             {
                 "version": 1,
                 "dimensions": [
-                    {"key": f"dimension_{index}", "name": f"维度 {index}"}
-                    for index in range(11)
+                    {"key": f"dimension_{index}", "name": f"维度 {index}"} for index in range(11)
                 ],
             }
         )
@@ -85,9 +84,7 @@ def test_conversation_context_rejects_unbounded_collections_and_wrong_version() 
         AnalysisConversationContext.model_validate(
             {
                 "version": 1,
-                "filters": [
-                    {"field_key": "factory", "operator": "eq", "value": "x" * 501}
-                ],
+                "filters": [{"field_key": "factory", "operator": "eq", "value": "x" * 501}],
             }
         )
     with pytest.raises(ValidationError):

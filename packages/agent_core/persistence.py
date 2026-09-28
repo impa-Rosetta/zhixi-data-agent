@@ -71,8 +71,6 @@ class AnalysisTurnStatus(enum.StrEnum):
     CANCELLED = "cancelled"
 
 
-
-
 class AnalysisReportStatus(enum.StrEnum):
     QUEUED = "queued"
     GENERATING = "generating"
@@ -85,6 +83,8 @@ class AnalysisReportFormat(enum.StrEnum):
     MARKDOWN = "markdown"
     HTML = "html"
     PDF = "pdf"
+
+
 class AnalysisConversation(Base):
     __tablename__ = "analysis_conversations"
     __table_args__ = (
@@ -381,8 +381,6 @@ class AnalysisValidation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-
-
 class AnalysisReport(Base):
     __tablename__ = "analysis_reports"
     __table_args__ = (
@@ -459,6 +457,8 @@ class AnalysisReportFile(Base):
     sha256_digest: Mapped[str] = mapped_column(String(64), index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class AnalysisCheckpoint(Base):
     __tablename__ = "analysis_checkpoints"
     __table_args__ = (

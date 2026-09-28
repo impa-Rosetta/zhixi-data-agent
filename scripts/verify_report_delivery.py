@@ -21,7 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from test_analysis_report_service import _payload, _trusted_source  # noqa: E402
+from test_analysis_report_service import (  # type: ignore[import-not-found]  # noqa: E402
+    _payload,
+    _trusted_source,
+)
 
 from apps.api.dependencies import get_current_user  # noqa: E402
 from apps.api.main import app  # noqa: E402
@@ -44,7 +47,9 @@ def seed(path: Path, database_url: str | None = None) -> None:
     engine = create_engine(database_url) if database_url else None
     db, user, workspace, conversation, turn, _ = _trusted_source(engine)
     report = create_report(
-        db, workspace_id=workspace.id, actor_user_id=user.id,
+        db,
+        workspace_id=workspace.id,
+        actor_user_id=user.id,
         idempotency_key="report-delivery-acceptance",
         payload=_payload(conversation, turn),
     )
@@ -64,12 +69,19 @@ def check(path: Path, output: Path, database_url: str | None = None) -> None:
 
     if (database_url is None and not path.is_file()) or output.exists():
         raise ValueError("Fixture required; output must not already exist")
-    engine = create_engine(database_url) if database_url else create_engine(
-        f"sqlite+pysqlite:///{path.as_posix()}", connect_args={"check_same_thread": False},
+    engine = (
+        create_engine(database_url)
+        if database_url
+        else create_engine(
+            f"sqlite+pysqlite:///{path.as_posix()}",
+            connect_args={"check_same_thread": False},
+        )
     )
     storage = MinioReportObjectStorage(
-        endpoint_url="http://127.0.0.1:59005", access_key="report-fixture",
-        secret_key="report-fixture-local-only", bucket="report-delivery-d5",
+        endpoint_url="http://127.0.0.1:59005",
+        access_key="report-fixture",
+        secret_key="report-fixture-local-only",
+        bucket="report-delivery-d5",
     )
     with Session(engine) as db:
         report = db.scalar(select(AnalysisReport))
@@ -83,12 +95,12 @@ def check(path: Path, output: Path, database_url: str | None = None) -> None:
         pdf_file = next(item for item in files if item.format.value == "pdf")
         anonymous = Minio("127.0.0.1:59005", secure=False)
         try:
-            response = anonymous.get_object("report-delivery-d5", pdf_file.object_key)
+            anonymous_response = anonymous.get_object("report-delivery-d5", pdf_file.object_key)
         except S3Error as exc:
             assert exc.code == "AccessDenied"
         else:
-            response.close()
-            response.release_conn()
+            anonymous_response.close()
+            anonymous_response.release_conn()
             raise AssertionError("Anonymous storage download was allowed")
         user = db.get(User, report.created_by_user_id)
         assert user is not None
@@ -112,10 +124,12 @@ def check(path: Path, output: Path, database_url: str | None = None) -> None:
                 assert response.headers["cache-control"] == "private, no-store"
                 assert response.headers["content-disposition"].startswith("attachment;")
                 count = len(calls)
-                membership = db.scalar(select(Membership).where(
-                    Membership.user_id == user.id,
-                    Membership.workspace_id == report.workspace_id,
-                ))
+                membership = db.scalar(
+                    select(Membership).where(
+                        Membership.user_id == user.id,
+                        Membership.workspace_id == report.workspace_id,
+                    )
+                )
                 assert membership is not None
                 db.delete(membership)
                 db.commit()
@@ -128,11 +142,20 @@ def check(path: Path, output: Path, database_url: str | None = None) -> None:
         finally:
             routes._storage = original_storage
             app.dependency_overrides.clear()
-        print(json.dumps({"formats": 3, "sha256_verified": True,
-                          "anonymous_denied": True, "download_status": 200,
-                          "revoked_status": 403, "revoked_before_storage": True,
-                          "attempt_count": report.attempt_count,
-                          "pdf_bytes": len(response.content)}))
+        print(
+            json.dumps(
+                {
+                    "formats": 3,
+                    "sha256_verified": True,
+                    "anonymous_denied": True,
+                    "download_status": 200,
+                    "revoked_status": 403,
+                    "revoked_before_storage": True,
+                    "attempt_count": report.attempt_count,
+                    "pdf_bytes": len(response.content),
+                }
+            )
+        )
     engine.dispose()
 
 

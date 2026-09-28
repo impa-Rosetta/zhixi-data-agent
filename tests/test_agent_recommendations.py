@@ -10,11 +10,14 @@ from packages.shared_contracts.agents import (
 
 
 def test_recommendations_are_empty_while_a_turn_is_running() -> None:
-    assert recommend_follow_ups(
-        context=AnalysisConversationContext(),
-        run_status=AnalysisRunStatus.RUNNING,
-        artifacts=[],
-    ) == []
+    assert (
+        recommend_follow_ups(
+            context=AnalysisConversationContext(),
+            run_status=AnalysisRunStatus.RUNNING,
+            artifacts=[],
+        )
+        == []
+    )
 
 
 def test_scalar_metric_recommendations_are_bounded_and_executable_messages() -> None:

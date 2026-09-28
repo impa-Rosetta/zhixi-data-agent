@@ -3,20 +3,21 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from build_initial_owner_brief import add_body, add_bullet, add_heading, add_table, set_run_font
 from docx import Document
+from docx.document import Document as DocxDocument
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.section import Section
 from docx.shared import Cm, Pt, RGBColor
-
-from build_initial_owner_brief import add_body, add_bullet, add_heading, add_table, set_run_font
-
+from docx.table import Table
 
 SOURCE = Path("docs/submission/初赛材料/给报告主笔的完整项目内容资料包.md")
 OUTPUT = SOURCE.with_suffix(".docx")
 
 
-def tune_table_borders(table) -> None:
+def tune_table_borders(table: Table) -> None:
     tbl_pr = table._tbl.tblPr
     borders = tbl_pr.find(qn("w:tblBorders"))
     if borders is None:
@@ -32,7 +33,7 @@ def tune_table_borders(table) -> None:
         node.set(qn("w:color"), "D9D9D9")
 
 
-def add_markdown_table(doc: Document, lines: list[str]) -> None:
+def add_markdown_table(doc: DocxDocument, lines: list[str]) -> None:
     records = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in lines]
     if len(records) < 3:
         return
@@ -49,7 +50,7 @@ def add_markdown_table(doc: Document, lines: list[str]) -> None:
     tune_table_borders(table)
 
 
-def add_page_number(section, label: str) -> None:
+def add_page_number(section: Section, label: str) -> None:
     paragraph = section.footer.paragraphs[0]
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     set_run_font(paragraph.add_run(f"{label}  ·  "), size=8)
@@ -58,7 +59,11 @@ def add_page_number(section, label: str) -> None:
     paragraph._p.append(field)
 
 
-def build(source: Path = SOURCE, output: Path = OUTPUT, footer_label: str = "智析 Data Agent 报告主笔资料包") -> None:
+def build(
+    source: Path = SOURCE,
+    output: Path = OUTPUT,
+    footer_label: str = "智析 Data Agent 报告主笔资料包",
+) -> None:
     text = source.read_text(encoding="utf-8")
     lines = text.splitlines()
     doc = Document()
@@ -125,14 +130,18 @@ def build(source: Path = SOURCE, output: Path = OUTPUT, footer_label: str = "智
         index += 1
         while index < len(lines):
             candidate = lines[index].strip()
-            if not candidate or candidate.startswith(("#", "|", "- ")) or re.match(r"\d+\.\s", candidate):
+            if (
+                not candidate
+                or candidate.startswith(("#", "|", "- "))
+                or re.match(r"\d+\.\s", candidate)
+            ):
                 break
             paragraph_lines.append(candidate)
             index += 1
         add_body(doc, " ".join(paragraph_lines))
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    doc.save(output)
+    doc.save(str(output))
     print(output.resolve())
 
 

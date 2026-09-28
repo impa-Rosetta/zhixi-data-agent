@@ -74,9 +74,7 @@ def classify_follow_up_deterministically(
         return FollowUpDecision(relation="explain", confidence=1.0)
     if any(marker in normalized for marker in _COMPARE_MARKERS):
         comparison = (
-            "previous_year"
-            if "同比" in normalized or "去年" in normalized
-            else "previous_period"
+            "previous_year" if "同比" in normalized or "去年" in normalized else "previous_period"
         )
         dimensions: tuple[str, ...] | None = None
         if "上月" in normalized:
@@ -105,11 +103,7 @@ def classify_follow_up_deterministically(
         output = ("time_series",) if grain is not None else None
         return FollowUpDecision(
             relation="refine",
-            patch=(
-                ContextPatch(dimensions=(grain,), output=output)
-                if grain is not None
-                else None
-            ),
+            patch=(ContextPatch(dimensions=(grain,), output=output) if grain is not None else None),
             confidence=1.0,
         )
     if any(marker in normalized for marker in _CONTINUE_MARKERS):

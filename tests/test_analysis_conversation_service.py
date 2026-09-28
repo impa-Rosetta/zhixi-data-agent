@@ -74,9 +74,7 @@ def test_create_conversation_atomically_creates_first_turn_and_worker_run() -> N
     db.commit()
 
     conversation = db.get(AnalysisConversation, response.id)
-    turn = db.scalar(
-        select(AnalysisTurn).where(AnalysisTurn.conversation_id == response.id)
-    )
+    turn = db.scalar(select(AnalysisTurn).where(AnalysisTurn.conversation_id == response.id))
     assert conversation is not None
     assert response.title == "本月 不良率是多少？"
     assert response.context.topic_summary == response.title
