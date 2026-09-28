@@ -50,6 +50,7 @@ from packages.agent_core.planner import (
 )
 from packages.agent_core.presentation import (
     AgentPresentation,
+    advanced_analysis_presentation,
     answer_presentation,
     catalog_presentation,
     clarification_presentation,
@@ -169,12 +170,12 @@ def _intent_metric_names(run: AnalysisRun) -> tuple[str, ...]:
 def _exception_code(exc: Exception) -> str:
     structured = getattr(exc, "code", None)
     if isinstance(structured, str) and structured.startswith(
-        ("agent.", "catalog.", "connector.", "model.", "policy.", "query.", "tool.")
+        ("agent.", "analysis.", "catalog.", "connector.", "model.", "policy.", "query.", "tool.")
     ):
         return structured
     text = str(exc)
     if text.startswith(
-        ("agent.", "catalog.", "connector.", "model.", "policy.", "query.", "tool.")
+        ("agent.", "analysis.", "catalog.", "connector.", "model.", "policy.", "query.", "tool.")
     ):
         return text
     return "agent.execution_failed"
@@ -211,7 +212,7 @@ def _complete_derived_step(
         step.status = AnalysisStepStatus.SKIPPED
         step.finished_at = datetime.now(UTC)
         return None
-    resolved_arguments = {"artifact_id": str(source_artifact.id)}
+    resolved_arguments = {**planned.arguments, "artifact_id": str(source_artifact.id)}
     normalized = json.dumps(resolved_arguments, sort_keys=True, separators=(",", ":"))
     call_key = hashlib.sha256(f"{run.id}:{step_key}:{normalized}".encode()).hexdigest()
     canonical = json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -230,7 +231,7 @@ def _complete_derived_step(
             run_id=run.id,
             step_id=step.id,
             tool_name=planned.tool,
-            tool_version="1.0.0",
+            tool_version=build_default_registry().get(planned.tool).version,
             idempotency_key=call_key,
             argument_digest=hashlib.sha256(normalized.encode()).hexdigest(),
             status=AnalysisStepStatus.SUCCEEDED,
@@ -282,6 +283,18 @@ def _derive_analysis_artifacts(
     source_artifact: AnalysisArtifact,
     source_evidence: AnalysisEvidence,
 ) -> tuple[AnalysisArtifact | None, AnalysisArtifact | None]:
+    if intent.task_type in {"correlation", "anomaly_detection"}:
+        from apps.worker.advanced_analysis_runtime import derive_advanced_artifacts
+
+        return derive_advanced_artifacts(
+            db,
+            run=run,
+            plan=plan,
+            intent=intent,
+            result=result,
+            source_artifact=source_artifact,
+            source_evidence=source_evidence,
+        )
     described = describe_verified_result(result, source_artifact_id=source_artifact.id)
     analysis_artifact = _complete_derived_step(
         db,
@@ -763,6 +776,7 @@ def _complete_catalog_search(db: Session, run: AnalysisRun, intent: Intent) -> N
 
 
 def _complete_verified_result_explanation(db: Session, run: AnalysisRun, intent: Intent) -> None:
+    _check_budget(run, tool=True)
     raw_context = run.context.get("conversation_context")
     context = raw_context if isinstance(raw_context, dict) else {}
     raw_result = context.get("last_result")
@@ -789,6 +803,60 @@ def _complete_verified_result_explanation(db: Session, run: AnalysisRun, intent:
         "但仅凭汇总结果不能可靠判断原因。要定位原因，我可以继续按时间、产线、工序或设备拆分，"
         "再比较哪些分组贡献了主要变化。"
     )
+    if intent.task_type in {"correlation", "anomaly_detection"}:
+        from apps.api.services.advanced_analysis_sources import load_advanced_analysis_input
+        from packages.analysis_engine.tools import bind_advanced_analysis_tools
+
+        source = load_advanced_analysis_input(
+            db,
+            workspace_id=run.workspace_id,
+            actor_user_id=run.created_by_user_id,
+            artifact_id=source_artifact.id,
+        )
+        candidates = db.scalars(
+            select(AnalysisArtifact).where(
+                AnalysisArtifact.workspace_id == run.workspace_id,
+                AnalysisArtifact.run_id == source_artifact.run_id,
+                AnalysisArtifact.artifact_type.in_(("correlation_result", "anomaly_result")),
+            )
+        ).all()
+        advanced = next(
+            (
+                item
+                for item in candidates
+                if item.summary.get("source_artifact_id") == str(source_artifact.id)
+            ),
+            None,
+        )
+        if advanced is None:
+            raise ModelGatewayError("agent.previous_result_not_available")
+        registry = build_default_registry()
+        bind_advanced_analysis_tools(registry, lambda _: source)
+        args: dict[str, object] = {"artifact_id": str(source.artifact_id)}
+        if advanced.artifact_type == "correlation_result":
+            args.update(
+                x_field=advanced.summary.get("x_field"),
+                y_field=advanced.summary.get("y_field"),
+                method=advanced.summary.get("method"),
+            )
+            tool = "analysis.correlate"
+            explanation = (
+                "系数范围为-1到1，正负表示关系方向，绝对值越接近1线性或秩关系越明显；"
+                "不能据此判断哪一个指标导致另一个指标变化。"
+            )
+        else:
+            args.update(
+                field=advanced.summary.get("field"), multiplier=advanced.summary.get("multiplier")
+            )
+            tool = "analysis.detect_anomaly"
+            explanation = (
+                "IQR以第1和第3四分位数的差值计算参考范围，超出边界的行是复核候选；"
+                "仍需结合原始记录和业务条件确认。"
+            )
+        verified = registry.invoke(tool, args)
+        if verified != advanced.summary:
+            raise RuntimeError("analysis.digest_mismatch")
+        content = advanced_analysis_presentation(verified).content + explanation
     plan = AnalysisPlan(
         goal=intent.goal,
         steps=(
@@ -1292,7 +1360,10 @@ def run_analysis(
         _persist_agent_message(
             db,
             run,
-            query_presentation(
+            advanced_analysis_presentation(analysis_artifact.summary)
+            if intent.task_type in {"correlation", "anomaly_detection"}
+            and analysis_artifact is not None
+            else query_presentation(
                 intent,
                 result,
                 source_artifact_id=artifact.id,

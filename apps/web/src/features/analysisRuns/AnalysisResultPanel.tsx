@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 
 import type { AnalysisArtifact, AnalysisRunView } from './types'
+import { AdvancedAnalysisResult } from './AdvancedAnalysisResult'
 
 const AnalysisChart = lazy(async () => {
   const module = await import('./AnalysisChart')
@@ -25,8 +26,14 @@ export function AnalysisResultPanel({ view }: { view: AnalysisRunView }) {
   const result = readQueryResult(artifact)
   const analysis = view.artifacts.find((item) =>
     item.artifact_type === 'analysis_summary' && item.summary.source_artifact_id === artifact.id)
+  const advanced = view.artifacts.find((item) =>
+    (item.artifact_type === 'correlation_result' || item.artifact_type === 'anomaly_result')
+    && item.summary.source_artifact_id === artifact.id)
+  const dataset = advanced && view.artifacts.find((item) => item.artifact_type === 'visualization_data'
+    && item.summary.source_artifact_id === artifact.id && item.summary.analysis_artifact_id === advanced.id)
+  const chartSource = dataset || artifact
   const chart = view.artifacts.find((item) =>
-    item.artifact_type === 'chart_spec' && item.summary.source_artifact_id === artifact.id)
+    item.artifact_type === 'chart_spec' && item.summary.source_artifact_id === chartSource.id)
   const linkedEvidence = view.evidence.find((item) => item.artifact_id === artifact.id)
   const validationPassed = view.validations.some((item) => item.outcome === 'passed')
 
@@ -81,9 +88,10 @@ export function AnalysisResultPanel({ view }: { view: AnalysisRunView }) {
       )}
 
       {analysis && <DescriptiveAnalysis artifact={analysis} />}
+      {advanced && <AdvancedAnalysisResult artifact={advanced} />}
       {chart && (
         <Suspense fallback={<div className="analysis-chart-loading" role="status">正在加载图表…</div>}>
-          <AnalysisChart artifact={chart} source={artifact} />
+          <AnalysisChart artifact={chart} source={chartSource} />
         </Suspense>
       )}
 

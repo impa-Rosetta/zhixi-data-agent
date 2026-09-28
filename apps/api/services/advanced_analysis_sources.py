@@ -75,11 +75,13 @@ def load_advanced_analysis_input(
     workspace_id: uuid.UUID,
     actor_user_id: uuid.UUID,
     artifact_id: uuid.UUID,
+    active_run_id: uuid.UUID | None = None,
 ) -> VerifiedAnalysisInput:
-    """Read a complete, trusted, completed query artifact without reconnecting to its DB.
+    """Read a complete trusted query artifact without reconnecting to its DB.
 
     Query validation expiry limits executing SQL again, not reading a past result.
     Active source/catalog/semantic publication and current membership are rechecked.
+    The worker may explicitly allow its own currently running run after query verification.
     This function neither executes queries nor writes artifacts or audit records.
     """
     user = db.get(User, actor_user_id, populate_existing=True)
@@ -107,10 +109,14 @@ def load_advanced_analysis_input(
         _reject("analysis.source_not_found")
     assert artifact is not None
     run = db.get(AnalysisRun, artifact.run_id, populate_existing=True)
-    if (
-        run is None
-        or run.workspace_id != workspace_id
-        or run.status is not AnalysisRunStatus.COMPLETED
+    if run is None or run.workspace_id != workspace_id:
+        _reject()
+    if run.cancel_requested_at is not None:
+        _reject("analysis.source_stale")
+    if run.status is not AnalysisRunStatus.COMPLETED and not (
+        run.id == active_run_id
+        and run.status is AnalysisRunStatus.RUNNING
+        and run.created_by_user_id == actor_user_id
     ):
         _reject()
     summary = artifact.summary

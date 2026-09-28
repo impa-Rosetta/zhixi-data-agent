@@ -14,6 +14,8 @@ AnalysisRoute = Literal[
     "comparison",
     "ranking",
     "trend",
+    "correlation",
+    "anomaly_detection",
     "unsupported",
 ]
 FollowUpRelation = Literal["continue", "refine", "explain", "compare", "switch_topic"]
@@ -30,6 +32,8 @@ class Intent(BaseModel):
         "comparison",
         "ranking",
         "trend",
+        "correlation",
+        "anomaly_detection",
         "exploration",
         "clarification",
         "unsupported",
@@ -40,6 +44,7 @@ class Intent(BaseModel):
     filters: dict[str, str | int | float | bool] = Field(default_factory=dict)
     time_range: str | None = None
     comparison: str | None = None
+    analysis_method: Literal["pearson", "spearman"] = "pearson"
     output: tuple[str, ...] = ("table",)
     ambiguities: tuple[str, ...] = ()
     confidence: float = Field(ge=0, le=1)
@@ -77,6 +82,7 @@ class ContextPatch(BaseModel):
     filters: dict[str, str | int | float | bool] | None = None
     time_range: str | None = None
     comparison: str | None = None
+    analysis_method: Literal["pearson", "spearman"] | None = None
     output: tuple[str, ...] | None = None
 
     def apply(self, intent: Intent) -> Intent:

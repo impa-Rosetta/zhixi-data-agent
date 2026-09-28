@@ -49,6 +49,37 @@ function resultView(
   }
 }
 
+test('shows correlation summary and wires its derived dataset into the chart', async () => {
+  const view = resultView({ columns: ['x', 'y'], rows: [[1, 2], [2, 4]], trust: 'trusted' })
+  view.artifacts.push(
+    { id: 'advanced-1', artifact_type: 'correlation_result', content_digest: 'c'.repeat(64), created_at: '',
+      summary: { source_artifact_id: 'artifact-1', method: 'pearson', coefficient: 0.75,
+        sample_count: 10, dropped_count: 2, warning: '相关性不代表因果关系。' } },
+    { id: 'dataset-1', artifact_type: 'visualization_data', content_digest: 'd'.repeat(64), created_at: '',
+      summary: { source_artifact_id: 'artifact-1', analysis_artifact_id: 'advanced-1', columns: ['x', 'y'], rows: [[1, 2], [2, 4]] } },
+    { id: 'chart-1', artifact_type: 'chart_spec', content_digest: 'e'.repeat(64), created_at: '',
+      summary: { source_artifact_id: 'dataset-1', chart_type: 'scatter' } },
+  )
+  render(<AnalysisResultPanel view={view} />)
+  expect(screen.getByRole('heading', { name: '相关性分析' })).toBeInTheDocument()
+  expect(screen.getByText('0.75')).toBeInTheDocument()
+  expect(screen.getByText('相关性不代表因果关系。')).toBeInTheDocument()
+  await screen.findByRole('img', { name: '隔离图表组件' })
+  expect(chartRender).toHaveBeenLastCalledWith(view.artifacts[3], view.artifacts[2])
+})
+
+test('shows IQR candidates without claiming confirmed defects', () => {
+  const view = resultView({ columns: ['y'], rows: [[1], [100]], trust: 'trusted' })
+  view.artifacts.push({ id: 'advanced-1', artifact_type: 'anomaly_result', content_digest: 'c'.repeat(64), created_at: '',
+    summary: { source_artifact_id: 'artifact-1', method: 'iqr', field: 'y', lower_bound: -2.5, upper_bound: 11.5,
+      sample_count: 8, dropped_count: 1, anomalies: [{ row_index: 8, value: 100, direction: 'above' }],
+      warning: '统计异常是需要复核的线索，不等于已确认的质量缺陷。' } })
+  render(<AnalysisResultPanel view={view} />)
+  expect(screen.getByRole('heading', { name: 'IQR 异常检测' })).toBeInTheDocument()
+  expect(screen.getByText('第 9 行')).toBeInTheDocument()
+  expect(screen.getByText(/不等于已确认/)).toBeInTheDocument()
+})
+
 test('renders a trusted metric result and evidence locator', () => {
   render(<AnalysisResultPanel view={resultView({
     columns: ['defect_rate'], rows: [[2.5]], row_count: 1,

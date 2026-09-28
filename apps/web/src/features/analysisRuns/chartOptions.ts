@@ -64,6 +64,8 @@ export function createSafeOption(
         : { x: spec.categoryField, y: item.field },
       showSymbol: spec.chartType !== 'line' || records.length <= 30,
       smooth: false,
+      itemStyle: item.field === 'anomaly_value' ? { color: '#dc4c64' } : undefined,
+      lineStyle: item.field === 'anomaly_value' ? { color: '#dc4c64' } : undefined,
       connectNulls: false,
       emphasis: { focus: 'series' },
     })),

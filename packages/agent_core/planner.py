@@ -92,6 +92,11 @@ def understand(
         "capability_help, questions about available data, "
         "tables or fields as catalog_exploration, governed metric questions as metric_query, "
         "and unrelated or prohibited requests as unsupported. "
+        "Classify relationships between two metrics as correlation and requests to detect "
+        "outliers in one metric as anomaly_detection. For these tasks include exactly two "
+        "or one metrics respectively, and a user-specified common dimension/grain; do not "
+        "invent a join or align unrelated rows. Set analysis_method=pearson by default or "
+        "spearman when explicitly requested. "
         "Use metric and dimension terms from the user; never invent formulas, SQL, code, "
         "credentials or authorization. Include domain, task_type, goal, metrics, dimensions, "
         "filters, time_range, comparison, output, ambiguities and confidence. "
@@ -119,7 +124,8 @@ def revise_intent(
     prompt = (
         "Revise the prior manufacturing analysis intent using the new user message. "
         "Return mode=patch with only structured ContextPatch fields when the user is adding "
-        "metrics, dimensions, filters, time_range, comparison or output. Return mode=replace "
+        "metrics, dimensions, filters, time_range, comparison, analysis_method or output. "
+        "Return mode=replace "
         "with a complete Intent only when the user explicitly changes the task goal. "
         "Never add formulas, SQL, code, credentials or authorization. "
         f"Validated follow-up relation: {relation}. "
@@ -160,6 +166,10 @@ def route_intent(intent: Intent) -> RouteDecision:
         route = "ranking"
     elif intent.task_type == "trend":
         route = "trend"
+    elif intent.task_type == "correlation":
+        route = "correlation"
+    elif intent.task_type == "anomaly_detection":
+        route = "anomaly_detection"
     else:
         return RouteDecision(route="unsupported", requires_binding=False)
     if not intent.metrics:
@@ -168,6 +178,33 @@ def route_intent(intent: Intent) -> RouteDecision:
             requires_binding=True,
             clarification=_metric_required(),
         )
+    if route in {"correlation", "anomaly_detection"}:
+        expected = 2 if route == "correlation" else 1
+        if len(intent.metrics) != expected or len(set(intent.metrics)) != expected:
+            return RouteDecision(
+                route=route,
+                requires_binding=True,
+                clarification=ClarificationRequest(
+                    reason_code="analysis_fields_required",
+                    question="你想分析哪两个指标之间的相关性？"
+                    if expected == 2
+                    else "你想检查哪个指标的异常？",
+                    missing_fields=("metrics",),
+                    resume_node="understand",
+                ),
+            )
+        if not intent.dimensions:
+            return RouteDecision(
+                route=route,
+                requires_binding=True,
+                clarification=ClarificationRequest(
+                    reason_code="analysis_grain_required",
+                    question="你希望按什么粒度分析？例如按天、按设备或按产线。不同粒度的结果不能直接配对。",
+                    missing_fields=("dimensions",),
+                    suggested_answers=("按天分析", "按设备分析", "按产线分析"),
+                    resume_node="understand",
+                ),
+            )
     if route == "comparison" and (intent.time_range is None or intent.comparison is None):
         return RouteDecision(
             route=route,
@@ -386,6 +423,17 @@ def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
     time_grain = _intent_time_grain(intent)
     if time_grain is None and intent.task_type == "trend" and binding.dimension_keys:
         time_grain = "month"
+    if (
+        intent.task_type in {"correlation", "anomaly_detection"}
+        and time_grain is None
+        and binding.time_dimension_key in binding.dimension_keys
+    ):
+        time_grain = "day"
+    if (
+        intent.task_type in {"correlation", "anomaly_detection"}
+        and binding.time_dimension_key not in binding.dimension_keys
+    ):
+        time_grain = None
     arguments: dict[str, object] = {
         "semantic_model_id": binding.semantic_model_id,
         "semantic_version_id": binding.semantic_version_id,
@@ -398,6 +446,47 @@ def create_plan(intent: Intent, binding: Binding) -> AnalysisPlan:
         "time_grain": time_grain if binding.dimension_keys else None,
         "limit": 200,
     }
+    if intent.task_type in {"correlation", "anomaly_detection"}:
+        analysis_arguments: dict[str, object] = {"artifact_id": "$trusted_metric_query.artifact"}
+        if intent.task_type == "correlation":
+            if len(binding.metric_keys) != 2 or len(set(binding.metric_keys)) != 2:
+                raise ValueError("correlation requires two resolved metrics")
+            analysis_arguments.update(
+                x_field=binding.metric_keys[0],
+                y_field=binding.metric_keys[1],
+                method=intent.analysis_method,
+            )
+            tool = "analysis.correlate"
+        else:
+            if len(binding.metric_keys) != 1:
+                raise ValueError("anomaly detection requires one resolved metric")
+            analysis_arguments.update(field=binding.metric_keys[0], multiplier=1.5)
+            tool = "analysis.detect_anomaly"
+        return AnalysisPlan(
+            goal=intent.goal,
+            steps=(
+                AnalysisStep(
+                    id="trusted_metric_query",
+                    tool="query.metric",
+                    arguments=arguments,
+                    expected_evidence=("validated_query", "query_execution"),
+                ),
+                AnalysisStep(
+                    id="advanced_analysis",
+                    tool=tool,
+                    arguments=analysis_arguments,
+                    depends_on=("trusted_metric_query",),
+                    expected_evidence=("advanced_analysis",),
+                ),
+                AnalysisStep(
+                    id="compose_visualization",
+                    tool="visualization.compose",
+                    arguments={"artifact_id": "$trusted_metric_query.artifact"},
+                    depends_on=("advanced_analysis",),
+                    expected_evidence=("chart_spec",),
+                ),
+            ),
+        )
     return AnalysisPlan(
         goal=intent.goal,
         steps=(

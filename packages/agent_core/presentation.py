@@ -105,11 +105,55 @@ def failure_presentation(
         "model.retry_exhausted",
     }:
         content = "模型服务暂时没有响应，我已经保留当前进度。请稍后重新尝试。"
+    elif code.startswith("analysis."):
+        content = {
+            "analysis.insufficient_samples": (
+                "当前范围内的有效样本不足，暂时无法可靠计算。"
+                "相关性至少需要3对数值，IQR异常检测至少需要8个样本。"
+                "请扩大时间范围或改用更细的分析粒度。"
+            ),
+            "analysis.constant_field": (
+                "当前数据中的指标没有变化，无法计算有意义的相关性。可以扩大数据范围或更换指标。"
+            ),
+            "analysis.zero_iqr": (
+                "当前数据的四分位距为零，IQR方法无法可靠区分异常。我不会把这些数据强行标成异常。"
+            ),
+            "analysis.incomplete_data": (
+                "当前查询结果不完整或已截断，不能用来可靠分析。请缩小筛选范围后再试。"
+            ),
+            "analysis.data_limit": "数据超过本次分析的资源上限，请缩小筛选范围后再试。",
+            "analysis.field_not_found": "所选指标不在当前查询结果中，请确认分析对象。",
+            "analysis.non_numeric_field": (
+                "所选字段包含非数值，暂时不能进行这项计算。请选择数值指标或先清理数据。"
+            ),
+            "analysis.numeric_range": "数据包含超出可靠计算范围的数值，请先检查数据。",
+        }.get(code, "当前数据来源或证据无法通过校验，我没有生成分析结论。请重新查询后再试。")
     else:
         content = "这次分析没有完成，但没有产生可用结论。" + (
             "当前进度已保留，你可以重新尝试。" if retryable else "你可以调整问题后重新发起分析。"
         )
     return _presentation(content, kind="error", retryable=retryable, technical_code=code)
+
+
+def advanced_analysis_presentation(summary: dict[str, object]) -> AgentPresentation:
+    method = summary.get("method")
+    if method in {"pearson", "spearman"}:
+        content = (
+            f"我按同一业务粒度配对了{summary.get('sample_count')}组有效数据，"
+            f"使用{str(method).capitalize()}计算，相关系数为{_format_value(summary.get('coefficient'))}。"
+            f"有{summary.get('dropped_count')}行因缺失值未参与计算。相关性不代表因果关系。"
+        )
+    else:
+        points = summary.get("anomalies")
+        count = len(points) if isinstance(points, list) else 0
+        content = (
+            f"我使用IQR方法检查了{summary.get('sample_count')}个有效样本，发现{count}个异常候选。"
+            f"正常参考区间为{_format_value(summary.get('lower_bound'))}至{_format_value(summary.get('upper_bound'))}。"
+            "统计异常只是需要复核的线索，不等于已确认的质量缺陷。"
+        )
+    return _presentation(
+        content, kind="answer", quick_replies=("解释这个结果", "扩大时间范围", "查看计算依据")
+    )
 
 
 def query_presentation(

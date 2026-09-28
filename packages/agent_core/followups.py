@@ -5,7 +5,16 @@ from __future__ import annotations
 from packages.agent_core.contracts import ContextPatch, FollowUpDecision, Intent
 from packages.model_gateway import GatewayMessage, GatewayRequest, GatewayUsage, ModelGateway
 
-_EXPLAIN_MARKERS = ("为什么", "解释一下", "怎么理解", "原因", "说明一下")
+_EXPLAIN_MARKERS = (
+    "为什么",
+    "解释一下",
+    "解释这个结果",
+    "解释结果",
+    "查看计算依据",
+    "怎么理解",
+    "原因",
+    "说明一下",
+)
 _COMPARE_MARKERS = (
     "相比",
     "比较",
@@ -72,6 +81,14 @@ def classify_follow_up_deterministically(
         return FollowUpDecision(relation="switch_topic", confidence=1.0)
     if any(marker in normalized for marker in _EXPLAIN_MARKERS):
         return FollowUpDecision(relation="explain", confidence=1.0)
+    if "spearman" in normalized or "pearson" in normalized:
+        return FollowUpDecision(
+            relation="refine",
+            patch=ContextPatch(
+                analysis_method="spearman" if "spearman" in normalized else "pearson"
+            ),
+            confidence=1.0,
+        )
     if any(marker in normalized for marker in _COMPARE_MARKERS):
         comparison = (
             "previous_year" if "同比" in normalized or "去年" in normalized else "previous_period"
