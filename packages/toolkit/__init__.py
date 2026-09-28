@@ -83,6 +83,8 @@ def _schema(*required: str) -> dict[str, object]:
 
 
 def build_default_registry() -> ToolRegistry:
+    from packages.analysis_engine.advanced import CorrelationRequest, IQRRequest
+
     registry = ToolRegistry()
     definitions = (
         ("catalog.search", "Search the authorized frozen catalog", _schema("query"), "catalog"),
@@ -115,13 +117,13 @@ def build_default_registry() -> ToolRegistry:
         (
             "analysis.correlate",
             "Measure correlation with causal warning",
-            _schema("artifact_id"),
+            CorrelationRequest.model_json_schema(),
             "analysis",
         ),
         (
             "analysis.detect_anomaly",
-            "Detect anomalies in verified data",
-            _schema("artifact_id"),
+            "Detect statistical IQR anomalies in complete verified data",
+            IQRRequest.model_json_schema(),
             "analysis",
         ),
         (
@@ -142,7 +144,9 @@ def build_default_registry() -> ToolRegistry:
         registry.register(
             ToolSpec(
                 name=name,
-                version="1.0.0",
+                version="1.1.0"
+                if name in {"analysis.correlate", "analysis.detect_anomaly"}
+                else "1.0.0",
                 description=description,
                 input_schema=input_schema,
                 output_schema={"type": "object"},
