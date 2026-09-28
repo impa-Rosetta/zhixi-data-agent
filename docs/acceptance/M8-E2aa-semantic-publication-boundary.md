@@ -6,7 +6,7 @@
 
 使用0.1.19草案中的`ambiguity-unknown-quality-metric`夹具构造一个已发布模型及其激活版本，并调用真实Worker的`_published_semantics`：基线返回1项。保持`active_version_id`不变，将模型状态改为`ARCHIVED`后仍返回1项；恢复模型已发布、将版本状态改为`DRAFT`后仍返回1项。
 
-根因可从当前查询直接看到：`apps/worker/analysis_runtime.py::_published_semantics`只以模型的`workspace_id`过滤，按`active_version_id`关联版本，没有要求模型状态`PUBLISHED`、版本状态`PUBLISHED`、版本所属工作空间与模型一致、版本所属模型ID与模型一致。内存复现仅证明前两种状态失效；后两种关联条件是代码审计风险，尚未构造运行证据，不应写成已复现漏洞。
+根因可从当前查询直接看到：`apps/worker/analysis_runtime.py::_published_semantics`只以模型的`workspace_id`过滤，按`active_version_id`关联版本，没有要求模型状态`PUBLISHED`、版本状态`PUBLISHED`、版本所属工作空间与模型一致、版本所属模型ID与模型一致。追加隔离复现：将当前空间模型的激活指针指向另一空间的已发布版本，加载结果仍使用外空间版本；将同空间某模型的激活指针指向另一模型的已发布版本，也仍被加载。四项约束缺口均有内存运行证据。此实验没有证明真实生产数据库可由普通用户创建非法指针，也没有证明敏感数据已泄露；需要分别核查发布API、数据库约束与纵向权限边界。
 
 这说明已有14条歧义案例不能证明发布生命周期安全；继续增加相同指标的缺失/双口径问法不会覆盖该边界。当前0.1.19与144/144历史结果保留，不把新诊断计入通过案例。
 
