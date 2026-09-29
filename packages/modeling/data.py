@@ -126,6 +126,8 @@ def prepare_training_data(
         raise ModelDataError("model.insufficient_samples")
     if spec.task == "classification":
         labels = Counter(projected[i][len(spec.features)] for i in retained)
+        if any(isinstance(label, float) and not label.is_integer() for label in labels):
+            raise ModelDataError("model.discrete_class_labels_required")
         if len(labels) < 2 or min(labels.values()) < 5:
             raise ModelDataError("model.insufficient_class_samples")
     if spec.task == "clustering" and len(retained) <= int(
