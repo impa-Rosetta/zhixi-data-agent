@@ -22,6 +22,9 @@ class Action(enum.StrEnum):
     AUDIT_READ = "audit.read"
     EVALUATION_READ = "evaluation.read"
     EVALUATION_MANAGE = "evaluation.manage"
+    MODEL_READ = "model.read"
+    MODEL_TRAIN = "model.train"
+    MODEL_PREDICT = "model.predict"
 
 
 _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
@@ -32,6 +35,9 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
             Action.WORKSPACE_READ,
             Action.MEMBER_READ,
             Action.DATA_SOURCE_MANAGE,
+            Action.MODEL_READ,
+            Action.MODEL_TRAIN,
+            Action.MODEL_PREDICT,
             Action.CATALOG_READ,
             Action.ANALYSIS_RUN,
             Action.ANALYSIS_REPORT_CREATE,
@@ -42,6 +48,9 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
     ),
     WorkspaceRole.ANALYST: frozenset(
         {
+            Action.MODEL_READ,
+            Action.MODEL_TRAIN,
+            Action.MODEL_PREDICT,
             Action.WORKSPACE_READ,
             Action.CATALOG_READ,
             Action.SEMANTIC_READ,
@@ -54,6 +63,7 @@ _ROLE_ACTIONS: dict[WorkspaceRole, frozenset[Action]] = {
     ),
     WorkspaceRole.AUDITOR: frozenset(
         {
+            Action.MODEL_READ,
             Action.WORKSPACE_READ,
             Action.MEMBER_READ,
             Action.CATALOG_READ,
