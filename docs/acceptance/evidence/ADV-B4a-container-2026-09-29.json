@@ -1,0 +1,265 @@
+{
+  "simulation": true,
+  "image_id": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+  "runs": [
+    {
+      "algorithm": "linear_regression",
+      "task": "regression",
+      "metrics": [
+        {
+          "name": "mae",
+          "value": 0.0019695401268411718,
+          "unavailable_reason": null
+        },
+        {
+          "name": "rmse",
+          "value": 0.0060478239221163094,
+          "unavailable_reason": null
+        },
+        {
+          "name": "r2",
+          "value": 0.3996765625446478,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        0.009668725878640153
+      ]
+    },
+    {
+      "algorithm": "decision_tree",
+      "task": "regression",
+      "metrics": [
+        {
+          "name": "mae",
+          "value": 0.0027516396352529047,
+          "unavailable_reason": null
+        },
+        {
+          "name": "rmse",
+          "value": 0.007760558200485159,
+          "unavailable_reason": null
+        },
+        {
+          "name": "r2",
+          "value": 0.011508492151007688,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        0.010001814285714289
+      ]
+    },
+    {
+      "algorithm": "decision_tree",
+      "task": "classification",
+      "metrics": [
+        {
+          "name": "precision_macro",
+          "value": 0.8916692096429661,
+          "unavailable_reason": null
+        },
+        {
+          "name": "recall_macro",
+          "value": 0.90655685777637,
+          "unavailable_reason": null
+        },
+        {
+          "name": "f1_macro",
+          "value": 0.8966515088879703,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        "normal"
+      ]
+    },
+    {
+      "algorithm": "random_forest",
+      "task": "regression",
+      "metrics": [
+        {
+          "name": "mae",
+          "value": 0.002780026420469977,
+          "unavailable_reason": null
+        },
+        {
+          "name": "rmse",
+          "value": 0.006888807043460869,
+          "unavailable_reason": null
+        },
+        {
+          "name": "r2",
+          "value": 0.22111191078454495,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        0.009202408923611214
+      ]
+    },
+    {
+      "algorithm": "random_forest",
+      "task": "classification",
+      "metrics": [
+        {
+          "name": "precision_macro",
+          "value": 0.9083333333333333,
+          "unavailable_reason": null
+        },
+        {
+          "name": "recall_macro",
+          "value": 0.9138950480413894,
+          "unavailable_reason": null
+        },
+        {
+          "name": "f1_macro",
+          "value": 0.9108804487431522,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        "normal"
+      ]
+    },
+    {
+      "algorithm": "logistic_regression",
+      "task": "classification",
+      "metrics": [
+        {
+          "name": "precision_macro",
+          "value": 0.9141123548488335,
+          "unavailable_reason": null
+        },
+        {
+          "name": "recall_macro",
+          "value": 0.917960088691796,
+          "unavailable_reason": null
+        },
+        {
+          "name": "f1_macro",
+          "value": 0.9159310634720471,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        "normal"
+      ]
+    },
+    {
+      "algorithm": "kmeans",
+      "task": "clustering",
+      "metrics": [
+        {
+          "name": "silhouette",
+          "value": 0.24639102199217472,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        1
+      ]
+    },
+    {
+      "algorithm": "isolation_forest",
+      "task": "anomaly_detection",
+      "metrics": [
+        {
+          "name": "anomaly_fraction",
+          "value": 0.1,
+          "unavailable_reason": null
+        }
+      ],
+      "sample_count": 1000,
+      "config": {
+        "image": "sha256:8864d6a33403094ccf10b994aef7456be91e0d490e4eca5e6d340cc74d3c646f",
+        "user": "10001:10001",
+        "network": "none",
+        "memory": 1073741824,
+        "pids": 128,
+        "readonly": true,
+        "exit_code": 0
+      },
+      "predictions": [
+        1
+      ]
+    }
+  ],
+  "not_verified": [
+    "production_agent",
+    "cancellation",
+    "lease",
+    "output_filesystem_quota",
+    "database_authorization"
+  ]
+}

@@ -46,3 +46,6 @@ A1/A2 先运行专项 pytest，再运行 Ruff/MyPy 和全量回归。测试覆�
 2026-09-28 ADV-A2：A3生产会话工具绑定、真实领域写入及A4结果组件/SSR图表已接通，C1/C2加入相关性、异常与方法切换及可信解释。后端711通过无跳过、覆盖率90.33%；前端98通过及静态/构建通过。真实浏览器/源查询联合验收及高级分析报告C4仍待完成，不关闭完整第一批；B六算法尚未实现。详见 `docs/acceptance/ADV-A2-advanced-analysis-runtime-2026-09-28.md`。
 
 2026-09-28：A1/A2 数学引擎、严格协议和工具绑定完成；A3 的当前权限与真实持久化证据读取器完成，生产任务写入/绑定仍待接通。新增79项回归，后端699通过无跳过、覆盖率90.29%。A4、B/C 尚未完成，不能宣称网页可使用新能力。验收见 `docs/acceptance/ADV-A1-advanced-analysis-foundation-2026-09-28.md`。
+# Execution update: 2026-09-29
+
+See [ADV-B3/B6/B4a acceptance](../acceptance/ADV-B3-B6-B4a-model-execution-2026-09-29.md). Eight algorithm/task combinations pass real fixed-image training and reloaded prediction. B3 and internal-file B6 foundations are implemented; B4a fixed image/file protocol is verified. Production B2/B4/B5/B6 authorization/publication, B7 and conversation batch C remain incomplete. Next: persisted job/version/lease service, then trusted host agent and object storage, then conversation integration. No website capability is opened by offline/container acceptance alone.

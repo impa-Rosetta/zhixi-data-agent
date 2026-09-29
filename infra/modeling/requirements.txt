@@ -1,0 +1,16 @@
+scikit-learn==1.9.1
+skops==0.16.0
+numpy==2.5.3
+scipy==1.18.1
+pydantic==2.13.5
+pydantic-core==2.46.5
+annotated-types==0.8.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+joblib==1.6.0
+threadpoolctl==3.7.0
+packaging==26.3
+narwhals==2.26.0
+prettytable==3.18.0
+cloudpickle==3.1.2
+wcwidth==0.8.3

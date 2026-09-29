@@ -130,3 +130,6 @@ M9-G16在独立空PostgreSQL/tmpfs容器执行现存预算并发测试，连续5
 - [已批准M8评测设计](superpowers/specs/2026-09-25-m8-evaluation-center-design.md)、[实施计划](plans/2026-09-25-m8-evaluation-center-implementation-plan.md)。
 
 临时E2z验收API/Worker在终态验证后清理，原有数据库、队列及源服务保留。用户原有M3文档改动、output和tmp不纳入开发提交；不记录真实密钥或令牌。
+# Latest delivery update: 2026-09-29
+
+ADV-B3/B6 foundations and B4a fixed image are verified with eight real algorithm/task combinations, each trained and reloaded for prediction in a restricted container (16 runs). This is NOT a website modeling release. See [current acceptance and remaining gates](acceptance/ADV-B3-B6-B4a-model-execution-2026-09-29.md). Production persisted jobs, trusted host agent, leases/cancellation, object storage and conversation/report integration remain open; do not enable model tools yet.
