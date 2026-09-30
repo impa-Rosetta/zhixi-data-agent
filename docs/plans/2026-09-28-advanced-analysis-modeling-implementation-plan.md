@@ -49,3 +49,7 @@ A1/A2 先运行专项 pytest，再运行 Ruff/MyPy 和全量回归。测试覆�
 # Execution update: 2026-09-29
 
 See [ADV-B3/B6/B4a acceptance](../acceptance/ADV-B3-B6-B4a-model-execution-2026-09-29.md). Eight algorithm/task combinations pass real fixed-image training and reloaded prediction. B3 and internal-file B6 foundations are implemented; B4a fixed image/file protocol is verified. Production B2/B4/B5/B6 authorization/publication, B7 and conversation batch C remain incomplete. Next: persisted job/version/lease service, then trusted host agent and object storage, then conversation integration. No website capability is opened by offline/container acceptance alone.
+
+# Execution update: 2026-09-30
+
+B5a persistence schema and lease/attempt state transitions are implemented with SQLite-isolated 0015 upgrade/downgrade and lifecycle tests. See [ADV-B5a acceptance](../acceptance/ADV-B5a-model-job-persistence-2026-09-30.md). Production PostgreSQL full-chain migration, MinIO, host agent, API/worker and conversation integration remain open. Do not enable model tools.
