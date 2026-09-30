@@ -4,6 +4,8 @@
 
 ## 当前结论
 
+2026-09-30 ADV-B4d：增加独立主机进程的有限批量轮询、过期租约回收和私有MinIO对象适配；8项专项通过，全量后端1007通过、1项跳过，覆盖率90.46%。尚无真实PostgreSQL/MinIO/Docker联合验收，未开放API或网页。详见[ADV-B4d记录](acceptance/ADV-B4d-host-polling-object-store-2026-09-30.md)。
+
 2026-09-30 ADV-B4c：新增按持久化任务ID领取、快照重验、固定容器执行、取消/撤权轮询、结果完整性验证及事务性版本发布的内部主机流程。4项离线编排测试通过，全量后端999通过、1项跳过，覆盖率90.60%。当前Docker与真实MinIO验收、常驻代理及API/对话入口仍未完成。详见[ADV-B4c记录](acceptance/ADV-B4c-host-job-runtime-2026-09-30.md)。
 
 2026-09-30 ADV-B4b：主机专用容器启动策略已固定镜像ID、资源、无网络、非root与挂载边界，6项专项测试通过；主机代理和当前Docker实测尚未完成，不对外开放。详见[ADV-B4b记录](acceptance/ADV-B4b-fixed-host-container-policy-2026-09-30.md)。

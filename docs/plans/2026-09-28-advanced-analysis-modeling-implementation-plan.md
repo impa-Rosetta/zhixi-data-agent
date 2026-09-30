@@ -59,3 +59,5 @@ B5b trusted API-side snapshot-to-job service now handles current authorization, 
 B4b now has a code-owned Docker create policy with a fixed image ID and resource/isolation flags. See [B4b acceptance](../acceptance/ADV-B4b-fixed-host-container-policy-2026-09-30.md). No live host agent or new Docker acceptance yet.
 
 B4c now has a trusted-host, persisted-job-ID execution flow, fixed-directory file exchange, authorization/cancellation polling, validated output and transactional version publication. See [B4c acceptance](../acceptance/ADV-B4c-host-job-runtime-2026-09-30.md). Four offline orchestrator tests pass; Docker Desktop and real MinIO remain unavailable/unverified, and a long-lived host agent plus API/Worker/conversation wiring remain open.
+
+B4d adds a separately launched polling process and a private MinIO adapter for model objects. See [B4d acceptance](../acceptance/ADV-B4d-host-polling-object-store-2026-09-30.md). Protocol/polling substitutes pass eight tests; real PG/MinIO/Docker integration, host operations and all user-facing routes remain open.
