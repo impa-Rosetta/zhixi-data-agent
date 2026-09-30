@@ -4,6 +4,10 @@
 
 ## 当前结论
 
+2026-09-30 ADV-B4c：新增按持久化任务ID领取、快照重验、固定容器执行、取消/撤权轮询、结果完整性验证及事务性版本发布的内部主机流程。4项离线编排测试通过，全量后端999通过、1项跳过，覆盖率90.60%。当前Docker与真实MinIO验收、常驻代理及API/对话入口仍未完成。详见[ADV-B4c记录](acceptance/ADV-B4c-host-job-runtime-2026-09-30.md)。
+
+2026-09-30 ADV-B4b：主机专用容器启动策略已固定镜像ID、资源、无网络、非root与挂载边界，6项专项测试通过；主机代理和当前Docker实测尚未完成，不对外开放。详见[ADV-B4b记录](acceptance/ADV-B4b-fixed-host-container-policy-2026-09-30.md)。
+
 2026-09-30 ADV-B5b：当前授权来源到完整快照对象与排队任务的内部服务已接通，同键重投不重复写对象、撤权/存储期间撤权阻断入队；使用替身存储和来源进行专项测试，尚无真实MinIO/主机代理/API公开入口。详见[ADV-B5b记录](acceptance/ADV-B5b-snapshot-to-job-service-2026-09-30.md)。
 
 2026-09-30 ADV-B5a：训练快照回执、任务、模型注册表和版本的空间隔离表及0015迁移已实现；幂等入队、租约重领、撤权/取消/陈旧attempt阻止发布和对象摘要读回已通过服务层测试。当前没有网页/API/主机代理建模闭环，Docker未就绪导致完整PostgreSQL迁移尚未复验。详见[ADV-B5a记录](acceptance/ADV-B5a-model-job-persistence-2026-09-30.md)。

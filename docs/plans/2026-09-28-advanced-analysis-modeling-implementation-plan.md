@@ -55,3 +55,7 @@ See [ADV-B3/B6/B4a acceptance](../acceptance/ADV-B3-B6-B4a-model-execution-2026-
 B5a persistence schema and lease/attempt state transitions are implemented with SQLite-isolated 0015 upgrade/downgrade and lifecycle tests. See [ADV-B5a acceptance](../acceptance/ADV-B5a-model-job-persistence-2026-09-30.md). Production PostgreSQL full-chain migration, MinIO, host agent, API/worker and conversation integration remain open. Do not enable model tools.
 
 B5b trusted API-side snapshot-to-job service now handles current authorization, object-write ordering and idempotent replay; see [ADV-B5b acceptance](../acceptance/ADV-B5b-snapshot-to-job-service-2026-09-30.md). The service is not a public API and does not execute training.
+
+B4b now has a code-owned Docker create policy with a fixed image ID and resource/isolation flags. See [B4b acceptance](../acceptance/ADV-B4b-fixed-host-container-policy-2026-09-30.md). No live host agent or new Docker acceptance yet.
+
+B4c now has a trusted-host, persisted-job-ID execution flow, fixed-directory file exchange, authorization/cancellation polling, validated output and transactional version publication. See [B4c acceptance](../acceptance/ADV-B4c-host-job-runtime-2026-09-30.md). Four offline orchestrator tests pass; Docker Desktop and real MinIO remain unavailable/unverified, and a long-lived host agent plus API/Worker/conversation wiring remain open.
