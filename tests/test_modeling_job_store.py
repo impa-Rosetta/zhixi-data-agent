@@ -14,6 +14,7 @@ from packages.modeling.job_store import (
     persist_snapshot_receipt,
     publish_training_version,
     reap_exhausted_training,
+    reject_queued_training,
 )
 from packages.modeling.persistence import ModelJob, ModelVersion
 from packages.modeling.snapshot_storage import SnapshotReceipt
@@ -116,6 +117,30 @@ def test_cancel_queued_or_running_blocks_late_claim_and_publication(db):
     with pytest.raises(ModelDataError, match="not_claimable"):
         claim_training(db, workspace_id=workspace.id, job_id=job.id, loader=loader, now=now)
     assert db.get(ModelJob, job.id).status == "cancelled"
+
+
+def test_revoked_queued_job_is_terminal(db):
+    data, user, workspace, receipt, job, loader = setup_job(db)
+    assert reject_queued_training(
+        db, workspace_id=workspace.id, job_id=job.id, error_code="policy.denied"
+    )
+    assert job.status == "failed"
+    with pytest.raises(ModelDataError, match="not_claimable"):
+        claim_training(db, workspace_id=workspace.id, job_id=job.id, loader=loader)
+    assert not reject_queued_training(
+        db, workspace_id=workspace.id, job_id=job.id, error_code="policy.denied"
+    )
+    with pytest.raises(ModelDataError, match="invalid_error_code"):
+        reject_queued_training(db, workspace_id=workspace.id, job_id=job.id, error_code="unknown")
+
+
+def test_queued_rejection_cannot_overwrite_running_attempt(db):
+    data, user, workspace, receipt, job, loader = setup_job(db)
+    claim_training(db, workspace_id=workspace.id, job_id=job.id, loader=loader)
+    assert not reject_queued_training(
+        db, workspace_id=workspace.id, job_id=job.id, error_code="policy.denied"
+    )
+    assert job.status == "running"
 
 
 def test_expired_attempt_cannot_publish_but_new_attempt_can(db):

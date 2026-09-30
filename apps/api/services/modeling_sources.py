@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from apps.api.authorization import authorize
 from apps.api.services.advanced_analysis_sources import load_advanced_analysis_input
 from packages.agent_core.persistence import AnalysisEvidence
+from packages.analysis_engine.advanced import AdvancedAnalysisError
 from packages.modeling.data import ModelDataError, VerifiedTrainingSource
 from packages.platform_core.models import Membership, User
 from packages.platform_core.policy import Action
@@ -43,9 +44,13 @@ def load_training_source(
         authorize(db, user=user, workspace_id=workspace_id, action=Action.MODEL_TRAIN)
     except HTTPException as exc:
         raise ModelDataError("policy.denied") from exc
-    source = load_advanced_analysis_input(
-        db, workspace_id=workspace_id, actor_user_id=actor_user_id, artifact_id=artifact_id
-    )
+    try:
+        source = load_advanced_analysis_input(
+            db, workspace_id=workspace_id, actor_user_id=actor_user_id, artifact_id=artifact_id
+        )
+    except AdvancedAnalysisError as exc:
+        code = "policy.denied" if exc.code == "policy.denied" else "model.source_mismatch"
+        raise ModelDataError(code) from exc
     evidence = db.get(AnalysisEvidence, source.evidence_id, populate_existing=True)
     if (
         evidence is None

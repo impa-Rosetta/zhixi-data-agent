@@ -231,6 +231,39 @@ def fail_attempt(
     return changed is not None
 
 
+def reject_queued_training(
+    db: Session,
+    *,
+    workspace_id: uuid.UUID,
+    job_id: uuid.UUID,
+    error_code: str,
+    now: datetime | None = None,
+) -> bool:
+    """Terminally reject a job whose current source/authority is invalid.
+
+    Only deterministic authorization/source failures may use this transition.
+    An expired or concurrently claimed attempt cannot be overwritten.
+    """
+    if error_code not in {"policy.denied", "model.source_mismatch"}:
+        raise ModelDataError("model.invalid_error_code")
+    current = now or datetime.now(UTC)
+    changed = db.scalar(
+        update(ModelJob)
+        .where(
+            ModelJob.workspace_id == workspace_id,
+            ModelJob.id == job_id,
+            ModelJob.operation == "train",
+            ModelJob.status == "queued",
+        )
+        .values(status="failed", finished_at=current, error_code=error_code)
+        .execution_options(synchronize_session=False)
+        .returning(ModelJob.id)
+    )
+    if changed is not None:
+        db.expire_all()
+    return changed is not None
+
+
 def reap_exhausted_training(
     db: Session,
     *,

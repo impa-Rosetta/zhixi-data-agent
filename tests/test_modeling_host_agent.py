@@ -1,9 +1,11 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy.orm import Session
 
 import apps.host.agent as agent
+from packages.modeling.data import ModelDataError
 from packages.modeling.persistence import ModelJob
 from tests.test_modeling_persistence import seeded
 
@@ -78,3 +80,33 @@ def test_invalid_batch_size_fails_before_db_access():
         pass
     else:
         raise AssertionError("invalid batch size accepted")
+
+
+@pytest.mark.parametrize(
+    "error_code, expected_status",
+    [("policy.denied", "failed"), ("model.source_mismatch", "failed"), ("transient", "queued")],
+)
+def test_poll_closes_revoked_jobs_but_preserves_transient_failure(
+    db, monkeypatch, error_code, expected_status
+):
+    job_id = create_job(db)
+
+    def fail_run(*args, **kwargs):
+        if error_code == "transient":
+            raise OSError("temporary database issue")
+        raise ModelDataError(error_code)
+
+    monkeypatch.setattr(agent, "run_training_job", fail_run)
+    assert (
+        agent.poll_once(
+            db_factory=lambda: Session(db.bind),
+            storage=object(),
+            image_id="sha256:" + "a" * 64,
+            runner=object(),
+        )
+        == 0
+    )
+    with Session(db.bind) as check_db:
+        job = check_db.get(ModelJob, job_id)
+        assert job is not None and job.status == expected_status
+        assert job.error_code == (error_code if expected_status == "failed" else None)

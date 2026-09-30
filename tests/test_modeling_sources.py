@@ -6,7 +6,6 @@ from sqlalchemy import update
 from test_advanced_analysis_sources import source_context  # noqa: F401
 
 from apps.api.services.modeling_sources import load_training_source
-from packages.analysis_engine.advanced import AdvancedAnalysisError
 from packages.modeling.data import ModelDataError
 from packages.platform_core.models import (
     DataSource,
@@ -78,7 +77,7 @@ def test_external_changes_are_not_hidden_by_cached_session(source_context, mutat
                 .where(DataSource.id == records["source"].id)
                 .values(status=DataSourceStatus.DISABLED)
             )
-    with pytest.raises((ModelDataError, AdvancedAnalysisError)):
+    with pytest.raises(ModelDataError):
         load(source_context)
 
 
@@ -95,5 +94,5 @@ def test_invalid_provenance_is_rejected(source_context, record, field, value):
     db, _, _, records = source_context
     setattr(records[record], field, value)
     db.commit()
-    with pytest.raises((ModelDataError, AdvancedAnalysisError)):
+    with pytest.raises(ModelDataError):
         load(source_context)

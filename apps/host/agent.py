@@ -24,7 +24,11 @@ from apps.host.modeling_runtime import (
     run_training_job,
 )
 from packages.modeling.data import ModelDataError
-from packages.modeling.job_store import MAX_ATTEMPTS, reap_exhausted_training
+from packages.modeling.job_store import (
+    MAX_ATTEMPTS,
+    reap_exhausted_training,
+    reject_queued_training,
+)
 from packages.modeling.object_storage import MinioModelObjectStorage
 from packages.modeling.persistence import ModelJob
 from packages.modeling.snapshot_storage import SnapshotObjectStorage
@@ -63,7 +67,7 @@ def poll_once(
                 reap_exhausted_training(db, workspace_id=workspace_id, job_id=job_id, now=now)
         db.commit()
     dispatched = 0
-    for job_id, _, attempts in jobs:
+    for job_id, workspace_id, attempts in jobs:
         if attempts >= MAX_ATTEMPTS:
             continue
         try:
@@ -76,8 +80,15 @@ def poll_once(
             )
         except Exception as exc:
             # Concurrent claim, source revocation and transient DB failure leave
-            # the job unexecuted. Next poll may retry only eligible states.
+            # the job unexecuted. Deterministic revocation is terminal; only
+            # transient failures may be retried by a later poll.
             code = str(exc) if isinstance(exc, ModelDataError) else "model.host_unavailable"
+            if code in {"policy.denied", "model.source_mismatch"}:
+                with db_factory() as db:
+                    reject_queued_training(
+                        db, workspace_id=workspace_id, job_id=job_id, error_code=code
+                    )
+                    db.commit()
             logger.warning("model job not dispatched: job_id=%s code=%s", job_id, code)
             continue
         dispatched += 1
