@@ -11,6 +11,7 @@ from apps.api.routes.auth import router as auth_router
 from apps.api.routes.data_sources import router as data_sources_router
 from apps.api.routes.evaluations import router as evaluations_router
 from apps.api.routes.health import router as health_router
+from apps.api.routes.modeling_jobs import router as modeling_jobs_router
 from apps.api.routes.queries import router as queries_router
 from apps.api.routes.semantic_models import router as semantic_models_router
 from apps.api.routes.workspaces import router as workspaces_router
@@ -52,3 +53,4 @@ app.include_router(analysis_conversations_router)
 app.include_router(analysis_runs_router)
 app.include_router(analysis_reports_router)
 app.include_router(evaluations_router)
+app.include_router(modeling_jobs_router)

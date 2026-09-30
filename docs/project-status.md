@@ -4,6 +4,8 @@
 
 ## 当前结论
 
+2026-09-30 ADV-B5c：新增默认关闭的受控建模任务HTTP接口，支持受权提交、幂等重投、本人查询和取消；撤权与存储故障安全响应。4项专项及全量后端1011通过、1项跳过，覆盖率90.48%。真实PG/MinIO/Docker联合、会话和网页验收未完成，默认仍关闭。详见[ADV-B5c记录](acceptance/ADV-B5c-guarded-model-api-2026-09-30.md)。
+
 2026-09-30 ADV-B4d：增加独立主机进程的有限批量轮询、过期租约回收和私有MinIO对象适配；8项专项通过，全量后端1007通过、1项跳过，覆盖率90.46%。尚无真实PostgreSQL/MinIO/Docker联合验收，未开放API或网页。详见[ADV-B4d记录](acceptance/ADV-B4d-host-polling-object-store-2026-09-30.md)。
 
 2026-09-30 ADV-B4c：新增按持久化任务ID领取、快照重验、固定容器执行、取消/撤权轮询、结果完整性验证及事务性版本发布的内部主机流程。4项离线编排测试通过，全量后端999通过、1项跳过，覆盖率90.60%。当前Docker与真实MinIO验收、常驻代理及API/对话入口仍未完成。详见[ADV-B4c记录](acceptance/ADV-B4c-host-job-runtime-2026-09-30.md)。

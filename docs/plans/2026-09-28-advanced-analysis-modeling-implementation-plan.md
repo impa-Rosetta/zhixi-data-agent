@@ -61,3 +61,5 @@ B4b now has a code-owned Docker create policy with a fixed image ID and resource
 B4c now has a trusted-host, persisted-job-ID execution flow, fixed-directory file exchange, authorization/cancellation polling, validated output and transactional version publication. See [B4c acceptance](../acceptance/ADV-B4c-host-job-runtime-2026-09-30.md). Four offline orchestrator tests pass; Docker Desktop and real MinIO remain unavailable/unverified, and a long-lived host agent plus API/Worker/conversation wiring remain open.
 
 B4d adds a separately launched polling process and a private MinIO adapter for model objects. See [B4d acceptance](../acceptance/ADV-B4d-host-polling-object-store-2026-09-30.md). Protocol/polling substitutes pass eight tests; real PG/MinIO/Docker integration, host operations and all user-facing routes remain open.
+
+B5c adds default-disabled authenticated HTTP create/status/cancel for model jobs. See [B5c acceptance](../acceptance/ADV-B5c-guarded-model-api-2026-09-30.md). No user-visible modeling capability is enabled; next gates are real-stack API-to-host validation, then conversation/prediction/report integration.
