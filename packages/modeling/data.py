@@ -99,6 +99,10 @@ def prepare_training_data(
         raise ModelDataError("model.field_not_found")
     indices = [columns.index(name) for name in selected]
     projected = [tuple(row[i] for i in indices) for row in rows]
+    # Query artifacts replace sensitive values with this exact sentinel. It is
+    # not a missing value or a legitimate training category/target.
+    if any(value == "***MASKED***" for row in projected for value in row):
+        raise ModelDataError("model.masked_data")
     missing = {name: sum(row[i] is None for row in projected) for i, name in enumerate(selected)}
     types: dict[str, Literal["numeric", "categorical"]] = {}
     for i, name in enumerate(selected):

@@ -99,6 +99,15 @@ def test_mixed_feature_types_rejected():
         prepare_training_data(spec, lambda _: source)
 
 
+@pytest.mark.parametrize("column", [0, 1, 2])
+def test_redacted_feature_or_target_is_not_used_for_training(column):
+    rows = [[float(i), "A", float(i * 2)] for i in range(40)]
+    rows[0][column] = "***MASKED***"
+    source, spec = fixture(rows)
+    with pytest.raises(ModelDataError, match="model.masked_data"):
+        prepare_training_data(spec, lambda _: source)
+
+
 def test_classification_requires_each_class_five_samples():
     source, spec = fixture([[i, "A", "rare" if i < 4 else "normal"] for i in range(40)])
     spec = spec.model_copy(update={"algorithm": "logistic_regression", "task": "classification"})

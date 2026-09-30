@@ -65,3 +65,5 @@ B4d adds a separately launched polling process and a private MinIO adapter for m
 B5c adds default-disabled authenticated HTTP create/status/cancel for model jobs. See [B5c acceptance](../acceptance/ADV-B5c-guarded-model-api-2026-09-30.md). No user-visible modeling capability is enabled; next gates are real-stack API-to-host validation, then conversation/prediction/report integration.
 
 B4e closes deterministic queued revocation to a terminal state and adds mocked Docker normal/cancel/timeout/cleanup tests. See [B4e acceptance](../acceptance/ADV-B4e-host-lifecycle-revocation-2026-09-30.md). The current complete-query artifact path is at most 1,000 rows, not the approved 20,000-row dedicated training-data path; B2 remains open.
+
+B2a rejects masked query cells in selected training features, target and split metadata. See [B2a acceptance](../acceptance/ADV-B2a-masked-training-boundary-2026-09-30.md). This safety fix does not close the dedicated 20,000-row training-data preparation or real-source gate.
