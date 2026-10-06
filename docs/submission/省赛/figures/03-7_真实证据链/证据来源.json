@@ -1,0 +1,29 @@
+{
+  "source": "local demo environment, real persisted run",
+  "workspaceId": "44383bdd-43c4-4131-a6c1-69142780b3be",
+  "conversationId": "5f79dc88-ae26-4180-a8d4-14fa537310dd",
+  "turnId": "7ea7674c-fa5c-4e9d-bf7a-02e0b392e540",
+  "runId": "982a0de4-090b-4ab7-a810-e81aa658c576",
+  "reportId": "19e3f556-f543-4782-a865-b16dd20f0e2a",
+  "queryArtifactId": "f03b3337-bf8b-406a-ac79-0a4dad751de5",
+  "chartArtifactId": "be386d1c-d3c1-42c5-8f9c-6ac4eb1277ed",
+  "queryEvidenceId": "edca3fbe-4a32-4e1e-8df2-03dddd477ed4",
+  "validatedQueryId": "e0441e6b-8c68-4093-b844-25a2b06a67c3",
+  "executionId": "9162d496-fe88-455d-bd03-f696de8a3a84",
+  "semanticVersionId": "d630bc97-e58b-40dc-b0a2-0d311c7aae15",
+  "semanticModelId": "3206d469-569a-42d9-831b-131f5394d303",
+  "metric": "defect_rate = SUM(inspection.defect_quantity) / SUM(inspection.inspected_quantity) × 100%",
+  "keyNumber": "2026-09-01: 3.0%",
+  "screenshots": [
+    "01a_用户提问_头像在右.png",
+    "01b_Agent回答_头像在左.png",
+    "01c_可信查询表.png",
+    "02_真实折线图.png",
+    "03_已发布指标口径.png",
+    "04a_查询执行证据.png",
+    "04b_验证结论.png",
+    "04c_同一运行ID.png",
+    "05_报告中的同一数字.png",
+    "05b_报告来源引用.png"
+  ]
+}

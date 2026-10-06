@@ -34,6 +34,12 @@ export function createSafeOption(
   const records = data.rows.slice(0, spec.rowLimit).map((row) =>
     Object.fromEntries(data.columns.map((column, index) => [column, safeValue(row[index])])),
   )
+  const chronological = spec.chartType === 'line' && spec.categoryField === 'inspection_time'
+    && records.every((record) => typeof record.inspection_time === 'string'
+      && Number.isFinite(Date.parse(record.inspection_time)))
+  if (chronological) {
+    records.sort((left, right) => Date.parse(String(left.inspection_time)) - Date.parse(String(right.inspection_time)))
+  }
   const horizontal = spec.chartType === 'horizontal_bar'
   const scatter = spec.chartType === 'scatter'
   return {
@@ -47,7 +53,7 @@ export function createSafeOption(
       ? { type: 'value', axisLabel: { color: '#667085' }, splitLine: { lineStyle: { color: '#edf0f5' } } }
       : {
           type: scatter ? 'value' : 'category',
-          axisLabel: { color: '#667085', hideOverlap: true },
+          axisLabel: { color: '#667085', hideOverlap: true, formatter: chronological ? formatInspectionDate : undefined },
           axisLine: { lineStyle: { color: '#cfd7e3' } },
         },
     yAxis: horizontal
@@ -70,6 +76,10 @@ export function createSafeOption(
       emphasis: { focus: 'series' },
     })),
   }
+}
+
+function formatInspectionDate(value: string): string {
+  return /^\d{4}-\d{2}-\d{2}T/.test(value) ? value.slice(0, 10) : value
 }
 
 function safeValue(value: unknown): string | number | null {

@@ -41,6 +41,33 @@ test('renders trusted dataset rows into the SVG chart', () => {
   expect(svg).toContain('不良率')
 })
 
+test('orders a monthly inspection trend chronologically without changing source rows', () => {
+  const rows: unknown[][] = [
+    ['2026-09-01T00:00:00+00:00', 3],
+    ['2026-08-01T00:00:00+00:00', 2.75],
+    ['2026-07-01T00:00:00+00:00', 1.75],
+  ]
+  const option = createSafeOption(
+    {
+      chartType: 'line', title: '最近三个月的不良率趋势',
+      categoryField: 'inspection_time', series: [{ field: 'defect_rate', label: 'defect_rate' }],
+      rowLimit: 3, truncated: false,
+    },
+    { columns: ['inspection_time', 'defect_rate'], rows },
+  ) as unknown as {
+    dataset: { source: Array<{ inspection_time: string; defect_rate: number }> }
+    xAxis: { axisLabel: { formatter: (value: string) => string } }
+  }
+
+  expect(option.dataset.source.map((row) => [row.inspection_time, row.defect_rate])).toEqual([
+    ['2026-07-01T00:00:00+00:00', 1.75],
+    ['2026-08-01T00:00:00+00:00', 2.75],
+    ['2026-09-01T00:00:00+00:00', 3],
+  ])
+  expect(option.xAxis.axisLabel.formatter('2026-09-01T00:00:00+00:00')).toBe('2026-09-01')
+  expect(rows[0]).toEqual(['2026-09-01T00:00:00+00:00', 3])
+})
+
 test('renders a real scatter dataset as visible SVG points', () => {
   const option = createSafeOption({ chartType: 'scatter', title: '相关性散点图', categoryField: 'x',
     series: [{ field: 'y', label: '指标Y' }], rowLimit: 10, truncated: false },
