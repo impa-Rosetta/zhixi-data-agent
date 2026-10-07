@@ -15,6 +15,7 @@ $apiHealthUrl = 'http://127.0.0.1:8000/health'
 $dockerDesktop = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
 $mutex = New-Object System.Threading.Mutex($false, 'Local\ZhixiDataAgentLauncher')
 $hasLock = $false
+Import-Module (Join-Path $PSScriptRoot 'startup-readiness.psm1') -Force
 
 function Write-Status {
     param([string]$Message)
@@ -61,27 +62,86 @@ function Wait-DockerEngine {
     return $false
 }
 
-function Test-HttpEndpoint {
-    param([string]$Url)
+function Invoke-DockerCommand {
+    param(
+        [string[]]$DockerArguments,
+        [int]$TimeoutSeconds,
+        [switch]$CaptureOutput
+    )
+
+    $command = (Get-Command docker.exe -ErrorAction Stop).Source
+    $invocationId = [guid]::NewGuid().ToString('N')
+    $stdoutPath = Join-Path $logRoot "docker-$invocationId.stdout.tmp"
+    $stderrPath = Join-Path $logRoot "docker-$invocationId.stderr.tmp"
+    $process = $null
     try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 4
+        $process = Start-Process -FilePath $command -ArgumentList $DockerArguments `
+            -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru `
+            -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+        $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        $nextProgress = (Get-Date).AddSeconds(30)
+        while (-not $process.WaitForExit(1000)) {
+            if ((Get-Date) -ge $deadline) {
+                # Only stop the process tree created by this launcher invocation.
+                & taskkill.exe /PID $process.Id /T /F *> $null
+                throw "Docker command timed out after $TimeoutSeconds seconds."
+            }
+            if ((Get-Date) -ge $nextProgress) {
+                Write-Status "Docker 命令仍在执行；最长等待 $TimeoutSeconds 秒。"
+                $nextProgress = (Get-Date).AddSeconds(30)
+            }
+        }
+        $output = if ($CaptureOutput) { Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue } else { '' }
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Output = $output }
+    }
+    finally {
+        if ($null -ne $process) { $process.Dispose() }
+        Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-ApiEndpoint {
+    try {
+        $payload = Invoke-RestMethod -Uri $apiHealthUrl -TimeoutSec 4
+        return (Test-ZhixiApiHealthPayload $payload)
+    }
+    catch { return $false }
+}
+
+function Test-WebEndpoint {
+    try {
+        $response = Invoke-WebRequest -UseBasicParsing -Uri $appUrl -TimeoutSec 4
         return $response.StatusCode -eq 200
     }
-    catch {
-        return $false
-    }
+    catch { return $false }
 }
 
 function Wait-Application {
     param([int]$TimeoutSeconds)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastIssues = ''
     while ((Get-Date) -lt $deadline) {
-        if ((Test-HttpEndpoint $apiHealthUrl) -and (Test-HttpEndpoint $appUrl)) {
-            return $true
+        $issues = New-Object System.Collections.Generic.List[string]
+        try {
+            $status = Invoke-DockerCommand -DockerArguments @('compose', 'ps', '--all', '--format', 'json') -TimeoutSeconds 10 -CaptureOutput
+            if ($status.ExitCode -ne 0) { throw "exit $($status.ExitCode)" }
+            $rows = @(ConvertFrom-ZhixiComposePsJson $status.Output)
+            $readiness = Get-ZhixiComposeReadiness $rows
+            foreach ($issue in $readiness.Issues) { $issues.Add($issue) }
+        }
+        catch { $issues.Add("compose status unavailable: $($_.Exception.Message)") }
+        if (-not (Test-ApiEndpoint)) { $issues.Add('api /health: not ready') }
+        if (-not (Test-WebEndpoint)) { $issues.Add('web /app: not ready') }
+
+        if ($issues.Count -eq 0) { return [pscustomobject]@{ Ready = $true; Issues = @() } }
+        $currentIssues = $issues -join '; '
+        if ($currentIssues -ne $lastIssues) {
+            Write-Status "等待服务就绪：$currentIssues"
+            $lastIssues = $currentIssues
         }
         Start-Sleep -Seconds 3
     }
-    return $false
+    return [pscustomobject]@{ Ready = $false; Issues = @($issues.ToArray()) }
 }
 
 try {
@@ -104,55 +164,37 @@ try {
         if (-not (Test-Path -LiteralPath $dockerDesktop)) {
             throw "未找到 Docker Desktop：$dockerDesktop"
         }
-        Write-Status 'Docker Engine 尚未就绪，正在后台启动 Docker Desktop。'
-        Start-Process -FilePath $dockerDesktop -WindowStyle Hidden
-        if (-not (Wait-DockerEngine -TimeoutSeconds 120)) {
-            $dockerRun = Join-Path $env:LOCALAPPDATA 'Docker\run'
-            $knownSockets = @(
-                (Join-Path $dockerRun 'dockerInference'),
-                (Join-Path $dockerRun 'userAnalyticsOtlpHttp.sock')
-            )
-            if ($knownSockets | Where-Object { Test-Path -LiteralPath $_ }) {
-                Write-Status '检测到已知 Docker 临时套接字故障，正在执行可恢复修复。'
-                & (Join-Path $PSScriptRoot 'docker-preflight.ps1') -Recover
-            }
-            if (-not (Wait-DockerEngine -TimeoutSeconds 180)) {
-                throw 'Docker Engine 在 5 分钟内仍未就绪。请打开 Docker Desktop 查看错误详情。'
-            }
+        if (-not (Get-Process 'Docker Desktop' -ErrorAction SilentlyContinue)) {
+            Write-Status 'Docker Engine 尚未就绪，正在后台启动 Docker Desktop。'
+            Start-Process -FilePath $dockerDesktop -WindowStyle Hidden
+        }
+        else {
+            Write-Status 'Docker Desktop 已运行，正在等待 Engine 就绪。'
+        }
+        if (-not (Wait-DockerEngine -TimeoutSeconds 300)) {
+            throw 'Docker Engine 在 5 分钟内仍未就绪。请查看 Docker Desktop 错误，运行 scripts/docker-preflight.ps1 做只读预检；启动器不会自动恢复 Docker。'
         }
     }
     Write-Status 'Docker Engine 已就绪。'
 
-    Push-Location $projectRoot
-    try {
-        $env:COMPOSE_BAKE = 'false'
-        $previousPreference = $ErrorActionPreference
-        $ErrorActionPreference = 'Continue'
-        try {
-            if ($NoBuild) {
-                Write-Status '正在启动现有容器。'
-                cmd.exe /d /c "docker compose up -d 2>&1" | Tee-Object -FilePath $logPath -Append
-            }
-            else {
-                Write-Status '正在构建并启动全部服务，首次运行可能需要几分钟。'
-                cmd.exe /d /c "docker compose up -d --build 2>&1" | Tee-Object -FilePath $logPath -Append
-            }
-            $composeExitCode = $LASTEXITCODE
-        }
-        finally {
-            $ErrorActionPreference = $previousPreference
-        }
-        if ($composeExitCode -ne 0) {
-            throw "Docker Compose 启动失败，退出码：$composeExitCode"
-        }
+    $env:COMPOSE_BAKE = 'false'
+    if ($NoBuild) {
+        Write-Status '正在启动现有容器，最多等待 5 分钟。'
+        $composeResult = Invoke-DockerCommand -DockerArguments @('compose', 'up', '-d') -TimeoutSeconds 300
     }
-    finally {
-        Pop-Location
+    else {
+        Write-Status '正在构建并启动全部服务，最多等待 20 分钟。'
+        $composeResult = Invoke-DockerCommand -DockerArguments @('compose', 'up', '-d', '--build') -TimeoutSeconds 1200
+    }
+    if ($composeResult.ExitCode -ne 0) {
+        $manualCommand = if ($NoBuild) { 'docker compose up -d' } else { 'docker compose up -d --build' }
+        throw "Docker Compose 启动失败，退出码：$($composeResult.ExitCode)。请在项目目录手动运行 $manualCommand 查看原始错误；启动器不记录可能含密钥的原始命令输出。"
     }
 
-    Write-Status '服务已启动，正在等待 API 和网页健康检查。'
-    if (-not (Wait-Application -TimeoutSeconds 180)) {
-        throw "服务未在 3 分钟内通过健康检查。请查看日志：$logPath"
+    Write-Status '容器启动命令已完成，正在核对关键服务、API 和网页。'
+    $readiness = Wait-Application -TimeoutSeconds 300
+    if (-not $readiness.Ready) {
+        throw "服务未在 5 分钟内就绪：$($readiness.Issues -join '; ')。请查看日志：$logPath"
     }
     Write-Status '智析 Data Agent 已就绪。'
 

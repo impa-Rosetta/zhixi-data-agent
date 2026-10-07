@@ -11,10 +11,13 @@ A07 企业数据底座智能问析 Agent 系统。M0至M6已完成产品级验�
 ### Windows 桌面一键启动
 
 双击桌面的“智析 Data Agent”快捷方式，或运行仓库根目录的
-启动智析DataAgent.cmd。启动器会检查并按需启动 Docker Desktop、处理已知的
-临时套接字故障、构建并启动 Compose 服务、等待 API 与 Web 健康，然后打开
+启动智析DataAgent.cmd。启动器会检查并按需启动 Docker Desktop、构建并启动
+Compose 服务，核对平台数据库、演示数据源、Redis、MinIO、Worker、迁移任务、
+API 与 Web 的就绪状态，然后打开
 <http://127.0.0.1:5173/app>。启动日志保存在
-%LOCALAPPDATA%\ZhixiDataAgent\logs，脚本不会保存登录密码或模型 API Key。
+%LOCALAPPDATA%\ZhixiDataAgent\logs。若 Docker Engine 未就绪，启动器只提示
+只读预检，不会自动重启 Docker、终止 WSL 或清理瞬态目录；已知故障的显式恢复
+步骤见 `docs/runbooks/docker-desktop-recovery.md`。脚本不会保存登录密码或模型 API Key。
 
 ## M1认证接口
 
@@ -98,6 +101,12 @@ DeepSeek 通过供应商无关 Model Gateway 接入。生产和本地真实模�
 
 ```powershell
 ./scripts/quality.ps1
+```
+
+Windows 启动器的无 Docker 依赖回归测试：
+
+```powershell
+Invoke-Pester -Path tests/powershell/StartupReadiness.Tests.ps1
 ```
 
 ## 浏览器与真实链路验收
