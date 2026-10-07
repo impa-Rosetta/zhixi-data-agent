@@ -1,13 +1,16 @@
 # 智析 Data Agent
 
-A07 企业数据底座智能问析 Agent 系统。M0至M6已完成产品级验收：具备身份权限、PostgreSQL/MySQL安全接入、版本化目录、质量语义模型、安全查询内核、可恢复的 DeepSeek Agent，以及支持断线续传、真实结果和 Evidence 定位的正式问析工作台。M7 已完成持久化会话事件、断线恢复、可追溯推荐、描述统计与受限 ChartSpec 图表，下一阶段完成报告编排与导出。
+A07 企业数据底座智能问析 Agent 系统。项目已实现身份权限、PostgreSQL/MySQL 安全接入、版本化目录、质量语义模型、安全查询、持续会话、证据定位、可信图表和报告生成。M8 评测与高级建模仍按切片验收；受控建模 API 默认关闭，不能将代码存在等同于生产可用。各能力的最新完成边界、剩余验收和测试证据以[项目状态](docs/project-status.md)为准。
 
 ## 快速开始
 
-1. 复制 `.env.example` 为 `.env`。
-2. 执行 `docker compose up --build`。
-3. 打开 Web：<http://localhost:5173>。
-4. API 健康检查：<http://localhost:8000/health>。
+1. 安装 Docker Desktop（Windows 请启用受支持的 WSL 2），确认 `docker info` 能返回 Engine 信息。
+2. 将 `.env.example` 复制为本机 `.env`；示例密钥和密码仅供本地开发，不可用于公开部署。若要调用真实模型，在本机 `.env` 配置 `DEEPSEEK_API_KEY`，不要提交该文件。
+3. 执行 `docker compose up -d --build`，再用 `docker compose ps --all` 确认服务状态。
+4. 检查 API：<http://localhost:8000/health>；打开 Web：<http://localhost:5173>。全新平台请在 `/setup` 创建首个管理员和工作空间，仓库不提供预设登录账号。
+
+GitHub 仓库不包含本机 `.env`、Docker 数据卷、已创建的账号或数据库中的演示会话；重新克隆不会自动恢复这些数据。模型密钥留空时，真实模型问析会明确失败，不会用模拟答案冒充成功。
+
 ### Windows 桌面一键启动
 
 双击桌面的“智析 Data Agent”快捷方式，或运行仓库根目录的
@@ -18,6 +21,20 @@ API 与 Web 的就绪状态，然后打开
 %LOCALAPPDATA%\ZhixiDataAgent\logs。若 Docker Engine 未就绪，启动器只提示
 只读预检，不会自动重启 Docker、终止 WSL 或清理瞬态目录；已知故障的显式恢复
 步骤见 `docs/runbooks/docker-desktop-recovery.md`。脚本不会保存登录密码或模型 API Key。
+
+### Windows / Docker Desktop 故障排查
+
+先区分“网页能打开”和“整套系统可用”：浏览器可能显示先前加载的页面，但 API、数据库或 Worker 已停止。一键启动器会检查关键服务、API 与 Web；若检查未通过，它不会打开网页。直接用 Compose 启动时，请自行核对服务状态。
+
+| 现象 | 可能原因与只读检查 | 建议处理 |
+| --- | --- | --- |
+| Docker Desktop 一直显示启动中，`docker info` 无响应 | Engine/WSL 尚未就绪；运行 `wsl --version`，再运行 `./scripts/docker-preflight.ps1`。仅凭网页打不开不能判定是 Docker 故障。 | 查看 Docker Desktop 错误与诊断日志，核对 WSL 版本和虚拟化条件。Docker [WSL 说明](https://docs.docker.com/desktop/features/wsl/)建议保持 WSL 更新；不要直接重置或删除数据卷。 |
+| 提示 `dockerInference` 或 `userAnalyticsOtlpHttp.sock` 无法访问 | 本项目在 Windows 上多次观察到 Engine 不可用且这些瞬态套接字存在；只读预检会报告检测结果，但“文件存在”本身不证明所有故障都由它造成。 | 先按[恢复说明](docs/runbooks/docker-desktop-recovery.md)核对条件。`-Recover` 是**单独的显式操作**，会中断 Docker Desktop 及其专用 WSL 实例；安排好其他容器任务后再执行。启动器不会自动执行。 |
+| 5173 网页能打开，但登录、问析或报告失败 | API、Worker、PostgreSQL、Redis 或 MinIO 可能未就绪；查看 `docker compose ps --all` 和 <http://localhost:8000/health>。 | 按失败服务查看本机容器日志；不要把含凭据的完整日志公开上传。确认服务健康后重试，不要把 Web HTTP 200 当作全链路验收。 |
+| 新克隆后无法使用原账号或历史数据 | `.env` 和 Docker 数据卷不随 Git 克隆；首次初始化与旧机器的状态彼此独立。 | 在 `/setup` 新建管理员；若需要迁移旧数据，使用经过验证的备份/恢复流程，而不是复制截图或重新克隆。 |
+| 问析提示模型未配置或供应商连接失败 | `.env` 中模型密钥可能为空，或供应商网络不可用；查看安全错误码和 Worker 状态。 | 在本机配置有效密钥、检查网络与调用额度；不要把密钥写入 Git、问题单或截图。 |
+
+Docker Desktop 的[官方排障文档](https://docs.docker.com/desktop/troubleshoot-and-support/troubleshoot/)提供日志与诊断入口。不要使用“Reset to factory defaults”作为常规修复；它会重置本机 Docker Desktop 状态。上述本机套接字现象不是对所有 Windows 安装的普遍故障判断。
 
 ## M1认证接口
 
@@ -95,7 +112,7 @@ DeepSeek 通过供应商无关 Model Gateway 接入。生产和本地真实模�
 - `/app/semantic`：制造质量语义模型、指标口径、目录字段映射与不可变版本发布；
 - `/app/members`：成员邀请和角色管理。
 
-前端不会模拟 Agent 回答。正式问析工作台已接入 AnalysisRun 全生命周期、SSE 断线续传、真实结果、可信等级、Evidence、验证结论和默认折叠的脱敏技术详情。统计摘要和图表均从已验证查询产物派生，并通过受限 ChartSpec 防止任意脚本或未验证数据进入渲染层。M7 剩余报告编排与导出能力。
+前端不会模拟 Agent 回答。正式问析工作台已接入 AnalysisRun 全生命周期、SSE 断线续传、真实结果、可信等级、Evidence、验证结论和默认折叠的脱敏技术详情。统计摘要和图表均从已验证查询产物派生，并通过受限 ChartSpec 防止任意脚本或未验证数据进入渲染层。报告编排与导出已有独立验收；建模与评测的开放范围和未完成事项请查阅[项目状态](docs/project-status.md)。
 
 ## 本地质量检查
 
