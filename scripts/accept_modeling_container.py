@@ -12,14 +12,21 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
+from typing import Any
 
-from packages.modeling.contracts import ModelSpec, ModelTrainingResult, PredictionRequest
+from packages.modeling.contracts import (
+    Algorithm,
+    ModelSpec,
+    ModelTrainingResult,
+    PredictionRequest,
+    Task,
+)
 from packages.modeling.data import VerifiedTrainingSource
 from packages.modeling.executor import ExecutorJob
 from packages.modeling.snapshots import encode_training_snapshot
 from packages.modeling.synthetic import manufacturing_training_fixture
 
-ALGORITHMS = (
+ALGORITHMS: tuple[tuple[Algorithm, Task], ...] = (
     ("linear_regression", "regression"),
     ("decision_tree", "regression"),
     ("decision_tree", "classification"),
@@ -37,7 +44,7 @@ def docker(*args: str, timeout: int = 30) -> str:
     ).stdout
 
 
-def execute(image: str, root: Path, job: ExecutorJob, content: bytes) -> dict:
+def execute(image: str, root: Path, job: ExecutorJob, content: bytes) -> dict[str, Any]:
     inputs, outputs = root / "input", root / "output"
     inputs.mkdir()
     outputs.mkdir()
@@ -137,7 +144,13 @@ def main() -> None:
             source = VerifiedTrainingSource(
                 spec.source_artifact_id, spec.source_snapshot_id, uuid.uuid4(), data, digest
             )
-            snapshot = encode_training_snapshot(spec, lambda _, source=source: source)
+
+            def load_source(
+                _: uuid.UUID, source: VerifiedTrainingSource = source
+            ) -> VerifiedTrainingSource:
+                return source
+
+            snapshot = encode_training_snapshot(spec, load_source)
             job = ExecutorJob(
                 job_id=uuid.uuid4(),
                 attempt_id=uuid.uuid4(),
